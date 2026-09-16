@@ -1,10 +1,5 @@
 # Backend dai Primi Principi
 
-<p align="center">
-  <a href="assets/growth-chart.svg" title="Fare clic per visualizzare il grafico interattivo a grandezza naturale">
-    <img src="assets/growth-chart.svg" alt="Backend dai primi principi: cronologia della crescita di stelle, fork e cloni" width="100%" />
-  </a>
-</p>
 
 Benvenuti nel repository della documentazione **Backend from First Principles**! 
 
