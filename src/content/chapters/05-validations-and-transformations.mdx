@@ -1,0 +1,986 @@
+---
+order: 5
+title: "Convalide e trasformazioni."
+navTitle: "Convalide e trasformazioni"
+summary: "Una panoramica sui principi primi delle regole e delle linee guida da tenere a mente durante la progettazione delle API, il cancello attraverso cui passa ogni dato del cliente prima dell'esecuzione di qualsiasi logica applicativa. Perché esiste, dove vive, come funziona, con le implementazioni complete in Go e Python mostrate fianco a fianco."
+readingTime: "2-3 ore"
+keywords:
+  - "validation"
+  - "transformation"
+  - "sanitization"
+  - "input"
+  - "schema"
+  - "zod"
+  - "pydantic"
+---
+Parte I / Il modello mentale
+
+## Cosa sono e perché esistono
+
+Le convalide e le trasformazioni non sono una singola funzionalità da installare. Si tratta di **un insieme di regole e linee guida da tenere a mente durante la progettazione delle API**. Quasi tutto in loro si riconduce a due obiettivi, e quei due obiettivi sono la lente attraverso la quale viene presa ogni decisione successiva:
+
+Obiettivo 01 Integrità dei dati
+
+Qualunque dato raggiunga finalmente la tua logica applicativa e il tuo database abbia la forma _esatta_ che la tua applicazione si aspetta, campi corretti, tipi corretti, intervalli corretti, significato corretto.
+
+Obiettivo 02Sicurezza
+
+Non è mai consentito che input non attendibili provenienti dal mondo esterno portino il tuo sistema in uno stato inaspettato e non gestito. Il server rimane sulla difensiva riguardo a tutto ciò che oltrepassa i suoi confini.
+
+#### Cosa conta come "dati cliente in entrata"
+
+Il limite di convalida copre **ogni** tipo di dati che un client può inviare al server, non solo il corpo della richiesta. Tutti i seguenti elementi devono essere considerati non attendibili fino a prova contraria:
+
+- **Payload JSON**: il corpo di a `POST` / `PUT` / `PATCH` richiesta.
+- **Parametri di query**: ad es. `?page=2&limit=20`.
+- **Parametri del percorso**: ad es. il `5` dentro `/users/5`.
+- **Intestazioni**: tutto ciò che il client imposta sulla richiesta.
+
+<Callout type="info">
+La definizione di una frase Validation risponde _"questi dati sono nel formato esatto previsto dalla mia API?"_ Transformation risponde _"come posso rimodellare questi dati nel formato desiderato dal mio livello di servizio?"_ Corrono insieme, davanti alla porta, prima che accada qualcosa di importante.
+</Callout>
+
+## Dove vive: i tre strati
+
+Per individuare _dove_ avviene la convalida è necessario innanzitutto il modello mentale standard di un backend: tre livelli impilati, ciascuno con un lavoro. Una richiesta viaggia lungo lo stack e la risposta risale.
+
+Livello del repository inferiore
+
+Si occupa solo del database, delle connessioni, delle interrogazioni, degli inserimenti, degli aggiornamenti, delle eliminazioni. Non gli interessa il _perché_ viene scritta una riga, gli interessa solo che lo sia. Funziona con un DB relazionale (Postgres), Redis o qualsiasi altro archivio persistente.
+
+Livello servizio medio
+
+La _logica applicativa_. Un singolo metodo di servizio può chiamare uno o più metodi di repository, inviare notifiche push, inviare e-mail a utenti, archiviare dati, attivare un webhook e tutto ciò che un'API dovrebbe effettivamente _fare_.
+
+Livello del controller superiore
+
+Il punto di ingresso rivolto a HTTP. Possiede tutto _HTTP_: quale codice di stato restituire, il formato della risposta e, soprattutto, le convalide. Riceve i dati del cliente, chiama il metodo del servizio corrispondente e restituisce tutto ciò che quel metodo restituisce.
+
+Il motivo per cui il controller e il servizio sono **deliberatamente separati** è quello di mantenere le preoccupazioni HTTP (codici di errore, codici di successo, forma della risposta, convalida) in un posto e la pura logica applicativa in un altro. Il titolare del trattamento chiama il servizio; il servizio può chiamare o meno il repository, a seconda di ciò di cui ha bisogno la richiesta.
+
+<Diagram>
+<svg viewBox="0 0 760 430" xmlns="http://www.w3.org/2000/svg" font-family="var(--font-diagram-mono)"><defs><marker id="ar" markerWidth="9" markerHeight="9" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="var(--dg-accent)"></path></marker></defs><rect x="40" y="30" width="170" height="56" rx="10" fill="var(--dg-paper)" stroke="var(--dg-line)"></rect><text x="125" y="56" text-anchor="middle" font-size="14" font-weight="700" fill="var(--dg-ink)">CLIENTE</text><text x="125" y="74" text-anchor="middle" font-size="10" fill="var(--dg-ink-3)">JSON/query/percorso/intestazioni</text><rect x="270" y="20" width="450" height="92" rx="12" fill="var(--dg-accent-surface)" stroke="var(--dg-accent)" stroke-width="1.5"></rect><text x="495" y="46" text-anchor="middle" font-size="15" font-weight="700" fill="var(--dg-accent-2)">LIVELLO DI CONTROLLO</text><text x="495" y="66" text-anchor="middle" font-size="10.5" fill="var(--dg-accent-2)">Preoccupazioni HTTP/codici di stato/forma della risposta</text><text x="495" y="84" text-anchor="middle" font-size="10.5" font-weight="700" fill="var(--dg-accent-2)">&gt; CONVALIDA E TRASFORMAZIONE live qui &lt;</text><text x="495" y="100" text-anchor="middle" font-size="9.5" fill="var(--dg-accent-2)">l'unico livello che tocca i dati grezzi del cliente</text><rect x="270" y="160" width="450" height="78" rx="12" fill="var(--dg-paper)" stroke="var(--dg-line)"></rect><text x="495" y="188" text-anchor="middle" font-size="15" font-weight="700" fill="var(--dg-ink)">LIVELLO DI SERVIZIO</text><text x="495" y="208" text-anchor="middle" font-size="10.5" fill="var(--dg-ink-3)">logica applicativa/e-mail/notifiche</text><text x="495" y="224" text-anchor="middle" font-size="10.5" fill="var(--dg-ink-3)">webhook/orchestrazione</text><rect x="270" y="286" width="450" height="74" rx="12" fill="var(--dg-paper)" stroke="var(--dg-line)"></rect><text x="495" y="314" text-anchor="middle" font-size="15" font-weight="700" fill="var(--dg-ink)">STRATO DI REPOSITIVO</text><text x="495" y="334" text-anchor="middle" font-size="10.5" fill="var(--dg-ink-3)">Connessioni DB/interrogazioni/inserisci/aggiorna/elimina</text><ellipse cx="495" cy="392" rx="60" ry="14" fill="var(--dg-paper)" stroke="var(--dg-line)"></ellipse><text x="495" y="397" text-anchor="middle" font-size="11" font-weight="700" fill="var(--dg-ink-2)">Postgres/Redis</text><line x1="210" y1="62" x2="264" y2="64" stroke="var(--dg-accent)" stroke-width="2" marker-end="url(#ar)"></line><line x1="495" y1="112" x2="495" y2="154" stroke="var(--dg-accent)" stroke-width="2" marker-end="url(#ar)"></line><line x1="495" y1="238" x2="495" y2="280" stroke="var(--dg-accent)" stroke-width="2" marker-end="url(#ar)"></line><line x1="495" y1="360" x2="495" y2="376" stroke="var(--dg-accent)" stroke-width="2" marker-end="url(#ar)"></line><text x="520" y="138" font-size="9.5" fill="var(--dg-ink-3)">chiama il metodo del servizio</text><text x="520" y="264" font-size="9.5" fill="var(--dg-ink-3)">può chiamare repository</text></svg>
+</Diagram>
+
+Lo stack standard, la convalida è fissata nella **parte superiore del controller**
+
+## Il ciclo di vita della richiesta
+
+Una richiesta non appare magicamente all'interno del metodo del controller. Arriva, ottiene la **corrispondenza del percorso** e solo allora viene richiamato il metodo del controller assegnato a quel percorso. Tale ordinamento è la chiave per posizionare correttamente la convalida.
+
+1. **I dati arrivano.** Un client apre una connessione HTTP e invia una richiesta, in genere un payload JSON, oltre a parametri e intestazioni di query e percorso.
+2. **Esecuzioni di corrispondenza del percorso.** Il router confronta il percorso in entrata con i suoi modelli e seleziona il metodo del controller registrato per il percorso corrispondente.
+3. **La pipeline di convalida e trasformazione viene attivata.** Prima che venga eseguita _qualsiasi_ logica significativa, il controller abbinato passa i dati grezzi attraverso la pipeline.
+4. **La logica applicativa viene eseguita.** Solo se i dati vengono trasmessi il controller chiama il metodo del servizio.
+5. **Servizio -&gt; repository.** Il servizio esegue la logica, facoltativamente chiamando metodi del repository che colpiscono il database.
+6. **La risposta torna indietro.** Tutto ciò che il servizio restituisce viene consegnato al controller, che lo restituisce al chiamante tramite la connessione HTTP.
+
+<Diagram>
+<svg viewBox="0 0 900 220" xmlns="http://www.w3.org/2000/svg" font-family="var(--font-diagram-mono)"><defs><marker id="ar2" markerWidth="9" markerHeight="9" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="var(--dg-accent)"></path></marker></defs><g font-size="11" font-weight="700"><rect x="14" y="80" width="110" height="58" rx="9" fill="var(--dg-paper)" stroke="var(--dg-line)"></rect><text x="69" y="106" text-anchor="middle" fill="var(--dg-ink)">CLIENTE</text><text x="69" y="122" text-anchor="middle" font-size="9" font-weight="400" fill="var(--dg-ink-3)">invia richiesta</text><rect x="158" y="80" width="120" height="58" rx="9" fill="var(--dg-paper)" stroke="var(--dg-line)"></rect><text x="218" y="102" text-anchor="middle" fill="var(--dg-ink)">PERCORSO</text><text x="218" y="118" text-anchor="middle" fill="var(--dg-ink)">ABBINAMENTO</text><rect x="312" y="64" width="186" height="92" rx="11" fill="var(--dg-accent-surface)" stroke="var(--dg-accent)" stroke-width="1.6"></rect><text x="405" y="92" text-anchor="middle" fill="var(--dg-accent-2)">CONVALIDA E</text><text x="405" y="108" text-anchor="middle" fill="var(--dg-accent-2)">TRASFORMAZIONE</text><text x="405" y="128" text-anchor="middle" font-size="9" font-weight="400" fill="var(--dg-accent-2)">il cancello, corre per primo</text><rect x="532" y="80" width="120" height="58" rx="9" fill="var(--dg-paper)" stroke="var(--dg-line)"></rect><text x="592" y="102" text-anchor="middle" fill="var(--dg-ink)">CONTROLLORE</text><text x="592" y="118" text-anchor="middle" font-size="9" font-weight="400" fill="var(--dg-ink-3)">percorso aziendale</text><rect x="686" y="80" width="100" height="58" rx="9" fill="var(--dg-paper)" stroke="var(--dg-line)"></rect><text x="736" y="106" text-anchor="middle" fill="var(--dg-ink)">SERVIZIO</text><text x="736" y="122" text-anchor="middle" font-size="9" font-weight="400" fill="var(--dg-ink-3)">-&gt; deposito</text><line x1="124" y1="109" x2="154" y2="109" stroke="var(--dg-accent)" stroke-width="2" marker-end="url(#ar2)"></line><line x1="278" y1="109" x2="308" y2="109" stroke="var(--dg-accent)" stroke-width="2" marker-end="url(#ar2)"></line><line x1="498" y1="109" x2="528" y2="109" stroke="var(--dg-accent)" stroke-width="2" marker-end="url(#ar2)"></line><line x1="652" y1="109" x2="682" y2="109" stroke="var(--dg-accent)" stroke-width="2" marker-end="url(#ar2)"></line><path d="M405 156 q0 30 -150 30 L150 186" fill="none" stroke="var(--dg-accent-2)" stroke-width="1.6" stroke-dasharray="5 4" marker-end="url(#ar2)"></path><text x="250" y="205" font-size="9.5" font-weight="700" fill="var(--dg-accent-2)">in caso di errore -&gt; 400 Richiesta errata, non raggiunge mai il servizio</text></g></svg>
+</Diagram>
+
+Il cancello si trova tra la **corrispondenza del percorso** e qualsiasi **logica di business**
+
+## Il punto di esecuzione
+
+La convalida e la trasformazione avvengono **esattamente in un punto**: all'interno del livello controller, immediatamente _dopo_ la corrispondenza del percorso e _prima_ che venga chiamato qualsiasi metodo di servizio o venga eseguita qualsiasi logica di business. Concretamente è implementato come un **middleware o una funzione di utilità** riutilizzabile che ti fornisce uno **schema**: la descrizione di come dovrebbero apparire i dati e cammina ogni campo del carico utile in entrata rispetto a quello schema.
+
+<Callout type="info">
+Perché la porta d'ingresso, in particolare la convalida al punto di ingresso, garantisce che il sistema non porti mai uno _stato imprevisto_ più in profondità della porta d'ingresso. I dati errati vengono rifiutati quando è ancora economico rifiutarli, prima che si aprano le connessioni al database, prima che le e-mail vengano messe in coda, prima che si attivi qualsiasi effetto collaterale.
+</Callout>
+
+## Perché è fondamentale: la storia 500 vs 400
+
+Il modo più chiaro per sentire il bisogno di convalida è osservare cosa accade _senza_ di essa. Immagina un'API "crea libro" che prevede un corpo JSON con a `name` campo che dovrebbe essere una stringa. Un client invia invece il **numero** `0`:
+
+POST /api/books
+
+Corpo della richiesta (formato non valido)
+
+```json
+{ "name": 0 }
+```
+
+Nel tuo schema Postgres la colonna è stata quasi certamente dichiarata in questo modo, una colonna stringa che non può essere nulla:
+
+schema.sqlSQL
+
+```sql
+CREATE TABLE books (
+  id    SERIAL PRIMARY KEY,
+  name  TEXT NOT NULL   -- expects text, refuses an integer
+);
+```
+
+Senza **nessuna convalida**, quello `0` naviga attraverso il controller, attraverso il servizio, scende nel repository e diventa un file `INSERT`. Postgres controlla il tipo di colonna, vede un numero dove richiesto `TEXT`e **rifiuta l'operazione**. La chiamata al database fallisce e il client riceve:
+
+Risposta senza convalida 500 ERRORE SERVER INTERNO
+
+"Qualcosa è andato storto sul server"
+
+```json
+{ "error": "Internal Server Error" }
+```
+
+Questa è una **esperienza utente scadente**. Un 500 dice "qualcosa di inaspettato si è rotto dentro di noi" quando in realtà il _client_ ha inviato un input errato e non gli dà nulla da risolvere. Con una pipeline di convalida nel punto di ingresso, il server rileva immediatamente l'errore, il database non viene mai toccato e il client riceve una **400 Bad Request** utilizzabile:
+
+Risposta con validazione 400 RICHIESTA ERRATA
+
+Azionabile, restituito prima di qualsiasi chiamata DB
+
+```json
+{ "errors": [ "name: expected a string, received a number" ] }
+```
+
+<Diagram>
+<svg viewBox="0 0 880 270" xmlns="http://www.w3.org/2000/svg" font-family="var(--font-diagram-mono)"><defs><marker id="ar3" markerWidth="9" markerHeight="9" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="var(--dg-ink-3)"></path></marker><marker id="ar3r" markerWidth="9" markerHeight="9" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="var(--dg-accent)"></path></marker></defs><text x="20" y="28" font-size="12" font-weight="700" fill="var(--dg-accent-2)">PERCORSO A/NESSUNA CONVALIDA</text><g font-size="10" font-weight="700"><rect x="20" y="44" width="92" height="44" rx="8" fill="var(--dg-paper)" stroke="var(--dg-line)"></rect><text x="66" y="70" text-anchor="middle" fill="var(--dg-ink)">{nome:0}</text><rect x="150" y="44" width="92" height="44" rx="8" fill="var(--dg-paper)" stroke="var(--dg-line)"></rect><text x="196" y="70" text-anchor="middle" fill="var(--dg-ink)">controllore</text><rect x="280" y="44" width="92" height="44" rx="8" fill="var(--dg-paper)" stroke="var(--dg-line)"></rect><text x="326" y="70" text-anchor="middle" fill="var(--dg-ink)">servizio</text><rect x="410" y="44" width="92" height="44" rx="8" fill="var(--dg-paper)" stroke="var(--dg-line)"></rect><text x="456" y="70" text-anchor="middle" fill="var(--dg-ink)">deposito</text><rect x="540" y="44" width="100" height="44" rx="8" fill="var(--dg-accent)" stroke="var(--dg-accent)"></rect><text x="590" y="64" text-anchor="middle" fill="var(--dg-on-accent)">DB RIFIUTA</text><text x="590" y="79" text-anchor="middle" font-size="8.5" font-weight="400" fill="var(--dg-on-accent)">tipo di mancata corrispondenza</text><rect x="678" y="44" width="178" height="44" rx="8" fill="var(--dg-inverse)" stroke="var(--dg-line-2)"></rect><text x="767" y="64" text-anchor="middle" fill="var(--dg-on-inverse)">500 al cliente</text><text x="767" y="79" text-anchor="middle" font-size="8.5" font-weight="400" fill="var(--dg-on-inverse-accent)">&quot;qualcosa si è rotto&quot; / inutile</text><line x1="112" y1="66" x2="146" y2="66" stroke="var(--dg-ink-3)" stroke-width="2" marker-end="url(#ar3)"></line><line x1="242" y1="66" x2="276" y2="66" stroke="var(--dg-ink-3)" stroke-width="2" marker-end="url(#ar3)"></line><line x1="372" y1="66" x2="406" y2="66" stroke="var(--dg-ink-3)" stroke-width="2" marker-end="url(#ar3)"></line><line x1="502" y1="66" x2="536" y2="66" stroke="var(--dg-ink-3)" stroke-width="2" marker-end="url(#ar3)"></line><line x1="640" y1="66" x2="674" y2="66" stroke="var(--dg-ink-3)" stroke-width="2" marker-end="url(#ar3)"></line></g><line x1="20" y1="120" x2="860" y2="120" stroke="var(--dg-line)" stroke-dasharray="3 4"></line><text x="20" y="158" font-size="12" font-weight="700" fill="var(--dg-accent-2)">PERCORSO B/CON VALIDAZIONE AL CANCELLO</text><g font-size="10" font-weight="700"><rect x="20" y="174" width="92" height="44" rx="8" fill="var(--dg-paper)" stroke="var(--dg-line)"></rect><text x="66" y="200" text-anchor="middle" fill="var(--dg-ink)">{nome:0}</text><rect x="150" y="166" width="150" height="60" rx="9" fill="var(--dg-accent-surface)" stroke="var(--dg-accent)" stroke-width="1.5"></rect><text x="225" y="192" text-anchor="middle" fill="var(--dg-accent-2)">CONVALIDA</text><text x="225" y="208" text-anchor="middle" font-size="8.5" font-weight="400" fill="var(--dg-accent-2)">stringa prevista, numero ottenuto</text><rect x="360" y="174" width="200" height="44" rx="8" fill="var(--dg-accent-surface)" stroke="var(--dg-accent)"></rect><text x="460" y="194" text-anchor="middle" fill="var(--dg-accent-2)">400 al cliente (istantaneo)</text><text x="460" y="209" text-anchor="middle" font-size="8.5" font-weight="400" fill="var(--dg-accent-2)">esattamente cosa riparare</text><rect x="600" y="174" width="170" height="44" rx="8" fill="var(--dg-paper)" stroke="var(--dg-line)" stroke-dasharray="4 4"></rect><text x="685" y="194" text-anchor="middle" fill="var(--dg-ink-3)">servizio/DB</text><text x="685" y="209" text-anchor="middle" font-size="8.5" font-weight="400" fill="var(--dg-ink-3)">mai toccato</text><line x1="112" y1="196" x2="146" y2="196" stroke="var(--dg-accent)" stroke-width="2" marker-end="url(#ar3r)"></line><line x1="300" y1="196" x2="356" y2="196" stroke="var(--dg-accent)" stroke-width="2" marker-end="url(#ar3r)"></line></g></svg>
+</Diagram>
+
+Stesso input errato, due risultati, **500 disastri** contro un **400** pulito che non riattiva mai il database
+
+## All'interno della pipeline: passo dopo passo
+
+Una pipeline robusta elabora un campo in **strati** e l'ordine è importante: ogni controllo viene eseguito solo se quello precedente ha superato. Prendi un singolo campo, `name`, che deve essere una stringa di lunghezza compresa tra 5 e 100:
+
+1. **Controllo dell'esistenza.** Fa `name` esistere nel payload? Altrimenti -&gt; `"name is required"`, fermare.
+2. **Verifica del tipo.** Esiste, è una stringa o il client ha inviato un array/booleano/numero? Se tipo sbagliato -&gt; `"expected a string"`, fermare.
+3. **Verifica dei vincoli.** È una stringa, soddisfa le restrizioni? Lunghezza 5-100. Una stringa di 2 caratteri o un intero paragrafo falliscono entrambi con un messaggio su misura.
+
+<Diagram>
+<svg viewBox="0 0 720 260" xmlns="http://www.w3.org/2000/svg" font-family="var(--font-diagram-mono)"><defs><marker id="ar4" markerWidth="9" markerHeight="9" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="var(--dg-inverse)"></path></marker><marker id="ar4r" markerWidth="9" markerHeight="9" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="var(--dg-accent)"></path></marker></defs><g font-size="11" font-weight="700"><rect x="270" y="14" width="180" height="40" rx="9" fill="var(--dg-paper)" stroke="var(--dg-line)"></rect><text x="360" y="39" text-anchor="middle" fill="var(--dg-ink)">campo in entrata &quot;nome&quot;</text><rect x="250" y="74" width="220" height="42" rx="9" fill="var(--dg-paper)" stroke="var(--dg-line)"></rect><text x="360" y="100" text-anchor="middle" fill="var(--dg-ink)">1/VERIFICA DELL'ESISTENZA</text><rect x="250" y="134" width="220" height="42" rx="9" fill="var(--dg-paper)" stroke="var(--dg-line)"></rect><text x="360" y="160" text-anchor="middle" fill="var(--dg-ink)">2 / VERIFICA DEL TIPO</text><rect x="250" y="194" width="220" height="42" rx="9" fill="var(--dg-paper)" stroke="var(--dg-line)"></rect><text x="360" y="220" text-anchor="middle" fill="var(--dg-ink)">3 / VERIFICA VINCOLI</text><line x1="360" y1="54" x2="360" y2="70" stroke="var(--dg-ink)" stroke-width="2" marker-end="url(#ar4)"></line><line x1="360" y1="116" x2="360" y2="130" stroke="var(--dg-ink)" stroke-width="2" marker-end="url(#ar4)"></line><line x1="360" y1="176" x2="360" y2="190" stroke="var(--dg-ink)" stroke-width="2" marker-end="url(#ar4)"></line><rect x="540" y="194" width="160" height="42" rx="9" fill="var(--dg-ok-surface)" stroke="var(--dg-ok)"></rect><text x="620" y="220" text-anchor="middle" fill="var(--dg-ok)" font-size="11">PASS -&gt; controllore</text><line x1="470" y1="215" x2="536" y2="215" stroke="var(--dg-ink)" stroke-width="2" marker-end="url(#ar4)"></line><rect x="20" y="74" width="200" height="42" rx="9" fill="var(--dg-accent-surface)" stroke="var(--dg-accent)"></rect><text x="120" y="95" text-anchor="middle" fill="var(--dg-accent-2)" font-size="9.5">&quot;il nome è obbligatorio&quot;</text><text x="120" y="109" text-anchor="middle" font-size="8" font-weight="400" fill="var(--dg-accent-2)">400</text><rect x="20" y="134" width="200" height="42" rx="9" fill="var(--dg-accent-surface)" stroke="var(--dg-accent)"></rect><text x="120" y="155" text-anchor="middle" fill="var(--dg-accent-2)" font-size="9.5">&quot;si aspettava una stringa&quot;</text><text x="120" y="169" text-anchor="middle" font-size="8" font-weight="400" fill="var(--dg-accent-2)">400</text><rect x="20" y="194" width="200" height="42" rx="9" fill="var(--dg-accent-surface)" stroke="var(--dg-accent)"></rect><text x="120" y="211" text-anchor="middle" fill="var(--dg-accent-2)" font-size="9">&quot;la lunghezza deve essere compresa tra 5 e 100&quot;</text><text x="120" y="225" text-anchor="middle" font-size="8" font-weight="400" fill="var(--dg-accent-2)">400</text><line x1="248" y1="95" x2="224" y2="95" stroke="var(--dg-accent)" stroke-width="1.8" stroke-dasharray="4 3" marker-end="url(#ar4r)"></line><line x1="248" y1="155" x2="224" y2="155" stroke="var(--dg-accent)" stroke-width="1.8" stroke-dasharray="4 3" marker-end="url(#ar4r)"></line><line x1="248" y1="215" x2="224" y2="215" stroke="var(--dg-accent)" stroke-width="1.8" stroke-dasharray="4 3" marker-end="url(#ar4r)"></line></g></svg>
+</Diagram>
+
+Ogni cancello si apre solo se è passato quello precedente, il guasto **cortocircuita** a 400
+
+Nel codice, le librerie lo esprimono come uno schema dichiarativo. Go utilizza comunemente i tag struct con `go-playground/validator`; Python utilizza Pydantic, dove lo stesso modello convalida _e_ trasforma. Ecco una versione **completa ed eseguibile** della pipeline in ciascuno:
+
+<Callout type="info">
+v Go (a sinistra) / Python (a destra), entrambi mostrati per intero, senza interruttore
+</Callout>
+
+pipeline.goGo
+
+```go
+package books
+
+import (
+    "encoding/json"
+    "fmt"
+    "net/http"
+    "strings"
+
+    "github.com/go-playground/validator/v10"
+)
+
+// one shared, reusable validator (the pipeline engine)
+var validate = validator.New()
+
+// CreateBook is the SCHEMA. The tags declare every rule:
+//   required      -> existence check
+//   the Go type   -> type check (string)
+//   min=5,max=100 -> constraint check
+type CreateBook struct {
+    Name string `json:"name" validate:"required,min=5,max=100"`
+}
+
+// runPipeline decodes then validates; returns 400-ready messages.
+func runPipeline(r *http.Request) (*CreateBook, []string) {
+    var body CreateBook
+
+    // 1. TYPE CHECK during decode: a JSON number for `name`
+    //    cannot unmarshal into a Go string -> caught here.
+    if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+        return nil, []string{"name: expected a string"}
+    }
+    // 2. EXISTENCE + CONSTRAINT checks in one pass.
+    if err := validate.Struct(body); err != nil {
+        return nil, formatErrors(err)
+    }
+    return &body, nil
+}
+
+// formatErrors turns validator output into human messages.
+func formatErrors(err error) []string {
+    var msgs []string
+    for _, e := range err.(validator.ValidationErrors) {
+        f := strings.ToLower(e.Field())
+        switch e.Tag() {
+        case "required":
+            msgs = append(msgs, fmt.Sprintf("%s: is required", f))
+        case "min":
+            msgs = append(msgs, fmt.Sprintf("%s: min %s chars", f, e.Param()))
+        case "max":
+            msgs = append(msgs, fmt.Sprintf("%s: max %s chars", f, e.Param()))
+        default:
+            msgs = append(msgs, fmt.Sprintf("%s: failed %s", f, e.Tag()))
+        }
+    }
+    return msgs
+}
+```
+
+pipeline.pyPython
+
+```python
+from fastapi import HTTPException
+from pydantic import BaseModel, Field, ValidationError
+
+# CreateBook is the SCHEMA. Each annotation = one rule:
+#   no default      -> existence check (required)
+#   : str           -> type check
+#   min/max_length  -> constraint check
+class CreateBook(BaseModel):
+    name: str = Field(min_length=5, max_length=100)
+
+def run_pipeline(raw: dict) -> CreateBook:
+    """Decode + validate in one call.
+    Raises a 400-ready error on failure."""
+    try:
+        # constructing the model runs all three layers
+        # in order: existence -> type -> constraint
+        return CreateBook(**raw)
+    except ValidationError as e:
+        # reshape pydantic errors into clean strings
+        messages = [
+            f"{err['loc'][0]}: {err['msg']}"
+            for err in e.errors()
+        ]
+        raise HTTPException(status_code=400, detail=messages)
+
+# run_pipeline({})            -> 400 ["name: Field required"]
+# run_pipeline({"name": 0})   -> 400 ["name: Input should be
+#                                      a valid string"]
+# run_pipeline({"name": "ab"})-> 400 ["name: String should
+#                                      have at least 5 chars"]
+# run_pipeline({"name": "Dune"}) ... still <5 -> 400
+# run_pipeline({"name": "The Hobbit"}) -> OK
+```
+
+Parte II / I quattro tipi di validazione
+
+Queste non sono una tassonomia fissa che devi memorizzare, ce ne possono essere di più a seconda dei requisiti, ma in pratica quattro versioni coprono quasi tutto ciò che incontrerai durante la progettazione delle API. La vera conclusione è una domanda che continui a farti: _quanto rigoroso e quanto specifico voglio essere con questi dati?_
+
+## Convalida del tipo
+
+La caratteristica più elementare: il campo corrisponde al **tipo di dati** previsto dall'API? È una stringa, un numero, un valore booleano, un array o un oggetto JSON nidificato e non qualcos'altro? Può anche essere applicato **ricorsivamente**: un campo array può richiedere che _ogni elemento_ sia una stringa, quindi elemento `0` essere un numero è di per sé un errore di tipo.
+
+POST /api/valid/type
+
+Tipi errati inviati
+
+```json
+{ "stringField":"x", "numberField":"x", "arrayField":"x", "boolField":"x" }
+```
+
+Risposta 400
+
+```text
+numberField: expected number, received string
+arrayField:  expected array,  received string
+boolField:   expected boolean, received string
+```
+
+Quindi una matrice di numeri in cui sono richieste le stringhe
+
+```json
+{ "arrayField": [1, 2] }  ->  arrayField[0]: expected string, received number
+```
+
+Completamente corretto -&gt; 200
+
+```json
+{ "stringField":"something", "numberField":10, "arrayField":["one","two"], "boolField":false }
+```
+
+digitare\_validation.goGo
+
+```go
+package validate
+
+import (
+    "encoding/json"
+    "errors"
+    "net/http"
+)
+
+// *bool so we can tell "false" apart from "missing".
+type TypePayload struct {
+    StringField string   `json:"stringField" validate:"required"`
+    NumberField float64  `json:"numberField" validate:"required"`
+    // dive = recurse INTO the slice; each element required
+    ArrayField  []string `json:"arrayField" validate:"required,dive,required"`
+    BoolField   *bool    `json:"boolField" validate:"required"`
+}
+
+func parseTypes(r *http.Request) (*TypePayload, error) {
+    var p TypePayload
+    dec := json.NewDecoder(r.Body)
+    dec.DisallowUnknownFields() // reject stray keys
+
+    // json.Decode enforces the BASE types: a string for
+    // numberField / arrayField / boolField fails to unmarshal.
+    if err := dec.Decode(&p); err != nil {
+        return nil, errors.New("a field has the wrong data type")
+    }
+    // existence + recursive element check
+    if err := validate.Struct(p); err != nil {
+        return nil, err
+    }
+    return &p, nil
+}
+
+// {"numberField":"x"} -> expected number, received string
+// {"arrayField":[1,2]} -> arrayField[0]: expected string
+```
+
+digitare\_validation.pyPython
+
+```python
+from pydantic import BaseModel
+from typing import List
+
+class TypePayload(BaseModel):
+    stringField: str
+    numberField: float
+    arrayField:  List[str]   # recursive: EVERY element a string
+    boolField:   bool
+
+# Strict, explicit type errors:
+#
+# TypePayload(stringField="x", numberField="x",
+#             arrayField="x", boolField="x")
+#   -> numberField: Input should be a valid number
+#   -> arrayField:  Input should be a valid list
+#   -> boolField:   Input should be a valid boolean
+#
+# TypePayload(..., arrayField=[1, 2], ...)
+#   -> arrayField.0: Input should be a valid string
+#   -> arrayField.1: Input should be a valid string
+#
+# TypePayload(stringField="something", numberField=10,
+#             arrayField=["one","two"], boolField=False) -> OK
+```
+
+## Validazione sintattica
+
+Qui il tipo è già corretto (una stringa) ma la stringa deve seguire uno **schema strutturale specifico**. L'algoritmo di validazione controlla la _forma_ del valore:
+
+- **Email**: una parte locale, quindi il `@` carattere, quindi un dominio composto da un nome più un dominio di primo livello (`.com`, `.co.in`, `.org`, ...). Esistono migliaia di TLD validi; la struttura è ciò che viene controllato.
+- **Numero di telefono**: un codice paese seguito dal numero esatto di cifre per quel paese (ad esempio un codice paese seguito da un numero di 10 cifre).
+- **Data**: deve corrispondere alla struttura prevista, ad es. `YYYY-MM-DD` (anno, poi mese, poi giorno).
+
+POST /api/valid/syntactic
+
+Corpo vuoto
+
+```text
+{ }
+```
+
+Risposta 400, gli errori raddoppiano come documentazione live
+
+```text
+email: required   phone: required   date: required
+```
+
+Cattivi valori
+
+```json
+{ "email":"randomstring", "phone":1234567, "date":"2025-11-05" }
+```
+
+Risposta 400
+
+```text
+email: invalid email format
+phone: expected a string, received a number
+```
+
+Corretto
+
+```json
+{ "email":"test@test.com", "phone":"1234567", "date":"2025-11-05" }  ->  200
+```
+
+<Callout type="info">
+Un vantaggio gratuito Anche un client che accede all'API blind, con un payload vuoto, recupera l'elenco dei campi obbligatori e le forme previste. Quando i documenti API mancano o non sono aggiornati, gli stessi messaggi di errore di convalida sono un ottimo modo per scoprire cosa richiede l'endpoint.
+</Callout>
+
+syntactic.goGo
+
+```go
+package validate
+
+import (
+    "errors"
+    "regexp"
+)
+
+// optional + then 7-15 digits (country code + national no.)
+var phoneRe = regexp.MustCompile(`^\+?[0-9]{7,15}$`)
+
+type Contact struct {
+    Email string `validate:"required,email"`            // local @ domain.tld
+    Phone string `validate:"required"`                  // checked below
+    Date  string `validate:"required,datetime=2006-01-02"` // YYYY-MM-DD
+}
+
+// checkSyntax handles the phone pattern (validator's
+// built-ins cover email + date structure already).
+func (c Contact) checkSyntax() error {
+    if !phoneRe.MatchString(c.Phone) {
+        return errors.New("phone: invalid phone number format")
+    }
+    return nil
+}
+
+// "randomstring"            -> email: invalid email format
+// phone sent as JSON number -> received a number, want string
+// "2025-13-40"              -> date: does not match YYYY-MM-DD
+```
+
+syntactic.pyPython
+
+```python
+from datetime import date
+from pydantic import BaseModel, EmailStr, Field
+
+class Contact(BaseModel):
+    email: EmailStr                       # local @ domain.tld
+    # country code + 7-15 digits
+    phone: str = Field(pattern=r"^\+?[0-9]{7,15}$")
+    date:  date                           # only accepts YYYY-MM-DD
+
+# Contact(email="randomstring", phone=1234567,
+#         date="2025-11-05")
+#   -> email: value is not a valid email address
+#   -> phone: Input should be a valid string
+#
+# Contact(email="bad@", ...)
+#   -> email: there must be something after the @-sign
+#
+# Contact(email="test@test.com", phone="1234567",
+#         date="2025-11-05")  -> OK
+```
+
+## Convalida semantica
+
+Il tipo è corretto e la sintassi è corretta, ma il valore **ha senso nel mondo reale?** I controlli semantici codificano la logica del dominio:
+
+- Una **data di nascita** non può essere nel futuro, se lo è oggi `2025-01-11`, un DOB di `2025-01-13` non ha senso anche se è una data perfettamente valida.
+- Un'**età** di `365` (o `430`) non ha senso, almeno non ancora. Una fascia di età umana ragionevole è approssimativamente `1` a `120`.
+
+POST /api/valid/semantic
+
+Futuro DOB
+
+```json
+{ "dateOfBirth":"2026-06-12", "age":43 }
+```
+
+Risposta 400
+
+```text
+dateOfBirth: date of birth cannot be in the future
+```
+
+Età impossibile
+
+```json
+{ "dateOfBirth":"1995-06-12", "age":430 }
+```
+
+Risposta 400
+
+```text
+age: number must be less than or equal to 120
+```
+
+Sensibile
+
+```json
+{ "dateOfBirth":"1995-06-12", "age":43 }  ->  200
+```
+
+semantic.goGo
+
+```go
+package validate
+
+import (
+    "errors"
+    "time"
+)
+
+type Profile struct {
+    DateOfBirth string `validate:"required,datetime=2006-01-02"`
+    // gte/lte cover the "430 is impossible" semantic bound
+    Age int `validate:"required,gte=1,lte=120"`
+}
+
+// Type & syntax can't express "not in the future"
+// semantics need real logic against the real clock.
+func (p Profile) checkSemantics() error {
+    dob, err := time.Parse("2006-01-02", p.DateOfBirth)
+    if err != nil {
+        return errors.New("dateOfBirth: invalid date")
+    }
+    if dob.After(time.Now()) {
+        return errors.New(
+            "dateOfBirth: date of birth cannot be in the future")
+    }
+    return nil
+}
+
+// {"dateOfBirth":"2026-06-12"} -> cannot be in the future
+// {"age":430}                  -> age: must be 120 or less
+```
+
+semantic.pyPython
+
+```python
+from datetime import date
+from pydantic import BaseModel, Field, field_validator
+
+class Profile(BaseModel):
+    dateOfBirth: date
+    age: int = Field(ge=1, le=120)   # 430 -> must be <= 120
+
+    @field_validator("dateOfBirth")
+    @classmethod
+    def not_in_future(cls, v: date) -> date:
+        if v > date.today():
+            raise ValueError(
+                "date of birth cannot be in the future")
+        return v
+
+# Profile(dateOfBirth="2026-06-12", age=43)
+#   -> dateOfBirth: date of birth cannot be in the future
+# Profile(dateOfBirth="1995-06-12", age=430)
+#   -> age: Input should be less than or equal to 120
+# Profile(dateOfBirth="1995-06-12", age=43) -> OK
+```
+
+## Validazione complessa/dipendente
+
+La caratteristica più potente: le regole di un campo dipendono da **altri campi**. La pipeline può codificare una logica incrociata arbitraria:
+
+- **Conferma password**: `passwordConfirmation` deve corrispondere esattamente `password`; e `password` deve contenere almeno 8 caratteri. Due stringhe diverse producono _"le password non corrispondono"_; una password di 6 caratteri restituisce _"la stringa deve contenere almeno 8 caratteri"_.
+- **Requisito condizionale**: `partner` è facoltativo quando `married` è `false`, ma il momento `married` è `true` il `partner` il nome diventa obbligatorio: _"il nome del partner è obbligatorio se sposato è vero"_.
+
+POST /api/valid/complex
+
+Password non corrispondente + breve
+
+```json
+{ "password":"random", "passwordConfirmation":"another", "married":false }
+```
+
+Risposta 400
+
+```text
+password: string must contain at least 8 characters
+passwordConfirmation: passwords don't match
+```
+
+sposato=vero ma senza partner
+
+```json
+{ "password":"random12", "passwordConfirmation":"random12", "married":true }
+```
+
+Risposta 400
+
+```text
+partner: partner name is required when married is true
+```
+
+Completo
+
+```json
+{ "password":"random12", "passwordConfirmation":"random12", "married":true, "partner":"Sam" }  ->  200
+```
+
+complesso.goGo
+
+```go
+package validate
+
+type Signup struct {
+    Password string `json:"password" validate:"required,min=8"`
+    // eqfield: must equal another field on the struct
+    PasswordConf string `json:"passwordConfirmation" \
+        validate:"required,eqfield=Password"`
+    Married *bool `json:"married" validate:"required"`
+    // required_if: partner required only if married == true
+    Partner string `json:"partner" \
+        validate:"required_if=Married true"`
+}
+
+// {password:"random", passwordConfirmation:"another",
+//  married:false}
+//   -> password: must be at least 8 characters
+//   -> passwordConfirmation: passwords don't match
+//
+// {password:"random12", passwordConfirmation:"random12",
+//  married:true}
+//   -> partner: required when married is true
+```
+
+complesso.pyPython
+
+```python
+from pydantic import BaseModel, Field, model_validator
+
+class Signup(BaseModel):
+    password: str = Field(min_length=8)
+    passwordConfirmation: str
+    married: bool
+    partner: str | None = None
+
+    # mode="after": runs once all fields are parsed,
+    # so it can compare them against each other.
+    @model_validator(mode="after")
+    def cross_field_rules(self):
+        if self.password != self.passwordConfirmation:
+            raise ValueError("passwords don't match")
+        if self.married and not self.partner:
+            raise ValueError(
+                "partner name is required when married is true")
+        return self
+
+# Signup(password="random", passwordConfirmation="another",
+#        married=False)
+#   -> password: String should have at least 8 characters
+#   -> Value error, passwords don't match
+```
+
+<Diagram>
+<svg viewBox="0 0 720 230" xmlns="http://www.w3.org/2000/svg" font-family="var(--font-diagram-mono)"><text x="360" y="26" text-anchor="middle" font-size="12" font-weight="700" fill="var(--dg-accent-2)">I QUATTRO GUSTI, SEMPRE PIÙ RIGORE E CONTESTO -&gt;</text><g font-size="11" font-weight="700"><rect x="20" y="56" width="160" height="140" rx="11" fill="var(--dg-paper)" stroke="var(--dg-line)"></rect><text x="100" y="84" text-anchor="middle" fill="var(--dg-accent)">TIPO</text><text x="100" y="112" text-anchor="middle" font-size="9" font-weight="400" fill="var(--dg-ink-3)">è giusto?</text><text x="100" y="126" text-anchor="middle" font-size="9" font-weight="400" fill="var(--dg-ink-3)">tipo di dati?</text><text x="100" y="160" text-anchor="middle" font-size="8.5" font-weight="400" fill="var(--dg-ink-3)">stringa/numero</text><text x="100" y="173" text-anchor="middle" font-size="8.5" font-weight="400" fill="var(--dg-ink-3)">booleano/array</text><rect x="195" y="56" width="160" height="140" rx="11" fill="var(--dg-paper)" stroke="var(--dg-line)"></rect><text x="275" y="84" text-anchor="middle" fill="var(--dg-accent)">SINTATTICO</text><text x="275" y="112" text-anchor="middle" font-size="9" font-weight="400" fill="var(--dg-ink-3)">giusto strutturale</text><text x="275" y="126" text-anchor="middle" font-size="9" font-weight="400" fill="var(--dg-ink-3)">modello?</text><text x="275" y="160" text-anchor="middle" font-size="8.5" font-weight="400" fill="var(--dg-ink-3)">e-mail/telefono</text><text x="275" y="173" text-anchor="middle" font-size="8.5" font-weight="400" fill="var(--dg-ink-3)">formato della data</text><rect x="370" y="56" width="160" height="140" rx="11" fill="var(--dg-paper)" stroke="var(--dg-line)"></rect><text x="450" y="84" text-anchor="middle" fill="var(--dg-accent)">SEMANTICO</text><text x="450" y="112" text-anchor="middle" font-size="9" font-weight="400" fill="var(--dg-ink-3)">fa il valore</text><text x="450" y="126" text-anchor="middle" font-size="9" font-weight="400" fill="var(--dg-ink-3)">ha senso?</text><text x="450" y="160" text-anchor="middle" font-size="8.5" font-weight="400" fill="var(--dg-ink-3)">DOB non futuro</text><text x="450" y="173" text-anchor="middle" font-size="8.5" font-weight="400" fill="var(--dg-ink-3)">età &lt;= 120</text><rect x="545" y="56" width="160" height="140" rx="11" fill="var(--dg-accent-surface)" stroke="var(--dg-accent)" stroke-width="1.5"></rect><text x="625" y="84" text-anchor="middle" fill="var(--dg-accent-2)">COMPLESSO</text><text x="625" y="112" text-anchor="middle" font-size="9" font-weight="400" fill="var(--dg-accent-2)">dipende da</text><text x="625" y="126" text-anchor="middle" font-size="9" font-weight="400" fill="var(--dg-accent-2)">altri campi?</text><text x="625" y="160" text-anchor="middle" font-size="8.5" font-weight="400" fill="var(--dg-accent-soft)">corrispondenza della password</text><text x="625" y="173" text-anchor="middle" font-size="8.5" font-weight="400" fill="var(--dg-accent-soft)">sposato-&gt;partner</text></g></svg>
+</Diagram>
+
+Dal "tipo giusto" alla "relazione giusta", scegli quanto rigoroso deve essere l'endpoint
+
+Parte III/Trasformazione
+
+## Trasformazione come fusione di tipo
+
+**Trasformazione** significa eseguire operazioni sui dati in entrata per convertirli in un formato desiderabile, prima della convalida (in modo che _possa_ passare) o dopo (per prepararli per il livello di servizio). Il caso da manuale è quello dei **parametri di query di impaginazione**.
+
+Considera `GET /bookmarks?page=2&limit=20` con questi requisiti:
+
+- `page`, un numero maggiore di 0 e inferiore a 500.
+- `limit`, un numero maggiore di 0 e inferiore a 10.000 (al massimo 10.000 record restituiti alla volta).
+
+<Callout type="info">
+I parametri catch Query sono **sempre stringhe per impostazione predefinita.** Ogni valore nella stringa di query arriva al tuo server come stringa, non hanno altro tipo nativo. Quindi `page` arriva come stringa `"2"`, non il numero `2`. La convalida che richiede un _numero_ fallisce al primo controllo, anche se il client non ha fatto nulla di sbagliato, le stringhe sono semplicemente il modo in cui funzionano i parametri di query.
+</Callout>
+
+La soluzione non è l'errore. È **responsabilità del server** _cast_ prima la stringa in un numero. Il "casting" forza un tipo di dati a diventare un altro. Cast `"2"` -&gt; `2`, quindi eseguire le convalide numeriche. La fase del casting è la trasformazione.
+
+<Diagram>
+<svg viewBox="0 0 760 150" xmlns="http://www.w3.org/2000/svg" font-family="var(--font-diagram-mono)"><defs><marker id="ar5" markerWidth="9" markerHeight="9" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="var(--dg-accent)"></path></marker></defs><g font-size="11" font-weight="700"><rect x="20" y="50" width="150" height="56" rx="9" fill="var(--dg-paper)" stroke="var(--dg-line)"></rect><text x="95" y="74" text-anchor="middle" fill="var(--dg-ink)">?pagina=&quot;2&quot;</text><text x="95" y="92" text-anchor="middle" font-size="9" font-weight="400" fill="var(--dg-ink-3)">arriva come STRING</text><rect x="225" y="42" width="170" height="72" rx="10" fill="var(--dg-accent-surface)" stroke="var(--dg-accent)" stroke-width="1.5"></rect><text x="310" y="72" text-anchor="middle" fill="var(--dg-accent-2)">TRASFORMARE</text><text x="310" y="90" text-anchor="middle" font-size="9" font-weight="400" fill="var(--dg-accent-2)">lancia &quot;2&quot; -&gt; 2</text><text x="310" y="104" text-anchor="middle" font-size="9" font-weight="400" fill="var(--dg-accent-2)">(forzare il tipo)</text><rect x="450" y="50" width="150" height="56" rx="9" fill="var(--dg-paper)" stroke="var(--dg-line)"></rect><text x="525" y="74" text-anchor="middle" fill="var(--dg-ink)">pagina = 2</text><text x="525" y="92" text-anchor="middle" font-size="9" font-weight="400" fill="var(--dg-ink-3)">ora un NUMERO</text><rect x="630" y="50" width="110" height="56" rx="9" fill="var(--dg-ok-surface)" stroke="var(--dg-ok)"></rect><text x="685" y="74" text-anchor="middle" fill="var(--dg-ok)" font-size="10">VALIDARE</text><text x="685" y="92" text-anchor="middle" font-size="8.5" font-weight="400" fill="var(--dg-ok)">0 &amp;#x3C; n &amp;#x3C; 500</text><line x1="170" y1="78" x2="221" y2="78" stroke="var(--dg-accent)" stroke-width="2" marker-end="url(#ar5)"></line><line x1="395" y1="78" x2="446" y2="78" stroke="var(--dg-accent)" stroke-width="2" marker-end="url(#ar5)"></line><line x1="600" y1="78" x2="626" y2="78" stroke="var(--dg-accent)" stroke-width="2" marker-end="url(#ar5)"></line></g></svg>
+</Diagram>
+
+La trasformazione viene eseguita **prima** della convalida qui, lancia la stringa, quindi possono anche essere applicate le regole numeriche
+
+paginazione.goGo
+
+```go
+package validate
+
+import (
+    "errors"
+    "net/url"
+    "strconv"
+)
+
+type Pagination struct {
+    Page  int
+    Limit int
+}
+
+// Query params are ALWAYS strings, so we must CAST
+// (transform) before we can VALIDATE the numbers.
+func parsePagination(q url.Values) (*Pagination, error) {
+    // TRANSFORM: force the string "2" into the int 2
+    page, err := strconv.Atoi(q.Get("page"))
+    if err != nil {
+        return nil, errors.New("page: must be a number")
+    }
+    limit, err := strconv.Atoi(q.Get("limit"))
+    if err != nil {
+        return nil, errors.New("limit: must be a number")
+    }
+
+    // VALIDATE the now-numeric values
+    if page <= 0 || page >= 500 {
+        return nil, errors.New("page: must be 1..499")
+    }
+    if limit <= 0 || limit >= 10000 {
+        return nil, errors.New("limit: must be 1..9999")
+    }
+    return &Pagination{Page: page, Limit: limit}, nil
+}
+```
+
+paginazione.pyPython
+
+```python
+from pydantic import BaseModel, Field
+
+class Pagination(BaseModel):
+    # Pydantic AUTO-CASTS the incoming string "2" into
+    # int 2 (transform), THEN enforces gt/lt (validate)
+    # -- both steps in one schema, in the right order.
+    page:  int = Field(gt=0, lt=500)
+    limit: int = Field(gt=0, lt=10_000)
+
+# request: /bookmarks?page=2&limit=20
+# (both values arrive as strings)
+#
+# Pagination(page="2", limit="20")
+#   -> Pagination(page=2, limit=20)   # real ints
+#
+# Pagination(page="0", limit="20")
+#   -> page: Input should be greater than 0
+#
+# Pagination(page="abc", limit="20")
+#   -> page: Input should be a valid integer
+```
+
+## Trasformazione come normalizzazione
+
+La trasformazione inoltre _ripulisce_ i dati dopo la convalida, rimodellandoli in ciò che preferisce il livello di servizio. Il server normalizza silenziosamente il carico utile prima di fare qualsiasi cosa con esso:
+
+- Una **email** inviata con maiuscole/minuscole miste, `Test@TEST.com`, ritorna memorizzato come tutto in minuscolo `test@test.com`.
+- Una stringa **telefono** ottiene a `+` prefisso iniettato prima di esso.
+- Una **data** viene ricalcolata nel formato canonico previsto dal backend.
+
+POST /api/valid/transform
+
+Ciò che il cliente ha inviato
+
+```json
+{ "email":"Test@TEST.com", "phone":"1234567", "date":"2025-11-05" }
+```
+
+Ciò che il server restituisce 200, normalizzato
+
+```json
+{ "email":"test@test.com", "phone":"+1234567", "date":"2025-11-05" }
+```
+
+normalize.goGo
+
+```go
+package validate
+
+import "strings"
+
+// normalize runs AFTER validation passes and BEFORE
+// the data is handed to the service layer.
+func (c *Contact) normalize() {
+    // lowercase + trim the email
+    c.Email = strings.ToLower(strings.TrimSpace(c.Email))
+
+    // inject the leading + if it is missing
+    c.Phone = strings.TrimSpace(c.Phone)
+    if !strings.HasPrefix(c.Phone, "+") {
+        c.Phone = "+" + c.Phone
+    }
+}
+
+// "Test@TEST.com" -> "test@test.com"
+// "1234567"       -> "+1234567"
+```
+
+normalize.pyPython
+
+```python
+from pydantic import BaseModel, EmailStr, field_validator
+
+class Contact(BaseModel):
+    email: EmailStr
+    phone: str
+
+    # field_validators double as transformers: whatever
+    # they return REPLACES the incoming value.
+    @field_validator("email")
+    @classmethod
+    def lower_email(cls, v: str) -> str:
+        return v.strip().lower()       # normalize case
+
+    @field_validator("phone")
+    @classmethod
+    def add_plus(cls, v: str) -> str:
+        v = v.strip()
+        return v if v.startswith("+") else "+" + v
+
+# Contact(email="Test@TEST.com", phone="1234567")
+#   -> email="test@test.com", phone="+1234567"
+```
+
+## Una pipeline combinata
+
+In pratica le convalide e le trasformazioni sono **accoppiate in un'unica pipeline**. Il motivo è la località: l'intero "livello dei dati di input", ogni requisito _e_ ogni operazione eseguita sui dati in entrata prima dell'esecuzione di qualsiasi logica applicativa, risiede in **un unico posto**. Non è mai necessario cercare tra i file per scoprire cosa si aspetta un endpoint o cosa fa silenziosamente ai dati. La pipeline può trasformare -&gt; convalidare o convalidare -&gt; trasformare, in entrambi gli ordini, a seconda dei requisiti.
+
+<Diagram>
+<svg viewBox="0 0 760 160" xmlns="http://www.w3.org/2000/svg" font-family="var(--font-diagram-mono)"><defs><marker id="ar6" markerWidth="9" markerHeight="9" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="var(--dg-accent)"></path></marker></defs><rect x="120" y="40" width="520" height="80" rx="14" fill="var(--dg-accent-surface)" stroke="var(--dg-accent)" stroke-width="1.6"></rect><text x="380" y="32" text-anchor="middle" font-size="11" font-weight="700" fill="var(--dg-accent-2)">CONVALIDA E TRASFORMAZIONE PIPELINE, un unico luogo</text><g font-size="10.5" font-weight="700"><rect x="150" y="62" width="120" height="38" rx="8" fill="var(--dg-paper)" stroke="var(--dg-accent)"></rect><text x="210" y="86" text-anchor="middle" fill="var(--dg-accent-2)">trasformare</text><rect x="320" y="62" width="120" height="38" rx="8" fill="var(--dg-paper)" stroke="var(--dg-accent)"></rect><text x="380" y="86" text-anchor="middle" fill="var(--dg-accent-2)">convalidare</text><rect x="490" y="62" width="120" height="38" rx="8" fill="var(--dg-paper)" stroke="var(--dg-accent)"></rect><text x="550" y="86" text-anchor="middle" fill="var(--dg-accent-2)">trasformare</text><line x1="270" y1="81" x2="316" y2="81" stroke="var(--dg-accent)" stroke-width="2" marker-end="url(#ar6)"></line><line x1="440" y1="81" x2="486" y2="81" stroke="var(--dg-accent)" stroke-width="2" marker-end="url(#ar6)"></line></g><text x="210" y="135" text-anchor="middle" font-size="8.5" fill="var(--dg-accent-2)">lanciare stringhe di query</text><text x="380" y="135" text-anchor="middle" font-size="8.5" fill="var(--dg-accent-2)">tipo/sintassi/semantico/complesso</text><text x="550" y="135" text-anchor="middle" font-size="8.5" fill="var(--dg-accent-2)">minuscolo/prefisso/riformattazione</text></svg>
+</Diagram>
+
+Tutta la logica, i requisiti e le operazioni del livello di input, raccolti in **un unico middleware riutilizzabile**
+
+Parte IV / La regola d'oro
+
+## Convalida frontend e backend
+
+Un errore comune e pericoloso è considerare la convalida del frontend come un **sostituto** della convalida del backend. Non sono intercambiabili, hanno scopi diversi e sono necessari **entrambi** per ogni API.
+
+FrontendPer UX
+
+Un modulo Web viene convalidato mentre l'utente digita e invia, fornendo un **feedback immediato e amichevole** ("che non sembra un'e-mail") prima che venga effettuata qualsiasi chiamata API. Il suo intero lavoro è l'esperienza dell'utente. Non si tratta di sicurezza o di integrità dei dati.
+
+BackendPer la sicurezza
+
+La convalida lato server è **obbligatoria** ed esiste per la sicurezza e l'integrità dei dati. Non importa quale sia il client o se sia stato validato, il server deve essere il più rigoroso e specifico possibile.
+
+Perché il backend non può fidarsi del frontend? Perché un server può avere **molti client diversi.** Un'app Web raffinata potrebbe validarsi magnificamente, ma la stessa API può anche essere raggiunta direttamente tramite un client API come **Postman o Insomnia**, dove non esiste un frontend che funge da proxy e quindi nessuna convalida del frontend. Se il backend dipendesse mai dal frontend per la sicurezza o l'integrità, il server si romperebbe nel momento in cui il client cambiasse.
+
+<Diagram>
+<svg viewBox="0 0 760 280" xmlns="http://www.w3.org/2000/svg" font-family="var(--font-diagram-mono)"><defs><marker id="ar7" markerWidth="9" markerHeight="9" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="var(--dg-accent)"></path></marker></defs><g font-size="10.5" font-weight="700"><rect x="30" y="22" width="190" height="56" rx="9" fill="var(--dg-paper)" stroke="var(--dg-line)"></rect><text x="125" y="44" text-anchor="middle" fill="var(--dg-ink)">APP WEB</text><text x="125" y="62" text-anchor="middle" font-size="8.5" font-weight="400" fill="var(--dg-ok)">ha la convalida FE (UX)</text><rect x="30" y="112" width="190" height="56" rx="9" fill="var(--dg-paper)" stroke="var(--dg-line)"></rect><text x="125" y="134" text-anchor="middle" fill="var(--dg-ink)">POSTINO / INSONNIA</text><text x="125" y="152" text-anchor="middle" font-size="8.5" font-weight="400" fill="var(--dg-accent-2)">NESSUNA convalida FE</text><rect x="30" y="202" width="190" height="56" rx="9" fill="var(--dg-paper)" stroke="var(--dg-line)"></rect><text x="125" y="224" text-anchor="middle" fill="var(--dg-ink)">MOBILE/TERZE PARTI</text><text x="125" y="242" text-anchor="middle" font-size="8.5" font-weight="400" fill="var(--dg-ink-3)">convalida sconosciuta</text><rect x="430" y="80" width="300" height="120" rx="14" fill="var(--dg-accent-surface)" stroke="var(--dg-accent)" stroke-width="1.8"></rect><text x="580" y="116" text-anchor="middle" font-size="13" fill="var(--dg-accent-2)">SERVER</text><text x="580" y="142" text-anchor="middle" font-size="10" fill="var(--dg-accent-2)">CONVALIDA DEL BACKEND</text><text x="580" y="160" text-anchor="middle" font-size="8.5" font-weight="400" fill="var(--dg-accent-2)">rigoroso/specifico/obbligatorio</text><text x="580" y="176" text-anchor="middle" font-size="8.5" font-weight="400" fill="var(--dg-accent-2)">sicurezza e integrità dei dati, per TUTTI i clienti</text><line x1="220" y1="50" x2="426" y2="110" stroke="var(--dg-accent)" stroke-width="1.8" marker-end="url(#ar7)"></line><line x1="220" y1="140" x2="426" y2="140" stroke="var(--dg-accent)" stroke-width="1.8" marker-end="url(#ar7)"></line><line x1="220" y1="230" x2="426" y2="170" stroke="var(--dg-accent)" stroke-width="1.8" marker-end="url(#ar7)"></line></g></svg>
+</Diagram>
+
+Un server, molti client, solo il gate **backend** è garantito per funzionare, quindi non deve mai essere ignorabile
+
+Quando i due sono collegati correttamente, si completano a vicenda: in un modulo web, un'e-mail non valida blocca l'invio e mostra un errore in linea, **non viene nemmeno effettuata alcuna chiamata API**. Correggilo su un indirizzo reale e l'invio attiva una richiesta adeguata; il payload viene inviato, il server convalida nuovamente e restituisce `200`. Il frontend ha fornito un feedback immediato; il backend ha fornito la garanzia.
+
+<Callout type="info">
+La regola, dichiarata chiaramente Progetta la tua convalida lato server in modo che sia il più rigorosa e specifica possibile _senza mai pensare_ a come si presenta la convalida client. La convalida del frontend riguarda l'esperienza dell'utente; la convalida del backend riguarda la sicurezza e l'integrità dei dati. Hai sempre bisogno di entrambi.
+</Callout>
+
+## Controller completo con annotazioni
+
+Mettendo insieme l'intero quadro: un controller completo che corrisponde al percorso, esegue la pipeline combinata (trasforma -&gt; convalida -&gt; normalizza) _prima_ di qualsiasi logica di business, restituisce un risultato pulito `400` in caso di errore e solo allora chiama il livello di servizio, che chiama il repository. Entrambe le estremità mostrate per intero.
+
+main.goGo
+
+```go
+package main
+
+import (
+    "context"
+    "encoding/json"
+    "net/http"
+    "strings"
+
+    "github.com/go-playground/validator/v10"
+)
+
+var validate = validator.New()
+
+// ---- schema (the gate) ----
+type CreateBook struct {
+    Name string `json:"name" validate:"required,min=5,max=100"`
+}
+
+type Book struct {
+    ID   int    `json:"id"`
+    Name string `json:"name"`
+}
+
+// ---- helper ----
+func writeJSON(w http.ResponseWriter, status int, b any) {
+    w.Header().Set("Content-Type", "application/json")
+    w.WriteHeader(status)
+    json.NewEncoder(w).Encode(b)
+}
+
+// ---- CONTROLLER: owns HTTP + the validation gate ----
+func createBookHandler(w http.ResponseWriter, r *http.Request) {
+    var body CreateBook
+
+    // === GATE, runs before ANY business logic ===
+    if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+        writeJSON(w, 400, map[string]string{
+            "error": "name: expected a string"})
+        return // 400, the DB is never touched
+    }
+    body.Name = strings.TrimSpace(body.Name) // transform
+    if err := validate.Struct(body); err != nil {
+        writeJSON(w, 400, map[string]string{
+            "error": err.Error()})
+        return // 400 Bad Request, not a confusing 500
+    }
+
+    // === only now: business logic (service -> repo) ===
+    book, err := createBook(r.Context(), body.Name)
+    if err != nil {
+        writeJSON(w, 500, map[string]string{
+            "error": "could not create book"})
+        return
+    }
+    writeJSON(w, 201, book)
+}
+
+// ---- service + repository (sketched) ----
+func createBook(ctx context.Context, name string) (*Book, error) {
+    // service logic ... repository INSERT ... then:
+    return &Book{ID: 1, Name: name}, nil
+}
+
+func main() {
+    http.HandleFunc("/api/books", createBookHandler)
+    http.ListenAndServe(":8080", nil)
+}
+```
+
+main.pyPython
+
+```python
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel, Field, field_validator
+
+app = FastAPI()
+
+# ---- schema (the gate) ----
+class CreateBook(BaseModel):
+    name: str = Field(min_length=5, max_length=100)
+
+    @field_validator("name")
+    @classmethod
+    def trim(cls, v: str) -> str:
+        return v.strip()          # transform / normalize
+
+class Book(BaseModel):
+    id: int
+    name: str
+
+# ---- service + repository (sketched) ----
+def create_book(name: str) -> Book:
+    # service logic ... repository INSERT ... then:
+    return Book(id=1, name=name)
+
+# ---- CONTROLLER ----
+# FastAPI runs the CreateBook schema (the GATE) BEFORE
+# this function body. A bad payload never enters the
+# function, the client gets an automatic 422/400, so
+# the DB is never touched and no client mistake leaks
+# out as a confusing 500.
+@app.post("/api/books", status_code=201)
+def create_book_endpoint(body: CreateBook) -> Book:
+    # validation already passed, straight to logic
+    try:
+        return create_book(body.name)  # service -> repo
+    except Exception:
+        raise HTTPException(
+            status_code=500, detail="could not create book")
+
+# run:  uvicorn main:app --reload
+```
+
+<Callout type="info">
+L'intero argomento, in un fiato Le convalide e le trasformazioni sono un piccolo insieme di regole da tenere a mente durante la progettazione delle API. Vivono nel punto di ingresso del controller, funzionano prima di qualsiasi logica applicativa, rifiutano i dati errati con un chiaro `400` invece che confuso `500`, sono disponibili in quattro versioni (tipo, sintattico, semantico, complesso), abbinati a trasformazioni (casting e normalizzazione) in un'unica pipeline e sul backend sono obbligatori per la sicurezza e l'integrità dei dati, indipendentemente da ciò che fa il client.
+</Callout>
+
+Backend dai Primi Principi / Capitolo 05 / Validazione. Il codice è destinato a Go 1.22+ e Python 3.11+.

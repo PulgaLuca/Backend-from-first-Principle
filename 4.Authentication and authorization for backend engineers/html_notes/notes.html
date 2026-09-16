@@ -1,0 +1,1927 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="referrer" content="no-referrer">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Autenticazione e autorizzazione / Capitolo 04 / Backend dai principi primi</title>
+  <meta name="description" content="Capitolo 04 di Backend dai principi primi: autenticazione e autorizzazione. Note sui principi primi, diagrammi ed esempi eseguibili in Go e Python.">
+  <meta name="theme-color" content="#f3ede2">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2032%2032'%3E%3Crect%20width='32'%20height='32'%20rx='7'%20fill='%23b8402e'/%3E%3Ctext%20x='16'%20y='23'%20font-family='Georgia,serif'%20font-size='19'%20font-weight='700'%20fill='%23f3ede2'%20text-anchor='middle'%3EB%3C/text%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/http.min.js"></script>
+<style>
+  :root{
+  --paper: #f3ede2;
+  --paper-2: #ece3d4;
+  --ink: #211e1a;
+  --ink-soft: #5b5347;
+  --muted: #8d8475;
+  --red: #b8402e;
+  --red-deep: #8f2f20;
+  --rule: #d8cfbe;
+  --rule-strong: #c7bca6;
+  --teal: #3f6f4e;
+  --gold: #b07d2b;
+  --code-bg: #232019;
+  --max: 1180px;
+}
+  *{box-sizing:border-box;}
+  html{scroll-behavior:smooth;}
+  body{
+    margin:0;background:var(--paper);color:var(--ink);
+    font-family:"Spline Sans", system-ui, sans-serif;font-weight:400;
+    font-size: 17px;line-height: 1.7;-webkit-font-smoothing:antialiased;
+    background-image:radial-gradient(circle at 20% 0%,rgba(184,64,46,.03),transparent 40%),
+                     radial-gradient(circle at 90% 60%,rgba(63,111,78,.03),transparent 45%);
+  }
+  /* ---------- SIDEBAR ---------- */
+  aside{
+    position:sticky;top:0;align-self:start;height:100vh;overflow-y:auto;
+    padding:34px 26px 60px 30px;border-right:1px solid var(--rule);
+    background:linear-gradient(180deg,var(--paper-2),var(--paper));
+  }
+  /* ---------- MAIN ---------- */
+  .bfp-content{padding:46px 60px 120px;min-width:0;}
+  .kicker{font-family:"JetBrains Mono", ui-monospace, monospace;font-size:12px;letter-spacing:.26em;color:var(--red);text-transform:uppercase;font-weight:500;}
+  h1.title{
+    font-family:"Fraunces", Georgia, serif;font-weight:900;font-size:clamp(46px,6vw,78px);
+    line-height:.96;letter-spacing:-.02em;margin:18px 0 0;
+  }
+  h1.title em{font-style:italic;color:var(--red);}
+  .lede{font-size: 19px;color:var(--ink-soft);max-width:62ch;margin:26px 0 0;line-height: 1.6;}
+  .lede em{font-style:italic;}
+  .pills{display:flex;flex-wrap:wrap;gap:11px;margin-top:30px;}
+  .pill{font-family:"JetBrains Mono", ui-monospace, monospace;font-size:11.5px;letter-spacing:.04em;color:var(--ink-soft);
+        border:1px solid var(--rule-strong);border-radius:30px;padding:8px 16px;background:rgba(255,255,255,.25);}
+  .titlerule{height:3px;width:120px;background:var(--red);margin:40px 0 0;}
+  /* ---------- PART / SECTION ---------- */
+  .part{font-family:"JetBrains Mono", ui-monospace, monospace;font-size:12px;letter-spacing:.24em;color:var(--red);
+        text-transform:uppercase;margin:80px 0 14px;padding-top:30px;border-top:1px dotted var(--rule-strong);font-weight:500;}
+  section{scroll-margin-top:24px;}
+  h2{font-family:"Fraunces", Georgia, serif;font-weight:700;font-size:clamp(28px,3.4vw,40px);
+     line-height:1.08;letter-spacing:-.01em;margin:14px 0 6px;display:flex;align-items:center;gap:16px;}
+  h2 .badge{font-family:"JetBrains Mono", ui-monospace, monospace;font-size:13px;font-weight:700;color:#fff;background:var(--red);
+            border-radius:6px;padding:5px 9px;line-height:1;flex:none;box-shadow:0 3px 0 var(--red-deep);}
+  h2 + .underh{height:1px;background:var(--rule);margin:8px 0 26px;}
+  h3{font-family:"Fraunces", Georgia, serif;font-weight:700;font-size:24px;margin:42px 0 4px;letter-spacing:-.01em;}
+  h4{font-family:"Spline Sans", system-ui, sans-serif;font-weight:700;font-size:15px;letter-spacing:.02em;
+     text-transform:uppercase;color:var(--red-deep);margin:30px 0 6px;}
+  p{margin:14px 0;max-width:70ch;}
+  strong{font-weight:700;color:var(--ink);}
+  em{font-style:italic;}
+  a.inline{color:var(--red);text-decoration:none;border-bottom:1px solid var(--rule-strong);}
+  /* inline code */
+  code.ic{font-family:"JetBrains Mono", ui-monospace, monospace;font-size:.84em;background:var(--paper-2);
+          border:1px solid var(--rule);border-radius:4px;padding:1.5px 6px;color:var(--red-deep);}
+  /* lists */
+  ul,ol{max-width:70ch;padding-left:22px;}
+  li{margin:7px 0;}
+  li::marker{color:var(--red);}
+  /* ---------- CALLOUTS ---------- */
+  .note{border-left:3px solid var(--red);background:rgba(184,64,46,.05);padding:14px 20px;margin:24px 0;border-radius:0 8px 8px 0;}
+  .note.teal{border-left-color:var(--teal);background:rgba(63,111,78,.06);}
+  .note.gold{border-left-color:var(--gold);background:rgba(176,125,43,.07);}
+  .note .lbl{font-family:"JetBrains Mono", ui-monospace, monospace;font-size:10.5px;letter-spacing:.2em;text-transform:uppercase;color:var(--red);display:block;margin-bottom:4px;font-weight:600;}
+  .note.teal .lbl{color:var(--teal);}
+  .note.gold .lbl{color:var(--gold);}
+  .note p{margin:6px 0;}
+  /* ---------- CODE BLOCKS ---------- */
+  .code{margin:24px 0;border:1px solid var(--rule-strong);border-radius:10px;overflow:hidden;background:var(--code-bg);box-shadow:0 1px 0 rgba(0,0,0,.03);}
+  .code .bar{display:flex;justify-content:space-between;align-items:center;padding:9px 16px;border-bottom:1px solid #35302a;background:#1a1813;}
+  .code .bar .lang{font-family:"JetBrains Mono", ui-monospace, monospace;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:#9c948a;font-weight:600;}
+  .code .bar .lang.go{color:#37607f;}
+  .code .bar .lang.py{color:#b07d2b;}
+  .code .bar .dots{display:flex;gap:6px;}
+  .code .bar .dots i{width:10px;height:10px;border-radius:50%;display:block;}
+  .code .bar .dots i:nth-child(1){background:#d05a47;}
+  .code .bar .dots i:nth-child(2){background:#cf9f4b;}
+  .code .bar .dots i:nth-child(3){background:#5a9a5f;}
+  pre{margin:0;padding:18px 20px;overflow-x:auto;font-family:"JetBrains Mono", ui-monospace, monospace;font-size:13.2px;line-height:1.62;color:#e9e2d3;}
+  pre code{font-family:inherit;background:none;}
+  pre::-webkit-scrollbar{height:8px;}
+  pre::-webkit-scrollbar-thumb{background:#4a443b;border-radius:4px;}
+  .codepair{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin:24px 0;}
+  @media(max-width:1000px){.codepair{grid-template-columns:1fr;}}
+  /* ---------- TABLES ---------- */
+  .tbl{margin:24px 0;border:1px solid var(--rule-strong);border-radius:10px;overflow:hidden;}
+  table{border-collapse:collapse;width:100%;font-size:14.5px;}
+  th{background:var(--paper-2);text-align:left;font-family:"JetBrains Mono", ui-monospace, monospace;font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--red-deep);padding:11px 16px;border-bottom:1px solid var(--rule-strong);}
+  td{padding:11px 16px;border-bottom:1px solid var(--rule);vertical-align:top;}
+  tr:last-child td{border-bottom:none;}
+  tr:nth-child(even) td{background:rgba(255,255,255,.22);}
+  .yes{color:var(--teal);font-weight:600;}
+  .no{color:var(--red);font-weight:600;}
+  /* ---------- FIGURE ---------- */
+  figure{margin:30px 0;}
+  figure svg{width:100%;height:auto;display:block;}
+  figcaption{font-family:"JetBrains Mono", ui-monospace, monospace;font-size:11px;letter-spacing:.06em;color:var(--muted);text-align:center;margin-top:10px;}
+  .fig-wrap{border:1px solid var(--rule-strong);border-radius:12px;background:rgba(255,255,255,.3);padding:24px;}
+  /* svg shared text */
+  .svg-t{font-family:"Spline Sans", system-ui, sans-serif;}
+  .svg-m{font-family:"JetBrains Mono", ui-monospace, monospace;}
+  /* progress bar */
+  #prog{position:fixed;top:0;left:0;height:3px;background:var(--red);width:0;z-index:50;}
+  /* mobile */
+  @media(max-width:880px){
+    .bfp-content{padding:30px 22px 80px;}}
+  footer{max-width:var(--max);margin:0 auto;padding:30px 60px 60px;border-top:1px dotted var(--rule-strong);color:var(--muted);font-family:"JetBrains Mono", ui-monospace, monospace;font-size:11.5px;letter-spacing:.06em;}
+  @media(max-width:880px){footer{padding:24px 22px 50px;}}</style>
+<style>
+.chapter-nav{position:fixed;bottom:0;left:0;right:0;z-index:9998;display:flex;align-items:center;justify-content:space-between;padding:14px clamp(16px,4vw,48px);background:rgba(243,237,226,.88);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border-top:1.5px solid #c7bca6;box-shadow:0 -8px 32px -16px rgba(40,30,20,.18);font-family:"JetBrains Mono", ui-monospace, monospace;}
+.nav-chapter-link{display:flex;align-items:center;gap:12px;text-decoration:none;color:#5b5347;padding:10px 18px;border-radius:10px;transition:all .2s ease;max-width:38%;}
+.nav-chapter-link:hover{background:rgba(184,64,46,.08);color:#b8402e;transform:translateY(-1px);}
+.nav-chapter-link.nav-next{text-align:right;flex-direction:row;}
+.nav-arrow{font-size:22px;color:#b8402e;font-weight:700;flex:none;}
+.nav-label{display:flex;flex-direction:column;gap:2px;font-size:13.5px;line-height:1.3;}
+.nav-small{font-size:10px;letter-spacing:.22em;text-transform:uppercase;color:#8d8475;font-weight:600;}
+.nav-indicator{font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:#b8402e;font-weight:700;text-decoration:none;padding:8px 16px;border:1.5px solid #c7bca6;border-radius:40px;background:rgba(255,255,255,.5);transition:all .2s;white-space:nowrap;}
+.nav-indicator:hover{background:#b8402e;color:#fff;border-color:#b8402e;}
+.nav-dot{display:inline-block;width:7px;height:7px;background:#b8402e;border-radius:50%;margin-right:4px;vertical-align:middle;}
+.nav-sep{color:#c7bca6;margin:0 2px;}
+.nav-disabled{visibility:hidden;pointer-events:none;}
+@media(max-width:700px){.nav-label{font-size:11.5px;}.nav-chapter-link{padding:8px 10px;max-width:38%;}.chapter-nav{padding:10px 12px;}.nav-small{font-size:9px;letter-spacing:.16em;}}
+@media(max-width:520px){.nav-label{display:none;}.nav-chapter-link{max-width:none;padding:8px 12px;}.nav-arrow{font-size:20px;}.nav-indicator{font-size:11px;padding:7px 13px;letter-spacing:.12em;}}
+body{padding-bottom:80px;}
+</style>
+  <link rel="stylesheet" href="../../assets/copy-button.css">
+  <link rel="stylesheet" href="../../assets/enhancements.css">
+  <link rel="stylesheet" href="../../assets/shell.css">
+  <link rel="stylesheet" href="../../assets/theme.css">
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;0,9..144,900;1,9..144,400;1,9..144,600&family=Spline+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="../../assets/theme.js"></script>
+</head>
+<body>
+<button class="bfp-toc-toggle" id="bfpTocToggle" aria-controls="bfpToc" aria-expanded="false"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><line x1="2" y1="4" x2="14" y2="4"/><line x1="2" y1="8" x2="14" y2="8"/><line x1="2" y1="12" x2="14" y2="12"/></svg>Contenuto</button>
+<div class="bfp-toc-scrim" id="bfpTocScrim"></div>
+<div class="bfp-shell">
+    <aside class="bfp-toc" id="bfpToc">
+      <div class="bfp-brand"><span class="bfp-brand-name">Aut</span><span class="bfp-brand-slash">/</span><span class="bfp-brand-lens">l'obiettivo del back-end</span></div>
+      <div class="bfp-brand-sub">Capitolo 04 / Manuale da campo</div>
+      <div class="bfp-toc-rule"></div>
+      <nav class="bfp-toc-nav">
+        <a class="bfp-toc-link" href="#s01"><span class="bfp-toc-num">01</span><span class="bfp-toc-text">Riepilogo di due frasi</span></a>
+        <a class="bfp-toc-link" href="#s02"><span class="bfp-toc-num">02</span><span class="bfp-toc-text">Una storia dell'Aut</span></a>
+        <a class="bfp-toc-link" href="#s03"><span class="bfp-toc-num">03</span><span class="bfp-toc-text">Le tre componenti</span></a>
+        <a class="bfp-toc-link" href="#s04"><span class="bfp-toc-num">04</span><span class="bfp-toc-text">Sessioni</span></a>
+        <a class="bfp-toc-link" href="#s05"><span class="bfp-toc-num">05</span><span class="bfp-toc-text">Token Web JSON</span></a>
+        <a class="bfp-toc-link" href="#s06"><span class="bfp-toc-num">06</span><span class="bfp-toc-text">Biscotti</span></a>
+        <a class="bfp-toc-link" href="#s07"><span class="bfp-toc-num">07</span><span class="bfp-toc-text">Aut. con stato</span></a>
+        <a class="bfp-toc-link" href="#s08"><span class="bfp-toc-num">08</span><span class="bfp-toc-text">Aut. senza stato</span></a>
+        <a class="bfp-toc-link" href="#s09"><span class="bfp-toc-num">09</span><span class="bfp-toc-text">Stateful vs senza stato</span></a>
+        <a class="bfp-toc-link" href="#s10"><span class="bfp-toc-num">10</span><span class="bfp-toc-text">Autenticazione chiave API</span></a>
+        <a class="bfp-toc-link" href="#s11"><span class="bfp-toc-num">11</span><span class="bfp-toc-text">Il problema della delega</span></a>
+        <a class="bfp-toc-link" href="#s12"><span class="bfp-toc-num">12</span><span class="bfp-toc-text">OAuth 1.0</span></a>
+        <a class="bfp-toc-link" href="#s13"><span class="bfp-toc-num">13</span><span class="bfp-toc-text">OAuth 2.0</span></a>
+        <a class="bfp-toc-link" href="#s14"><span class="bfp-toc-num">14</span><span class="bfp-toc-text">OpenID Connetti</span></a>
+        <a class="bfp-toc-link" href="#s15"><span class="bfp-toc-num">15</span><span class="bfp-toc-text">Scelta di un tipo di autenticazione</span></a>
+        <a class="bfp-toc-link" href="#s16"><span class="bfp-toc-num">16</span><span class="bfp-toc-text">Autorizzazione e RBAC</span></a>
+        <a class="bfp-toc-link" href="#s17"><span class="bfp-toc-num">17</span><span class="bfp-toc-text">Errori e attacchi temporali</span></a>
+        <a class="bfp-toc-link" href="#s18"><span class="bfp-toc-num">18</span><span class="bfp-toc-text">Cheat-sheet di debug</span></a>
+      </nav>
+    </aside>
+    <main class="bfp-content">
+  <div class="kicker">Un riferimento dettagliato al backend</div>
+  <h1 class="title">Autenticazione, la questione <em>chi sei.</em></h1>
+  <p class="lede">Una panoramica dei principi primi delle due idee che ogni backend tocca ogni singolo giorno, <em>chi sei?</em> (autenticazione) e <em>cosa puoi fare</em> (autorizzazione). Dai sigilli di ceralacca e i segreti condivisi alle sessioni, JWT, cookie, OAuth 2.0, OpenID Connect e RBAC. Scritto per spiegare non solo <em>cosa</em> ogni pezzo fa ma <em>perché</em> esiste e <em>come</em> funziona sotto. Implementazioni sia in Go che in Python.</p>
+  <div class="pills">
+    <span class="pill">Identità/Accesso</span>
+    <span class="pill">Sessioni/JWT/OAuth</span>
+    <span class="pill">Vai 1.22+ / Python 3.11+</span>
+    <span class="pill">18 sezioni</span>
+  </div>
+  <div class="titlerule"></div>
+
+  <!-- PART I -->
+  <div class="part">Parte I/Fondamenti</div>
+
+  <!-- 01 -->
+  <section id="s01">
+    <h2><span class="badge">01</span> Il riassunto in due frasi</h2>
+    <div class="underh"></div>
+    <p>L'intero argomento si riduce a due domande. <strong>Autenticazione</strong> è il meccanismo per assegnare un'identità a un soggetto all'interno di un dato contesto, risponde alla domanda <em>&quot;chi sei?&quot;</em>. Il contesto può essere una piattaforma, un sistema operativo, il tuo telefono, qualsiasi cosa. Il processo per trovare la risposta a questa domanda è l’autenticazione.</p>
+    <p><strong>Autorizzazione</strong> risponde a una domanda completamente diversa: <em>&quot;cosa puoi fare?&quot;</em> in quel contesto. Le tue capacità, i tuoi permessi. Il processo per trovare la risposta a <em>cosa puoi fare qui?</em> è l'autorizzazione. L'autenticazione stabilisce innanzitutto l'identità; l'autorizzazione decide in secondo luogo cosa è consentito fare a quell'identità.</p>
+
+    <figure>
+      <div class="fig-wrap">
+        <svg viewBox="0 0 760 230" role="img" aria-label="Autenticazione contro autorizzazione">
+          <!-- left: auth -->
+          <rect x="20" y="30" width="340" height="170" rx="14" fill="rgba(184,64,46,.06)" stroke="#b8402e" stroke-width="1.5"/>
+          <text x="40" y="62" class="svg-m" font-size="12" letter-spacing="3" fill="#b8402e">AUTENTICAZIONE</text>
+          <text x="40" y="108" class="svg-t" font-size="30" font-weight="700" fill="#211e1a">Chi sei?</text>
+          <text x="40" y="140" class="svg-t" font-size="14" fill="#8d8475">Assegnare un'identità a un soggetto</text>
+          <text x="40" y="160" class="svg-t" font-size="14" fill="#8d8475">all'interno di un dato contesto.</text>
+          <text x="40" y="186" class="svg-m" font-size="12" fill="#8f2f20">-&gt; login, registrazione, prova d'identità</text>
+          <!-- right: authz -->
+          <rect x="400" y="30" width="340" height="170" rx="14" fill="rgba(63,111,78,.07)" stroke="#3f6f4e" stroke-width="1.5"/>
+          <text x="420" y="62" class="svg-m" font-size="12" letter-spacing="3" fill="#3f6f4e">AUTORIZZAZIONE</text>
+          <text x="420" y="108" class="svg-t" font-size="30" font-weight="700" fill="#211e1a">Cosa puoi fare?</text>
+          <text x="420" y="140" class="svg-t" font-size="14" fill="#8d8475">Le tue capacità e autorizzazioni</text>
+          <text x="420" y="160" class="svg-t" font-size="14" fill="#8d8475">all'interno di quello stesso contesto.</text>
+          <text x="420" y="186" class="svg-m" font-size="12" fill="#1f6b5e">-&gt; ruoli, ambiti, controllo degli accessi</text>
+          <!-- arrow between -->
+          <path d="M362 115 H398" stroke="#8d8475" stroke-width="2" marker-end="url(#ar)"/>
+          <defs><marker id="ar" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M0 0 L9 4.5 L0 9 Z" fill="#8d8475"/></marker></defs>
+        </svg>
+      </div>
+      <figcaption>FIG 1, L'identità precede l'autorizzazione. Prima autenticarsi, poi autorizzare.</figcaption>
+    </figure>
+  </section>
+
+  <!-- 02 -->
+  <section id="s02">
+    <h2><span class="badge">02</span> Una storia di autenticazione</h2>
+    <div class="underh"></div>
+    <p>L'autenticazione moderna non è apparsa dal nulla, ogni meccanismo che utilizziamo oggi è il discendente di un'idea molto più antica. Tracciare la discendenza rende evidenti i compromessi di progettazione.</p>
+
+    <h3>Società preindustriali: fiducia intrinseca</h3>
+    <p>L'autenticazione era <em>implicito</em>. L'identità di un soggetto coincideva con il riconoscimento del soggetto: qualcuno già rispettato nella comunità, un anziano del villaggio, poteva garantire per una persona, e gli accordi venivano suggellati con una stretta di mano, atto che simboleggiava il riconoscimento e l'accordo reciproco. Elementare, ma sfruttava una forma di autenticazione integrata <strong>fiducia contestuale umana</strong>. Man mano che le popolazioni crescevano e le interazioni si estendevano oltre i circoli familiari, la fiducia implicita <em>non è riuscito a ridimensionarsi</em>, l'anziano di un villaggio non gode di fiducia in tutti i paesi o continenti. Questo ha segnato la ricerca di <strong>esplicito</strong> autenticazione: prove di identità che funzionano indipendentemente dalla conoscenza personale.</p>
+
+    <h3>Periodo medievale: sigilli ed era crittografica</h3>
+    <p>La società aveva bisogno di un sistema che andasse oltre il riconoscimento personale. La risposta è stata la <strong>sigillo di cera</strong>: un modello unico impresso su documenti e accordi, che funge da firma anticipata. I sigilli furono i primi ad essere ampiamente adottati <strong>token di autenticazione</strong>: rappresentazioni fisiche dell'identità su cui si basava <strong>possesso</strong> (&quot;qualcosa che hai&quot;). Se possedevi il sigillo, eri autenticato. Ma i sigilli erano falsificabili, segnando i primi casi registrati di <strong>attacchi di bypass dell'autenticazione</strong>: ignorare l'autenticazione con intenti dannosi. Ciò ha dato vita a meccanismi più sofisticati: filigrane e codici crittografati nella documentazione commerciale, gettando le basi per il pensiero crittografico.</p>
+
+    <h3>Rivoluzione industriale: passphrase e segreti condivisi</h3>
+    <p>Man mano che le macchine trasformavano il mondo, anche i sistemi di comunicazione si evolvevano. Il <strong>telegrafo</strong> è diventata un'infrastruttura critica e con essa è arrivata la necessità di una convalida sicura dei messaggi. Operatori utilizzati pre-concordati <strong>passphrase</strong>: una prima forma di <strong>segreto condiviso</strong>, password effettivamente statiche. Il principio si spostò da &quot;qualcosa che possiedi&quot; (il sigillo) a <strong>&quot;qualcosa che sai&quot;</strong>, un significativo passo avanti in termini di sicurezza e l'antenato diretto della password moderna.</p>
+
+    <h3>Mainframe: la prima fase digitale</h3>
+    <p>Dentro <strong>1961</strong>, i ricercatori del Project MAC del MIT hanno lavorato su <strong>Sistema di condivisione del tempo compatibile (CTSS)</strong> e ha introdotto le password per i sistemi multiutente, in modo che più utenti potessero condividere un computer senza condividere i reciproci dati. Le password sono state memorizzate in <strong>testo semplice</strong>: una vulnerabilità critica, diventata visibile il giorno in cui qualcuno ha stampato il file delle password. Quell’incidente segnò l’inizio dell’archiviazione sicura delle password e motivò la filosofia che ancora oggi manteniamo: <em>non memorizzare mai le password in formato testo normale</em>. Ha portato a <strong>hashing</strong>.</p>
+    <div class="note teal">
+      <span class="lbl">Come funziona l'hashing</span>
+      <p>Un algoritmo di hashing accetta una stringa di testo semplice di <em>qualsiasi</em> length ed esegue un calcolo unidirezionale che restituisce a <strong>lunghezza fissa</strong> stringa. La lunghezza non cambia mai se gli dai 3 caratteri o 100, e lo stesso input produce sempre lo stesso output. Lo è <em>irreversibile</em>, non è possibile recuperare l'originale dall'hash, che è esattamente il motivo per cui memorizziamo l'hash, non la password.</p>
+    </div>
+
+    <h3>Gli anni '70: crittografia asimmetrica</h3>
+    <p>Un'esplosione nella ricerca crittografica, guidata da Whitfield Diffie e Martin Hellman, ha prodotto il <strong>Scambio di chiavi Diffie-Hellman</strong> e il concetto di <strong>crittografia asimmetrica</strong>: consentire a due parti di stabilire un segreto condiviso su un mezzo non affidabile. La crittografia asimmetrica è diventata la spina dorsale dei moderni protocolli di autenticazione (chiamati anche <strong>PKI</strong>: infrastruttura a chiave pubblica). Anche l'epoca ci ha dato <strong>Kerberos</strong>, che ha introdotto <strong>autenticazione basata su ticket</strong> utilizzare terze parti fidate per emettere ticket verificando sia l'utente che il servizio, un diretto precursore degli odierni sistemi basati su token.</p>
+
+    <h3>Gli anni '90: AMF e biometria</h3>
+    <p>Con la crescita di Internet, i semplici sistemi di nome utente/password non erano abbastanza resistenti <strong>forza bruta</strong> e <strong>attacchi del dizionario</strong>. Questo ha prodotto <strong>Autenticazione a più fattori (MFA)</strong>, combinando tre categorie di prove:</p>
+
+    <figure>
+      <div class="fig-wrap">
+        <svg viewBox="0 0 760 170" role="img" aria-label="Tre fattori di autenticazione">
+          <g>
+            <rect x="20" y="30" width="230" height="110" rx="12" fill="rgba(184,64,46,.06)" stroke="#b8402e" stroke-width="1.4"/>
+            <text x="40" y="62" class="svg-m" font-size="11" letter-spacing="2" fill="#b8402e">FATTORE 1</text>
+            <text x="40" y="92" class="svg-t" font-size="20" font-weight="700" fill="#211e1a">Qualcosa che conosci</text>
+            <text x="40" y="118" class="svg-t" font-size="13" fill="#8d8475">password/PIN</text>
+          </g>
+          <g>
+            <rect x="265" y="30" width="230" height="110" rx="12" fill="rgba(176,125,43,.07)" stroke="#b07d2b" stroke-width="1.4"/>
+            <text x="285" y="62" class="svg-m" font-size="11" letter-spacing="2" fill="#b07d2b">FATTORE 2</text>
+            <text x="285" y="92" class="svg-t" font-size="20" font-weight="700" fill="#211e1a">Qualcosa che hai</text>
+            <text x="285" y="118" class="svg-t" font-size="13" fill="#8d8475">smart card/generatori OTP</text>
+          </g>
+          <g>
+            <rect x="510" y="30" width="230" height="110" rx="12" fill="rgba(63,111,78,.07)" stroke="#3f6f4e" stroke-width="1.4"/>
+            <text x="530" y="62" class="svg-m" font-size="11" letter-spacing="2" fill="#3f6f4e">FATTORE 3</text>
+            <text x="530" y="92" class="svg-t" font-size="20" font-weight="700" fill="#211e1a">Qualcosa che sei</text>
+            <text x="530" y="118" class="svg-t" font-size="13" fill="#8d8475">impronte digitali/scansioni della retina</text>
+          </g>
+        </svg>
+      </div>
+      <figcaption>FIGURA 2, L'AMF stratifica fattori indipendenti, quindi un compromesso non è sufficiente.</figcaption>
+    </figure>
+    <p><strong>Autenticazione biometrica</strong> è emerso qui, utilizzando il riconoscimento di modelli e modelli statistici per identificare gli utenti in base a tratti fisici unici. Ma la biometria ha introdotto le proprie sfide: <strong>falsi positivi/negativi</strong> e <strong>sicurezza del modello</strong>: quindi non è mai stata la soluzione in un solo passaggio a ogni problema.</p>
+
+    <h3>Il 21° secolo: e il futuro</h3>
+    <p>Il cloud computing, i dispositivi mobili e le architetture basate su API richiedevano framework più avanzati. Nessuno dei metodi precedenti da solo era sufficiente, il che ha prodotto i componenti che usiamo ancora: <strong>OAuth</strong> e <strong>OAuth 2.0</strong>, <strong>JWT</strong>, <strong>architettura Zero Trust</strong>, e <strong>senza password</strong> sistemi come <strong>WebAuthn</strong> (basato su chiavi pubbliche/private archiviate nell'hardware). Guardando al futuro, i candidati per il futuro lo sono <strong>identità decentralizzata</strong> (costruito su blockchain), <strong>biometria comportamentale</strong>, e <strong>crittografia post-quantistica</strong>.</p>
+    <div class="note gold">
+      <span class="lbl">Crittografia post-quantistica</span>
+      <p>Una volta che i computer quantistici saranno diventati comuni, saranno abbastanza veloci da rompere gli algoritmi (RSA e altri schemi a chiave pubblica/privata) che oggi fanno sentire i nostri dati sicuri; questi algoritmi non sono mai stati progettati per quel livello di calcolo. La crittografia post-quantistica è la famiglia di tecniche progettate per rimanere sicure anche contro le macchine quantistiche. Alcuni di questi algoritmi esistono già.</p>
+    </div>
+  </section>
+
+  <!-- 03 -->
+  <section id="s03">
+    <h2><span class="badge">03</span> I tre componenti principali</h2>
+    <div class="underh"></div>
+    <p>Prima della parte tecnica, tre componenti ricorrono in ogni flusso di autenticazione e autorizzazione. Incontrarli in anticipo ti darà il vocabolario per tutto ciò che segue: <strong>sessioni</strong>, <strong>JWT</strong>, e <strong>biscotti</strong>.</p>
+    <ul>
+      <li><strong>Sessione</strong>: un contesto temporaneo lato server che fornisce a un Web senza stato parte della memoria di un utente tra una richiesta e l'altra.</li>
+      <li><strong>JWT (token Web JSON)</strong>: un token firmato e autonomo che trasporta le affermazioni dell'utente in modo che il server non abbia bisogno dello stato memorizzato per verificarle.</li>
+      <li><strong>Biscotto</strong>: un meccanismo di archiviazione lato browser controllato dal server, allegato automaticamente a ogni richiesta successiva.</li>
+    </ul>
+    <p>Le tre sezioni successive le prenderanno ciascuna a turno, in dettaglio.</p>
+  </section>
+
+  <!-- PART II -->
+  <div class="part">Parte II / Gli elementi costitutivi</div>
+
+  <!-- 04 -->
+  <section id="s04">
+    <h2><span class="badge">04</span> Sessioni</h2>
+    <div class="underh"></div>
+    <p>Quando è iniziato il web, tutte le comunicazioni client-server si sono interrotte <strong>HTTP</strong>e, in base alla progettazione, HTTP lo è <strong>senza stato</strong>: ogni richiesta viene trattata come un'interazione isolata. Il server non ricorda la tua richiesta precedente; ogni richiesta deve contenere tutte le informazioni necessarie al server per eseguire la propria logica applicativa. HTTP non ha memoria degli scambi passati.</p>
+    <p>Era l'ideale per il web iniziale, per lo più pagine statiche, immagini statiche, dati leggibili. Nessuno aveva bisogno di continuità tra le richieste. Ma con la transizione del web a <strong>contenuto dinamico</strong>, l’assenza di stato è diventata un collo di bottiglia. Un sito e-commerce deve ricordare gli articoli presenti nel carrello; l'utente deve rimanere connesso mentre naviga tra le pagine. Queste esigenze hanno segnato l'inizio del <strong>interazioni con stato</strong>, e il <strong>sessione</strong> era la risposta, un modo per stabilire un temporaneo <em>lato server</em> contesto per ciascun utente.</p>
+
+    <h3>Come funziona una sessione</h3>
+    <ol>
+      <li><strong>Creazione della sessione.</strong> Quando un utente accede, il server crea un file univoco <strong>identificativo della sessione</strong> e lo memorizza insieme ai dati utente rilevanti (ruolo, nome, articoli nel carrello, se l'utente è autenticato) in a <strong>negozio persistente</strong>: un database o un archivio in memoria come Redis.</li>
+      <li><strong>Consegna.</strong> L'ID di sessione, semplicemente una chiave, viene inviato al client (il browser) come file <strong>biscotto</strong>. Ogni richiesta successiva include quel cookie, quindi il server può utilizzare l'ID di sessione per recuperare tutti i dati dell'utente dallo store.</li>
+      <li><strong>Scadenza.</strong> Le sessioni sono di breve durata. Se la scadenza è di 15 minuti, oltrepassati i quali la sessione non è valida; il server crea una nuova sessione ed emette un nuovo ID di sessione. Questo ciclo si ripete.</li>
+    </ol>
+
+    <figure>
+      <div class="fig-wrap">
+        <svg viewBox="0 0 760 300" role="img" aria-label="Flusso della sessione">
+          <!-- lanes -->
+          <text x="90" y="30" class="svg-t" font-size="14" font-weight="700" fill="#211e1a" text-anchor="middle">Cliente</text>
+          <text x="380" y="30" class="svg-t" font-size="14" font-weight="700" fill="#211e1a" text-anchor="middle">Server</text>
+          <text x="670" y="30" class="svg-t" font-size="14" font-weight="700" fill="#211e1a" text-anchor="middle">Negozio (Redis/DB)</text>
+          <line x1="90" y1="42" x2="90" y2="285" stroke="#c7bca6" stroke-width="1.5"/>
+          <line x1="380" y1="42" x2="380" y2="285" stroke="#c7bca6" stroke-width="1.5"/>
+          <line x1="670" y1="42" x2="670" y2="285" stroke="#c7bca6" stroke-width="1.5"/>
+          <!-- steps -->
+          <path d="M90 70 H375" stroke="#b8402e" stroke-width="1.8" marker-end="url(#a2)"/>
+          <text x="95" y="63" class="svg-m" font-size="11.5" fill="#8f2f20">1 / login (utente + password)</text>
+          <path d="M380 110 H665" stroke="#3f6f4e" stroke-width="1.8" marker-end="url(#a3)"/>
+          <text x="386" y="103" class="svg-m" font-size="11.5" fill="#1f6b5e">2 / memorizza {sessionID -&gt; userData}</text>
+          <path d="M375 150 H95" stroke="#b8402e" stroke-width="1.8" marker-end="url(#a2b)"/>
+          <text x="120" y="143" class="svg-m" font-size="11.5" fill="#8f2f20">3 / Set-Cookie: sid=... (HttpOnly)</text>
+          <path d="M90 195 H375" stroke="#8d8475" stroke-width="1.8" stroke-dasharray="5 4" marker-end="url(#a4)"/>
+          <text x="95" y="188" class="svg-m" font-size="11.5" fill="#8d8475">4/richiesta + Cookie: sid</text>
+          <path d="M380 235 H665" stroke="#3f6f4e" stroke-width="1.8" marker-end="url(#a3b)"/>
+          <text x="386" y="228" class="svg-m" font-size="11.5" fill="#1f6b5e">5 / ricerca sid -&gt; userData</text>
+          <path d="M375 275 H95" stroke="#8d8475" stroke-width="1.8" marker-end="url(#a4b)"/>
+          <text x="170" y="268" class="svg-m" font-size="11.5" fill="#8d8475">6/risposta autorizzata</text>
+          <defs>
+            <marker id="a2" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M0 0 L9 4.5 L0 9 Z" fill="#b8402e"/></marker>
+            <marker id="a2b" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M0 0 L9 4.5 L0 9 Z" fill="#b8402e"/></marker>
+            <marker id="a3" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M0 0 L9 4.5 L0 9 Z" fill="#3f6f4e"/></marker>
+            <marker id="a3b" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M0 0 L9 4.5 L0 9 Z" fill="#3f6f4e"/></marker>
+            <marker id="a4" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M0 0 L9 4.5 L0 9 Z" fill="#8d8475"/></marker>
+            <marker id="a4b" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M0 0 L9 4.5 L0 9 Z" fill="#8d8475"/></marker>
+          </defs>
+        </svg>
+      </div>
+      <figcaption>FIG 3, Il ciclo della sessione. Il cookie porta solo una chiave; i dati vivono lato server.</figcaption>
+    </figure>
+
+    <h3>L'evoluzione dello stoccaggio</h3>
+    <p>L'archiviazione delle sessioni è maturata in tre fasi, ciascuna delle quali risolve il problema di ridimensionamento della fase precedente:</p>
+    <ul>
+      <li><strong>Sessioni basate su file</strong>: l'approccio più precoce, che memorizza i dati in file sul server. Semplice, ma presentava problemi di scalabilità con l'aumento del numero di utenti.</li>
+      <li><strong>Sessioni supportate da database</strong>: spostato i dati della sessione nei database per ricerche più rapide e persistenza tra i riavvii del server (la sessione sopravvive al riavvio).</li>
+      <li><strong>Negozi distribuiti</strong>: alla fine i dati della sessione vengono spostati in archivi in memoria distribuiti come <strong>Redis</strong> o <strong>Memcached</strong> (dati nella RAM anziché su disco), che sono molto più veloci delle ricerche nel database.</li>
+    </ul>
+    <p>Usiamo ancora oggi le sessioni, esattamente per lo stesso scopo: fornire ai nostri server un po' di memoria dell'utente.</p>
+
+    <h4>Codice: hashing della password e accesso alla sessione</h4>
+    <p>Un accesso di sessione verifica innanzitutto le credenziali rispetto a un file archiviato <em>hash</em> (mai testo semplice), quindi conia un ID di sessione casuale e memorizza il payload dell'utente in Redis con un TTL.</p>
+    <div class="codepair">
+      <div class="code">
+        <div class="bar"><span class="lang go">Vai</span><span class="dots"><i></i><i></i><i></i></span></div>
+        <pre><code class="language-go">package main
+
+import (
+    "context"
+    "crypto/rand"
+    "encoding/hex"
+    "encoding/json"
+    "net/http"
+    "time"
+
+    "github.com/redis/go-redis/v9"
+    "golang.org/x/crypto/bcrypt"
+)
+
+var rdb = redis.NewClient(&amp;redis.Options{Addr: "localhost:6379"})
+var ctx = context.Background()
+
+type User struct {
+    ID   string `json:"id"`
+    Role string `json:"role"`
+}
+
+// hash once at signup; store hash, never the password
+func HashPassword(pw string) (string, error) {
+    b, err := bcrypt.GenerateFromPassword([]byte(pw), bcrypt.DefaultCost)
+    return string(b), err
+}
+
+// bcrypt.CompareHashAndPassword is constant-time internally
+func CheckPassword(hash, pw string) bool {
+    return bcrypt.CompareHashAndPassword([]byte(hash), []byte(pw)) == nil
+}
+
+func newSessionID() string {
+    b := make([]byte, 32)
+    rand.Read(b) // cryptographically random
+    return hex.EncodeToString(b)
+}
+
+func Login(w http.ResponseWriter, u User) error {
+    sid := newSessionID()
+    data, _ := json.Marshal(u)
+    // store {sessionID -&gt; userData} with a 15-minute TTL
+    if err := rdb.Set(ctx, "sess:"+sid, data, 15*time.Minute).Err(); err != nil {
+        return err
+    }
+    http.SetCookie(w, &amp;http.Cookie{
+        Name:     "sid",
+        Value:    sid,
+        HttpOnly: true,            // JS cannot read it
+        Secure:   true,            // HTTPS only
+        SameSite: http.SameSiteLaxMode,
+        Path:     "/",
+        Expires:  time.Now().Add(15 * time.Minute),
+    })
+    return nil
+}</code></pre>
+      </div>
+      <div class="code">
+        <div class="bar"><span class="lang py">Pitone</span><span class="dots"><i></i><i></i><i></i></span></div>
+        <pre><code class="language-python">import json, secrets
+import bcrypt
+import redis
+from flask import Flask, request, make_response
+
+app = Flask(__name__)
+rdb = redis.Redis(host="localhost", port=6379)
+TTL = 15 * 60  # 15 minutes
+
+# hash once at signup; store hash, never the password
+def hash_password(pw: str) -&gt; bytes:
+    return bcrypt.hashpw(pw.encode(), bcrypt.gensalt())
+
+# bcrypt.checkpw is constant-time internally
+def check_password(hash_: bytes, pw: str) -&gt; bool:
+    return bcrypt.checkpw(pw.encode(), hash_)
+
+def new_session_id() -&gt; str:
+    return secrets.token_hex(32)  # cryptographically random
+
+@app.post("/login")
+def login():
+    body = request.get_json()
+    # ... look up user, check_password(stored_hash, body["password"]) ...
+    user = {"id": "u_42", "role": "admin"}
+
+    sid = new_session_id()
+    # store {sessionID -&gt; userData} with a 15-minute TTL
+    rdb.setex(f"sess:{sid}", TTL, json.dumps(user))
+
+    resp = make_response({"ok": True})
+    resp.set_cookie(
+        "sid", sid,
+        httponly=True,   # JS cannot read it
+        secure=True,     # HTTPS only
+        samesite="Lax",
+        max_age=TTL,
+        path="/",
+    )
+    return resp</code></pre>
+      </div>
+    </div>
+
+    <h3>Approfondimento: come memorizzare effettivamente una password</h3>
+    <p>&quot;Memorizza l'hash, non la password&quot; è solo metà della regola. <em>Quale</em> L'hash, e ciò che ci mescoli, decide se un database trapelato è un incidente minore o una catastrofe.</p>
+
+    <h4>Perché un hash generico è lo strumento sbagliato</h4>
+    <p>SHA-256 e MD5 sono progettati per esserlo <strong>veloce</strong>: questo è esattamente quello che fai <em>no</em> desiderare le password. Una moderna GPU o ASIC calcola <strong>miliardi</strong> di hash SHA-256 al secondo, quindi una tabella rubata di hash veloci viene forzata quasi gratuitamente. La memorizzazione della password richiede un file <strong>funzione di hashing della password</strong> (un KDF lento e sintonizzabile) che è deliberatamente costoso e, idealmente, <strong>dura per la memoria</strong> quindi gli aggressori non possono parallelizzare a buon mercato sulle GPU. Le scelte accettate sono <strong>Argon2id</strong> (preferito oggi), <strong>scrypt</strong>, e <strong>bcrypt</strong>.</p>
+
+    <h4>Sale: sconfigge il precalcolo</h4>
+    <p>A <strong>sale</strong> è un valore univoco e casuale generato <em>per password</em> e memorizzato in testo semplice proprio accanto all'hash. Fa due cose: password identiche non producono più hash identici (quindi un utente malintenzionato non può individuare password riutilizzate o violarne molte contemporaneamente) e precalcolate <strong>tavoli arcobaleno</strong> diventare inutili perché l'attaccante avrebbe bisogno di una tabella separata per salt. Un sale è <strong>non è un segreto</strong>: il suo unico compito è essere unico.</p>
+
+    <h4>Pepper: un segreto che il database non custodisce mai</h4>
+    <p>A <strong>pepe</strong> è un unico segreto mantenuto a livello di sito <em>fuori</em> il database, in una variabile di ambiente, un gestore segreto o un HSM. Tu <code class="ic">HMAC</code> la parola d'ordine con il pepe <em>prima</em> inviandolo al KDF. Il vantaggio: se perde solo il database (salt + hash) ma il segreto dell'applicazione no, gli hash sono ancora inviolabili, perché all'aggressore manca il pepe. Il sale protegge dal precalcolo; pepper protegge da una violazione del solo DB.</p>
+
+    <h4>Fattore lavoro/costo</h4>
+    <p>Ogni KDF espone <strong>parametri di costo</strong> ti sintonizzi sul tuo hardware: bcrypt <code class="ic">cost</code> (cicli logaritmici), scrypt <code class="ic">N/r/p</code>e Argon2 <strong>tempo</strong>, <strong>memoria</strong>, e <strong>parallelismo</strong>. Scegli i valori in modo che un singolo hash richieda all'incirca <strong>250 ms</strong> sui tuoi server, abbastanza lenti da limitare gli aggressori, abbastanza veloci da consentire accessi reali e aumentarli nel tempo man mano che l'hardware migliora. I parametri scelti vengono memorizzati <em>dentro</em> la stringa hash in modo da poter verificare i vecchi hash e rieseguire l'hash in modo trasparente al prossimo accesso quando si aumenta il costo.</p>
+
+    <figure>
+      <div class="fig-wrap">
+        <svg viewBox="0 0 760 150" role="img" aria-label="Pipeline di hashing della password">
+          <rect x="20" y="50" width="120" height="50" rx="9" fill="rgba(255,255,255,.5)" stroke="#211e1a" stroke-width="1.3"/>
+          <text x="80" y="80" text-anchor="middle" class="svg-t" font-size="13" font-weight="700">parola d'ordine</text>
+          <rect x="190" y="50" width="150" height="50" rx="9" fill="rgba(176,125,43,.08)" stroke="#b07d2b" stroke-width="1.3"/>
+          <text x="265" y="74" text-anchor="middle" class="svg-t" font-size="12.5" font-weight="700">HMAC(pw, pepe)</text>
+          <text x="265" y="90" text-anchor="middle" class="svg-t" font-size="10.5" fill="#8d8475">segreto, non nel DB</text>
+          <rect x="390" y="50" width="180" height="50" rx="9" fill="rgba(184,64,46,.06)" stroke="#b8402e" stroke-width="1.3"/>
+          <text x="480" y="72" text-anchor="middle" class="svg-t" font-size="12.5" font-weight="700">Argon2id(/, sale, costo)</text>
+          <text x="480" y="89" text-anchor="middle" class="svg-t" font-size="10.5" fill="#8d8475">lento/con memoria difficile</text>
+          <rect x="620" y="50" width="120" height="50" rx="9" fill="rgba(63,111,78,.08)" stroke="#3f6f4e" stroke-width="1.3"/>
+          <text x="680" y="74" text-anchor="middle" class="svg-t" font-size="12.5" font-weight="700">negozio</text>
+          <text x="680" y="90" text-anchor="middle" class="svg-t" font-size="10" fill="#8d8475">salt+parametri+hash</text>
+          <path d="M140 75 H188" stroke="#8d8475" stroke-width="1.7" marker-end="url(#h1)"/>
+          <path d="M340 75 H388" stroke="#8d8475" stroke-width="1.7" marker-end="url(#h2)"/>
+          <path d="M570 75 H618" stroke="#8d8475" stroke-width="1.7" marker-end="url(#h3)"/>
+          <defs>
+            <marker id="h1" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M0 0 L9 4.5 L0 9 Z" fill="#8d8475"/></marker>
+            <marker id="h2" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M0 0 L9 4.5 L0 9 Z" fill="#8d8475"/></marker>
+            <marker id="h3" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M0 0 L9 4.5 L0 9 Z" fill="#8d8475"/></marker>
+          </defs>
+        </svg>
+      </div>
+      <figcaption>FIG 4, Pepper (segreto) -&gt; KDF con salt per password + costo -&gt; memorizza insieme salt, parametri e hash.</figcaption>
+    </figure>
+
+    <div class="tbl">
+      <table>
+        <thead><tr><th>KDF</th><th>Difficile dalla memoria?</th><th>Note</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Argon2id</strong></td><td class="yes">Sì</td><td>Predefinito preferito; resiste a GPU/ASIC; memoria dell'accordatura + tempo + parallelismo.</td></tr>
+          <tr><td><strong>scrypt</strong></td><td class="yes">Sì</td><td>Buona opzione per la memoria; sintonizzare N/r/p.</td></tr>
+          <tr><td><strong>bcrypt</strong></td><td class="no">No</td><td>Ancora accettabile; limita l'input a 72 byte, input lunghi pre-hash.</td></tr>
+          <tr><td><strong>SHA-256/MD5</strong></td><td class="no">No</td><td class="no">Mai per le password, troppo veloce.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h4>Codice: Argon2id con un peperone</h4>
+    <div class="codepair">
+      <div class="code">
+        <div class="bar"><span class="lang go">Vai</span><span class="dots"><i></i><i></i><i></i></span></div>
+        <pre><code class="language-go">import (
+    "crypto/hmac"
+    "crypto/rand"
+    "crypto/sha256"
+    "crypto/subtle"
+    "encoding/base64"
+    "fmt"
+    "golang.org/x/crypto/argon2"
+)
+
+var pepper = []byte(os.Getenv("PASSWORD_PEPPER")) // secret, NOT in DB
+
+// cost parameters, tune so one hash ~250ms
+const (
+    aTime    = 3         // iterations
+    aMemory  = 64 * 1024 // 64 MB, memory-hard
+    aThreads = 4
+    aKeyLen  = 32
+)
+
+func peppered(pw string) []byte {
+    m := hmac.New(sha256.New, pepper)
+    m.Write([]byte(pw))
+    return m.Sum(nil)
+}
+
+// returns an encoded string: salt + params + hash
+func HashArgon(pw string) string {
+    salt := make([]byte, 16)
+    rand.Read(salt) // unique per password
+    h := argon2.IDKey(peppered(pw), salt, aTime, aMemory, aThreads, aKeyLen)
+    return fmt.Sprintf("argon2id$%d$%d$%d$%s$%s", aTime, aMemory, aThreads,
+        base64.RawStdEncoding.EncodeToString(salt),
+        base64.RawStdEncoding.EncodeToString(h))
+}
+
+// re-derive with the SAME salt+params, then constant-time compare
+func VerifyArgon(encoded, pw string) bool {
+    var t, mem, th uint32
+    var b64salt, b64hash string
+    fmt.Sscanf(encoded, "argon2id$%d$%d$%d$%s$%s", &amp;t, &amp;mem, &amp;th, &amp;b64salt, &amp;b64hash)
+    salt, _ := base64.RawStdEncoding.DecodeString(b64salt)
+    want, _ := base64.RawStdEncoding.DecodeString(b64hash)
+    got := argon2.IDKey(peppered(pw), salt, t, mem, uint8(th), uint32(len(want)))
+    return subtle.ConstantTimeCompare(got, want) == 1
+}</code></pre>
+      </div>
+      <div class="code">
+        <div class="bar"><span class="lang py">Pitone</span><span class="dots"><i></i><i></i><i></i></span></div>
+        <pre><code class="language-python">import os, hmac, hashlib
+from argon2 import PasswordHasher
+from argon2.exceptions import VerifyMismatchError
+
+PEPPER = os.environ["PASSWORD_PEPPER"].encode()  # secret, NOT in DB
+
+# cost parameters, tune so one hash ~250ms
+ph = PasswordHasher(
+    time_cost=3,            # iterations
+    memory_cost=64 * 1024,  # 64 MB, memory-hard
+    parallelism=4,
+    hash_len=32,
+    salt_len=16,            # random salt baked into the output
+)
+
+def peppered(pw: str) -&gt; bytes:
+    return hmac.new(PEPPER, pw.encode(), hashlib.sha256).digest()
+
+# argon2-cffi embeds salt + params inside the returned string
+def hash_argon(pw: str) -&gt; str:
+    return ph.hash(peppered(pw))
+
+def verify_argon(encoded: str, pw: str) -&gt; bool:
+    try:
+        ph.verify(encoded, peppered(pw))   # constant-time internally
+    except VerifyMismatchError:
+        return False
+    # transparently upgrade old hashes when cost is raised
+    if ph.check_needs_rehash(encoded):
+        rehash_and_store(hash_argon(pw))
+    return True</code></pre>
+      </div>
+    </div>
+  </section>
+
+  <!-- 05 -->
+  <section id="s05">
+    <h2><span class="badge">05</span> Token Web JSON (JWT)</h2>
+    <div class="underh"></div>
+    <p>Verso la metà degli anni 2000, le applicazioni web erano cresciute fino a diventare sistemi distribuiti a livello globale e i sistemi stateful (sessioni), sebbene efficaci, causavano colli di bottiglia. Tre problemi hanno spinto l’industria verso un nuovo approccio:</p>
+    <ul>
+      <li><strong>Memoria.</strong> Il mantenimento dei dati delle sessioni per milioni di utenti è diventato un sovraccarico costoso.</li>
+      <li><strong>Replica.</strong> Nelle architetture distribuite, è stata introdotta la sincronizzazione dei dati di sessione tra server e regioni (un server in una parte del mondo, un altro sul lato opposto) <strong>latenza</strong> nel flusso di autenticazione.</li>
+      <li><strong>Coerenza.</strong> Mantenere lo stato sincronizzato corretto ovunque è difficile.</li>
+    </ul>
+    <p>Gli sviluppatori volevano un modo per farlo <strong>scaricare lo stato dal server</strong> mantenendo la sicurezza e l'integrità. La risposta, formalizzata in <strong>2015</strong>, era il <strong>JWT</strong>: a <strong>senza stato</strong> meccanismo di trasferimento <em>affermazioni</em> tra due parti. La sua innovazione chiave: <strong>gettoni autonomi</strong>. Un JWT trasporta i dati dell'utente (ID utente, ruolo) e una firma crittografica all'interno del token stesso, tutti codificati Base64.</p>
+
+    <h3>Anatomia: tre parti</h3>
+    <p>Un JWT è una singola stringa con codifica Base64URL composta da tre parti separate da punti: <code class="ic">header.payload.signature</code>.</p>
+
+    <figure>
+      <div class="fig-wrap">
+        <svg viewBox="0 0 760 250" role="img" aria-label="Anatomia del JWT">
+          <rect x="20" y="24" width="230" height="200" rx="12" fill="rgba(184,64,46,.06)" stroke="#b8402e" stroke-width="1.4"/>
+          <text x="36" y="50" class="svg-m" font-size="11" letter-spacing="2" fill="#b8402e">INTESTAZIONE</text>
+          <text x="36" y="78" class="svg-t" font-size="13" fill="#211e1a">Metadati su</text>
+          <text x="36" y="96" class="svg-t" font-size="13" fill="#211e1a">il gettone stesso</text>
+          <text x="36" y="128" class="svg-m" font-size="11" fill="#8d8475">{ &quot;alg&quot;: &quot;HS256&quot;,</text>
+          <text x="36" y="146" class="svg-m" font-size="11" fill="#8d8475">  &quot;tipo&quot;: &quot;JWT&quot; }</text>
+          <text x="36" y="200" class="svg-t" font-size="12" fill="#8f2f20">algoritmo di firma</text>
+
+          <rect x="265" y="24" width="230" height="200" rx="12" fill="rgba(63,111,78,.07)" stroke="#3f6f4e" stroke-width="1.4"/>
+          <text x="281" y="50" class="svg-m" font-size="11" letter-spacing="2" fill="#3f6f4e">CARICO UTILE</text>
+          <text x="281" y="78" class="svg-t" font-size="13" fill="#211e1a">Le affermazioni/dati</text>
+          <text x="281" y="110" class="svg-m" font-size="11" fill="#8d8475">{ &quot;sostitutivo&quot;: &quot;u_42&quot;,</text>
+          <text x="281" y="128" class="svg-m" font-size="11" fill="#8d8475">  &quot;iat&quot;: 1716998400,</text>
+          <text x="281" y="146" class="svg-m" font-size="11" fill="#8d8475">  &quot;nome&quot;: &quot;Asha&quot;,</text>
+          <text x="281" y="164" class="svg-m" font-size="11" fill="#8d8475">  &quot;ruolo&quot;: &quot;amministratore&quot; }</text>
+          <text x="281" y="200" class="svg-t" font-size="12" fill="#1f6b5e">sub = ID utente / iat = emesso-at</text>
+
+          <rect x="510" y="24" width="230" height="200" rx="12" fill="rgba(176,125,43,.07)" stroke="#b07d2b" stroke-width="1.4"/>
+          <text x="526" y="50" class="svg-m" font-size="11" letter-spacing="2" fill="#b07d2b">FIRMA</text>
+          <text x="526" y="78" class="svg-t" font-size="13" fill="#211e1a">Dimostra integrità</text>
+          <text x="526" y="96" class="svg-t" font-size="13" fill="#211e1a">e autenticità</text>
+          <text x="526" y="128" class="svg-m" font-size="10.5" fill="#8d8475">HMACSHA256(</text>
+          <text x="526" y="144" class="svg-m" font-size="10.5" fill="#8d8475">  b64(intestazione)+&quot;.&quot;+</text>
+          <text x="526" y="160" class="svg-m" font-size="10.5" fill="#8d8475">  b64(carico utile), SEGRETO)</text>
+          <text x="526" y="200" class="svg-t" font-size="12" fill="#8a6210">manomissione -&gt; verifica fallisce</text>
+        </svg>
+      </div>
+      <figcaption>FIG 5, intestazione/carico utile/firma. Modifica qualsiasi byte di intestazione o payload e la firma non corrisponde più.</figcaption>
+    </figure>
+
+    <p>Il <strong>intestazione</strong> contiene metadati come l'algoritmo di firma. Il <strong>carico utile</strong> sostiene le affermazioni: <code class="ic">sub</code> è la convenzione per l'ID utente (dal tuo DB o da un provider di autenticazione, qualsiasi contesto), <code class="ic">iat</code> significa &quot;rilasciato a&quot;, oltre a campi facoltativi come nome e ruolo (amministratore/membro/editore/visualizzatore). Il <strong>firma</strong> si calcola con a <strong>chiave segreta</strong> che solo tu tieni. Se qualcuno altera il JWT, la verifica con il tuo segreto fallisce, sai immediatamente che non è più un token valido. È così che verifichi i dati di un utente in a <em>senza stato</em> modo: nessuna ricerca di sessione, solo un controllo della firma su ogni richiesta. È leggero e consente di risparmiare sui costi di archiviazione.</p>
+
+    <h3>Vantaggi</h3>
+    <ul>
+      <li><strong>assenza di stato</strong>: nessun costo di archiviazione lato server.</li>
+      <li><strong>Scalabilità</strong>: nei microservizi e nelle architetture distribuite, un cookie emesso da un server non può essere utilizzato da un altro dominio, ma un JWT può essere inviato a più server; ognuno detiene il segreto condiviso, decodifica il token e verifica l'identità. I server si adattano a molte istanze e tutti eseguono l'autenticazione contemporaneamente utilizzando il segreto condiviso.</li>
+      <li><strong>Portabilità</strong>: essendo leggeri, compatibili con gli URL e codificati Base64, i JWT viaggiano facilmente: nelle intestazioni, nei cookie, anche nei valori degli URL (e nell'archiviazione locale, anche se generalmente non dovresti).</li>
+    </ul>
+
+    <h3>Le sfide</h3>
+    <div class="note">
+      <span class="lbl">Furto di gettoni</span>
+      <p>Poiché un JWT è senza stato, il server non dispone di record archiviati con cui eseguire la convalida. Se qualcuno ottiene il tuo JWT, può farlo <strong>impersonare te</strong> e agisci per tuo conto fino alla scadenza e non esiste un modo integrato per invalidarlo anticipatamente <em>a meno che</em> il server cambia il suo segreto. Ma la rotazione del segreto invalida <em>ogni</em> token dell'utente, costringendo tutti ad accedere nuovamente solo per uccidere un token.</p>
+    </div>
+    <div class="note">
+      <span class="lbl">Revoca</span>
+      <p>Per lo stesso motivo non puoi <strong>revocare</strong> l'accesso di un utente su richiesta. Poiché i JWT sono senza stato, non è possibile tenere traccia dello stato di un token fino alla scadenza.</p>
+    </div>
+
+    <h3>L’approccio ibrido (e il suo paradosso)</h3>
+    <p>Per superare entrambi i problemi, i team combinano l’assenza di stato con un tocco di assenza di stato. L'utente accede, ottiene un JWT e lo invia su ogni richiesta (tipicamente nel file <code class="ic">Authorization</code> intestazione). Il server verifica la firma con il suo segreto, senza ricerca nell'archivio. <em>Poi</em>, una volta superata la verifica, il server controlla a <strong>lista nera</strong> dei JWT revocati conservati in un archivio permanente (Redis/DB). Ciò ti consente di bloccare o revocare temporaneamente un utente (ad esempio un account compromesso) senza ruotare il segreto globale.</p>
+    <div class="note gold">
+      <span class="lbl">La domanda onesta</span>
+      <p>Il punto centrale del JWT era l’assenza di stato. Se ora stai comunque eseguendo una ricerca nell'archivio persistente per verificare la validità, perché non utilizzare in primo luogo l'approccio con stato, che generalmente è considerato più sicuro e ti offre questo controllo gratuitamente? Questo è un dibattito frequente nel settore.</p>
+    </div>
+    <div class="note teal">
+      <span class="lbl">Consigli pratici</span>
+      <p>Per un sistema medio-grande, non preoccuparti tu stesso di hashing, salting, algoritmi e strategie di revoca, utilizza un <strong>fornitore di autenticazione</strong> (Auth0, Impiegato e simili). Il loro compito è preoccuparsi di quali componenti siano più sicuri. È un ottimo esercizio implementare la propria autenticazione mentre <em>apprendimento</em> backend, per comprendere le parti e i compromessi, ma in produzione, rivolgiti a un fornitore a meno che tu non sia molto sicuro dei tuoi flussi di lavoro di autenticazione.</p>
+    </div>
+
+    <h4>Codice: firma e verifica un JWT</h4>
+    <div class="codepair">
+      <div class="code">
+        <div class="bar"><span class="lang go">Vai</span><span class="dots"><i></i><i></i><i></i></span></div>
+        <pre><code class="language-go">package auth
+
+import (
+    "time"
+    "github.com/golang-jwt/jwt/v5"
+)
+
+var secret = []byte("keep-this-very-secret")
+
+// mint a self-contained token carrying the claims
+func Sign(userID, role string) (string, error) {
+    claims := jwt.MapClaims{
+        "sub":  userID,                              // user id
+        "role": role,                                // for authorization
+        "iat":  time.Now().Unix(),                   // issued at
+        "exp":  time.Now().Add(time.Hour).Unix(),    // expiry
+    }
+    tok := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+    return tok.SignedString(secret)
+}
+
+// verify signature + expiry; returns the claims if valid
+func Verify(tokenStr string) (jwt.MapClaims, error) {
+    tok, err := jwt.Parse(tokenStr, func(t *jwt.Token) (any, error) {
+        // pin the algorithm to stop "alg: none" attacks
+        if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
+            return nil, jwt.ErrSignatureInvalid
+        }
+        return secret, nil
+    })
+    if err != nil || !tok.Valid {
+        return nil, err
+    }
+    return tok.Claims.(jwt.MapClaims), nil
+}</code></pre>
+      </div>
+      <div class="code">
+        <div class="bar"><span class="lang py">Pitone</span><span class="dots"><i></i><i></i><i></i></span></div>
+        <pre><code class="language-python">import jwt   # PyJWT
+from datetime import datetime, timedelta, timezone
+
+SECRET = "keep-this-very-secret"
+
+# mint a self-contained token carrying the claims
+def sign(user_id: str, role: str) -&gt; str:
+    now = datetime.now(timezone.utc)
+    payload = {
+        "sub":  user_id,                 # user id
+        "role": role,                    # for authorization
+        "iat":  now,                     # issued at
+        "exp":  now + timedelta(hours=1) # expiry
+    }
+    return jwt.encode(payload, SECRET, algorithm="HS256")
+
+# verify signature + expiry; returns the claims if valid
+def verify(token: str) -&gt; dict:
+    # algorithms is a whitelist -&gt; stops "alg: none" attacks
+    return jwt.decode(token, SECRET, algorithms=["HS256"])
+
+# hybrid: after verify(), also check a revocation blacklist
+def is_revoked(rdb, jti_or_token: str) -&gt; bool:
+    return rdb.sismember("jwt:blacklist", jti_or_token)</code></pre>
+      </div>
+    </div>
+
+    <h3>Approfondimento: firma, attacchi e token di aggiornamento</h3>
+
+    <h4>HS256 vs RS256: firma simmetrica vs asimmetrica</h4>
+    <p>Quello dell'intestazione <code class="ic">alg</code> decide chi può <em>creare</em> gettoni validi. Con <strong>HS256</strong> (HMAC) esiste un segreto condiviso utilizzato sia per firmare che per verificare, quindi <em>ogni</em> anche il servizio che può verificare può <strong>forgiare</strong>. Va bene all'interno di un confine di fiducia, pericoloso in molti altri. Con <strong>RS256</strong> / <strong>ES256</strong> (asimmetrico), il server di autenticazione firma con a <strong>chiave privata</strong> e tutti gli altri verificano con il <strong>chiave pubblica</strong>. I verificatori non possono coniare token e puoi pubblicare le chiavi pubbliche (un endpoint JWKS) in modo che i microservizi non correlati e le terze parti vengano convalidati in modo indipendente. Questo è il vero motivo per cui i JWT si adattano a un sistema distribuito: <em>la verifica non richiede la condivisione del potere di firma.</em></p>
+    <div class="tbl">
+      <table>
+        <thead><tr><th></th><th>HS256 (simmetrico)</th><th>RS256 / ES256 (asimmetrico)</th></tr></thead>
+        <tbody>
+          <tr><td>Chiavi</td><td>Un segreto condiviso</td><td>Privato (firma) + pubblico (verifica)</td></tr>
+          <tr><td>Chi può forgiare</td><td class="no">Chiunque possa verificare</td><td class="yes">Solo il titolare della chiave privata</td></tr>
+          <tr><td>Meglio per</td><td>Un unico servizio/monolite</td><td>Microservizi, verificatori di terze parti, OIDC</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h4>Il <code class="ic">alg:none</code> e attacchi con confusione di tasti</h4>
+    <p>Due classiche vulnerabilità JWT derivano entrambe dalla fiducia nell'intestazione del token. Nel <strong>alg:nessuno</strong> attacco, un attaccante imposta <code class="ic">"alg":"none"</code> e toglie la firma; un verificatore ingenuo che &quot;fa quello che dice l'intestazione&quot; accetta un token non firmato. Nel <strong>Confusione tasti RS256-&gt;HS256</strong> attacco, l'aggressore modifica l'algoritmo in HS256 e firma con il file <em>pubblico</em> chiave (che è, per definizione, pubblica) come se fosse un segreto HMAC; un verificatore che preleva l'algoritmo dall'intestazione lo convaliderà. <strong>Difesa:</strong> non lasciare mai che sia il token a scegliere, appunta gli algoritmi attesi sul lato del verificatore, come il <code class="ic">SigningMethodHMAC</code> controlla e il <code class="ic">algorithms=[...]</code> la whitelist nel codice della sezione 05 lo fa già.</p>
+
+    <h4>Token di accesso + token di aggiornamento</h4>
+    <p>Questo modello risolve la debolezza della revoca senza eliminare l’assenza di stato. Emettere a <strong>token di accesso di breve durata</strong> (~5-15 minuti) utilizzato su ogni chiamata API e a <strong>token di aggiornamento di lunga durata</strong> (giorni-settimane) conservati in modo sicuro (an <code class="ic">HttpOnly</code> cookie o archiviazione sicura su dispositivo mobile). Quando il token di accesso scade, il client scambia il token di aggiornamento con una nuova coppia. Poiché i token di accesso hanno vita breve, uno rubato diventa inutilizzabile nel giro di pochi minuti; poiché solo il token di aggiornamento tocca lo store, il percorso rapido per richiesta rimane senza stato.</p>
+    <div class="note teal">
+      <span class="lbl">Rilevamento rotazione + riutilizzo</span>
+      <p>Ad ogni aggiornamento, <strong>ruotare</strong>: emette un nuovo token di aggiornamento e invalida quello vecchio. Se un token di aggiornamento utilizzato in precedenza (ruotato all'esterno) viene presentato di nuovo, è un forte segnale che è stato rubato, <strong>revocare l'intera famiglia di token</strong> e forzare il nuovo accesso. Ciò offre una revoca pratica mantenendo il percorso del token di accesso libero da ricerche.</p>
+    </div>
+
+    <figure>
+      <div class="fig-wrap">
+        <svg viewBox="0 0 760 150" role="img" aria-label="Accedi e aggiorna il ciclo di vita del token">
+          <rect x="20" y="40" width="200" height="70" rx="10" fill="rgba(184,64,46,.06)" stroke="#b8402e" stroke-width="1.3"/>
+          <text x="120" y="70" text-anchor="middle" class="svg-t" font-size="14" font-weight="700">Token di accesso</text>
+          <text x="120" y="90" text-anchor="middle" class="svg-t" font-size="11" fill="#8d8475">~10 minuti / ogni chiamata inviata</text>
+          <rect x="540" y="40" width="200" height="70" rx="10" fill="rgba(63,111,78,.07)" stroke="#3f6f4e" stroke-width="1.3"/>
+          <text x="640" y="70" text-anchor="middle" class="svg-t" font-size="14" font-weight="700">Aggiorna token</text>
+          <text x="640" y="90" text-anchor="middle" class="svg-t" font-size="11" fill="#8d8475">giorni/HttpOnly/memorizzato</text>
+          <path d="M540 65 H222" stroke="#3f6f4e" stroke-width="1.7" marker-end="url(#r1)"/>
+          <text x="380" y="57" text-anchor="middle" class="svg-m" font-size="11" fill="#1f6b5e">conia un nuovo token di accesso alla scadenza</text>
+          <path d="M222 92 H538" stroke="#b8402e" stroke-width="1.7" stroke-dasharray="5 4" marker-end="url(#r2)"/>
+          <text x="380" y="112" text-anchor="middle" class="svg-m" font-size="11" fill="#8f2f20">ruotare: vecchio aggiornamento invalidato; riutilizzo -&gt; revoca famiglia</text>
+          <defs>
+            <marker id="r1" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M0 0 L9 4.5 L0 9 Z" fill="#3f6f4e"/></marker>
+            <marker id="r2" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M0 0 L9 4.5 L0 9 Z" fill="#b8402e"/></marker>
+          </defs>
+        </svg>
+      </div>
+      <figcaption>FIG 6, Token di accesso breve per la velocità, token di aggiornamento rotante per il controllo.</figcaption>
+    </figure>
+
+    <h4>Codice: verifica RS256 + rotazione aggiornamento</h4>
+    <div class="codepair">
+      <div class="code">
+        <div class="bar"><span class="lang go">Vai</span><span class="dots"><i></i><i></i><i></i></span></div>
+        <pre><code class="language-go">// Verify with a PUBLIC key, pinning RS256 (blocks alg:none &amp; key confusion)
+func VerifyRS256(tokenStr string, pub *rsa.PublicKey) (jwt.MapClaims, error) {
+    tok, err := jwt.Parse(tokenStr, func(t *jwt.Token) (any, error) {
+        if _, ok := t.Method.(*jwt.SigningMethodRSA); !ok { // pin family
+            return nil, jwt.ErrSignatureInvalid
+        }
+        return pub, nil
+    }, jwt.WithValidMethods([]string{"RS256"}))
+    if err != nil || !tok.Valid {
+        return nil, err
+    }
+    return tok.Claims.(jwt.MapClaims), nil
+}
+
+// Rotate a refresh token; detect reuse of an already-spent one.
+func Refresh(rdb *redis.Client, presented string) (string, error) {
+    family, err := rdb.Get(ctx, "rt:"+presented).Result()
+    if err != nil {
+        // not a live token, was it a previously-spent one? -&gt; theft
+        if fam, e := rdb.Get(ctx, "spent:"+presented).Result(); e == nil {
+            rdb.Del(ctx, "family:"+fam)            // revoke the whole family
+            return "", errors.New("refresh reuse detected")
+        }
+        return "", errors.New("invalid refresh token")
+    }
+    rdb.Del(ctx, "rt:"+presented)                  // consume the live token
+    rdb.Set(ctx, "spent:"+presented, family, 14*24*time.Hour) // remember it
+    newRefresh := newSessionID()
+    rdb.Set(ctx, "rt:"+newRefresh, family, 14*24*time.Hour)
+    return newRefresh, nil
+}</code></pre>
+      </div>
+      <div class="code">
+        <div class="bar"><span class="lang py">Pitone</span><span class="dots"><i></i><i></i><i></i></span></div>
+        <pre><code class="language-python"># Verify with a PUBLIC key, pinning RS256 (blocks alg:none &amp; key confusion)
+def verify_rs256(token: str, public_key) -&gt; dict:
+    return jwt.decode(token, public_key, algorithms=["RS256"])  # whitelist
+
+# Rotate a refresh token; detect reuse of an already-spent one.
+def refresh(rdb, presented: str) -&gt; str:
+    family = rdb.get(f"rt:{presented}")
+    if family is None:
+        # not a live token, was it previously spent? -&gt; theft
+        fam = rdb.get(f"spent:{presented}")
+        if fam is not None:
+            rdb.delete(f"family:{fam.decode()}")    # revoke the whole family
+            raise PermissionError("refresh reuse detected")
+        raise PermissionError("invalid refresh token")
+    rdb.delete(f"rt:{presented}")                   # consume the live token
+    rdb.setex(f"spent:{presented}", 14 * 24 * 3600, family)  # remember it
+    new_refresh = secrets.token_hex(32)
+    rdb.setex(f"rt:{new_refresh}", 14 * 24 * 3600, family)
+    return new_refresh</code></pre>
+      </div>
+    </div>
+  </section>
+
+  <!-- 06 -->
+  <section id="s06">
+    <h2><span class="badge">06</span> Biscotti</h2>
+    <div class="underh"></div>
+    <p>A <strong>biscotto</strong> è un modo per memorizzare un'informazione, qualsiasi valore di stringa, nel browser di un utente, <em>dal lato server</em>. Quest'ultima parte è la parte importante: utilizzando i cookie, un server può inserire dati nel browser di un client attraverso il normale flusso di richiesta/risposta HTTP, soggetto a due garanzie imposte dal browser:</p>
+    <ul>
+      <li>Un cookie è accessibile solo al server (dominio) che lo ha impostato, un server non può vedere i cookie di un altro server. Questo ambito è una funzionalità di sicurezza incorporata del browser.</li>
+      <li>Un cookie impostato da un server viene automaticamente collegato a <strong>ogni successiva richiesta</strong> tornare allo stesso server.</li>
+    </ul>
+    <p>Questo andata e ritorno automatico è ciò che rende i cookie così utili per l'autenticazione. Il server memorizza un token di autorizzazione (un JWT o un ID di sessione, a seconda dell'implementazione) nel cookie; il browser (Chrome, Firefox, Safari) lo rimanda ad ogni richiesta; il server lo valida, identifica e autorizza l'utente. L'intera danza &quot;il server consegna al client un token, il client lo restituisce ogni volta&quot; è automatizzata dal meccanismo dei cookie, gestito interamente dal lato server, perché il server può scrivere nel cookie jar del client.</p>
+    <div class="note teal">
+      <span class="lbl">HttpOnly</span>
+      <p>Contrassegnare un cookie <code class="ic">HttpOnly</code> significa che JavaScript non può leggerne il valore. Per un ID di sessione questo è importante: blocca un'intera classe di attacchi di furto di token che funzionano leggendo il cookie dagli script della pagina. Abbinalo a <code class="ic">Secure</code> (Solo HTTPS) e un file sensato <code class="ic">SameSite</code> politica.</p>
+    </div>
+
+    <h3>Approfondimento: CSRF e fissazione della sessione</h3>
+    <p>La caratteristica migliore dei cookie, l'allegato automatico a ogni richiesta, è anche la radice dei loro due attacchi alle firme. Entrambi contano specificamente per <em>basato sui cookie</em> aut.</p>
+
+    <h4>Falsificazione di richieste intersito (CSRF)</h4>
+    <p>Perché il browser invia il cookie di sessione <em>qualsiasi</em> richiesta a un dominio, comprese le richieste attivate da a <em>diverso</em> site, la pagina di un utente malintenzionato può inviare silenziosamente una richiesta di modifica dello stato alla tua banca o alla tua app e il browser allega utile il tuo cookie. Il server vede una richiesta completamente autenticata che non ha mai avuto intenzione di onorare. Notare l'asimmetria: <strong>l'autenticazione token-in-header (Bearer JWT) è naturalmente immune</strong>, perché la pagina dell'utente malintenzionato non può leggere o impostare il tuo <code class="ic">Authorization</code> intestazione; solo le credenziali generate dai cookie vengono inviate automaticamente. Difese:</p>
+    <ul>
+      <li><strong><code class="ic">SameSite</code> biscotti</strong>: <code class="ic">Lax</code> o <code class="ic">Strict</code> impedisce al cookie di passare attraverso le richieste tra siti. La prima linea di difesa.</li>
+      <li><strong>Token di sincronizzazione</strong>: il server incorpora un token casuale nella pagina/modulo; le richieste di cambio di stato devono restituirlo. L'aggressore non può leggerlo (politica della stessa origine), quindi non può creare una richiesta valida.</li>
+      <li><strong>Cookie di doppio invio</strong>: invia il token CSRF sia come cookie leggibile che come intestazione/campo; il server verifica che corrispondano. senza stato e semplice.</li>
+    </ul>
+
+    <figure>
+      <div class="fig-wrap">
+        <svg viewBox="0 0 760 160" role="img" aria-label="Attacco CSRF">
+          <rect x="20" y="55" width="170" height="55" rx="9" fill="rgba(184,64,46,.06)" stroke="#b8402e" stroke-width="1.3"/>
+          <text x="105" y="80" text-anchor="middle" class="svg-t" font-size="13" font-weight="700">evil.com</text>
+          <text x="105" y="98" text-anchor="middle" class="svg-t" font-size="10.5" fill="#8d8475">pagina dell'attaccante</text>
+          <rect x="300" y="55" width="170" height="55" rx="9" fill="rgba(255,255,255,.5)" stroke="#211e1a" stroke-width="1.3"/>
+          <text x="385" y="80" text-anchor="middle" class="svg-t" font-size="13" font-weight="700">il tuo browser</text>
+          <text x="385" y="98" text-anchor="middle" class="svg-t" font-size="10.5" fill="#8d8475">contiene un cookie bancario</text>
+          <rect x="580" y="55" width="160" height="55" rx="9" fill="rgba(63,111,78,.07)" stroke="#3f6f4e" stroke-width="1.3"/>
+          <text x="660" y="80" text-anchor="middle" class="svg-t" font-size="13" font-weight="700">banca.com</text>
+          <text x="660" y="98" text-anchor="middle" class="svg-t" font-size="10.5" fill="#8d8475">si fida del cookie</text>
+          <path d="M190 82 H298" stroke="#b8402e" stroke-width="1.7" marker-end="url(#cs1)"/>
+          <text x="244" y="74" text-anchor="middle" class="svg-m" font-size="10" fill="#8f2f20">POST nascosto</text>
+          <path d="M470 82 H578" stroke="#b8402e" stroke-width="1.7" marker-end="url(#cs2)"/>
+          <text x="524" y="74" text-anchor="middle" class="svg-m" font-size="10" fill="#8f2f20">+ biscotto (automatico!)</text>
+          <text x="385" y="135" text-anchor="middle" class="svg-m" font-size="10.5" fill="#1f6b5e">Il token SameSite/CSRF blocca la richiesta contraffatta</text>
+          <defs>
+            <marker id="cs1" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M0 0 L9 4.5 L0 9 Z" fill="#b8402e"/></marker>
+            <marker id="cs2" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M0 0 L9 4.5 L0 9 Z" fill="#b8402e"/></marker>
+          </defs>
+        </svg>
+      </div>
+      <figcaption>FIG 7, Il cookie si sposta su una richiesta tra siti; SameSite + un token CSRF interrompono la catena.</figcaption>
+    </figure>
+
+    <h4>Fissazione della sessione</h4>
+    <p>Ecco l'aggressore <em>piante</em> un ID di sessione che già conoscono, ad es. fornendo alla vittima un collegamento con un fisso <code class="ic">sid</code>o impostandone uno, e attende che la vittima effettui l'accesso <em>con lo stesso ID</em>. Se il server conserva l'ID della sessione di pre-accesso dopo l'autenticazione, l'aggressore ora condivide una sessione autenticata. La soluzione è semplice e assoluta: <strong>rigenerare l'ID di sessione ad ogni modifica dei privilegi</strong>, soprattutto subito dopo l'accesso, quindi il valore che l'aggressore conosceva diventa inutile.</p>
+
+    <h4>Codice: doppio invio CSRF + rigenerazione della sessione</h4>
+    <div class="codepair">
+      <div class="code">
+        <div class="bar"><span class="lang go">Vai</span><span class="dots"><i></i><i></i><i></i></span></div>
+        <pre><code class="language-go">// Double-submit: compare the CSRF cookie against the header.
+func CheckCSRF(next http.HandlerFunc) http.HandlerFunc {
+    return func(w http.ResponseWriter, r *http.Request) {
+        if r.Method == "GET" || r.Method == "HEAD" {
+            next(w, r); return
+        }
+        c, err := r.Cookie("csrf")
+        hdr := r.Header.Get("X-CSRF-Token")
+        if err != nil || subtle.ConstantTimeCompare(
+            []byte(c.Value), []byte(hdr)) != 1 {
+            http.Error(w, "forbidden", http.StatusForbidden)
+            return
+        }
+        next(w, r)
+    }
+}
+
+// Regenerate the session ID right after a successful login.
+func RegenerateSession(oldSID string, u User) (string, error) {
+    raw, _ := rdb.Get(ctx, "sess:"+oldSID).Result()
+    rdb.Del(ctx, "sess:"+oldSID)            // kill the pre-login ID
+    newSID := newSessionID()                // brand-new value
+    rdb.Set(ctx, "sess:"+newSID, raw, 15*time.Minute)
+    return newSID, nil
+}</code></pre>
+      </div>
+      <div class="code">
+        <div class="bar"><span class="lang py">Pitone</span><span class="dots"><i></i><i></i><i></i></span></div>
+        <pre><code class="language-python">import hmac
+
+# Double-submit: compare the CSRF cookie against the header.
+def check_csrf(view):
+    @wraps(view)
+    def wrapper(*args, **kwargs):
+        if request.method in ("GET", "HEAD"):
+            return view(*args, **kwargs)
+        cookie = request.cookies.get("csrf", "")
+        header = request.headers.get("X-CSRF-Token", "")
+        if not cookie or not hmac.compare_digest(cookie, header):
+            return jsonify(error="forbidden"), 403
+        return view(*args, **kwargs)
+    return wrapper
+
+# Regenerate the session ID right after a successful login.
+def regenerate_session(old_sid: str) -&gt; str:
+    raw = rdb.get(f"sess:{old_sid}")
+    rdb.delete(f"sess:{old_sid}")            # kill the pre-login ID
+    new_sid = secrets.token_hex(32)          # brand-new value
+    rdb.setex(f"sess:{new_sid}", 15 * 60, raw)
+    return new_sid</code></pre>
+      </div>
+    </div>
+  </section>
+
+  <!-- PART III -->
+  <div class="part">Parte III/Tipi di autenticazione</div>
+
+  <!-- 07 -->
+  <section id="s07">
+    <h2><span class="badge">07</span> Autenticazione con stato</h2>
+    <div class="underh"></div>
+    <p>Il primo tipo principale. Il client (un browser) invia nome utente/e-mail e password al server. Il server verifica validità e correttezza; se l'utente è idoneo, genera un file <strong>identificativo della sessione</strong>, lo raggruppa con i dati dell'utente e memorizza il pacchetto in <strong>Redis</strong> (funziona anche un DB, ma la maggior parte delle piattaforme sceglie Redis per il suo tempo di accesso rapido). L'ID di sessione viene inviato al client all'interno di un file <strong>Cookie HttpOnly</strong>: quindi JavaScript non può leggere l'ID di sessione. Grazie al comportamento di collegamento automatico del cookie, ogni richiesta successiva trasporta quel cookie. Il server legge l'ID di sessione, ne verifica l'esistenza, la scadenza e i dati dell'utente in Redis, identifica e autorizza l'utente e lascia passare la richiesta. L'ID di sessione può essere qualsiasi stringa crittograficamente casuale, anche un JWT, a seconda dell'implementazione.</p>
+
+    <figure>
+      <div class="fig-wrap">
+        <svg viewBox="0 0 760 230" role="img" aria-label="Flusso di autenticazione con stato">
+          <rect x="20" y="80" width="150" height="70" rx="10" fill="rgba(255,255,255,.5)" stroke="#b8402e" stroke-width="1.4"/>
+          <text x="95" y="110" text-anchor="middle" class="svg-t" font-size="15" font-weight="700" fill="#211e1a">Cliente</text>
+          <text x="95" y="130" text-anchor="middle" class="svg-t" font-size="11.5" fill="#8d8475">navigatore</text>
+
+          <rect x="300" y="80" width="160" height="70" rx="10" fill="rgba(255,255,255,.5)" stroke="#211e1a" stroke-width="1.4"/>
+          <text x="380" y="110" text-anchor="middle" class="svg-t" font-size="15" font-weight="700" fill="#211e1a">Server</text>
+          <text x="380" y="130" text-anchor="middle" class="svg-t" font-size="11.5" fill="#8d8475">logica applicativa</text>
+
+          <rect x="590" y="80" width="150" height="70" rx="10" fill="rgba(63,111,78,.08)" stroke="#3f6f4e" stroke-width="1.4"/>
+          <text x="665" y="108" text-anchor="middle" class="svg-t" font-size="15" font-weight="700" fill="#211e1a">Redis</text>
+          <text x="665" y="128" text-anchor="middle" class="svg-t" font-size="11.5" fill="#8d8475">sid -&gt; datiutente</text>
+
+          <path d="M172 100 H298" stroke="#b8402e" stroke-width="1.8" marker-end="url(#b1)"/>
+          <text x="235" y="92" text-anchor="middle" class="svg-m" font-size="10.5" fill="#8f2f20">utente+pass</text>
+          <path d="M462 100 H588" stroke="#3f6f4e" stroke-width="1.8" marker-end="url(#b2)"/>
+          <text x="525" y="92" text-anchor="middle" class="svg-m" font-size="10.5" fill="#1f6b5e">pacchetto del negozio</text>
+          <path d="M298 135 H174" stroke="#b8402e" stroke-width="1.8" marker-end="url(#b3)"/>
+          <text x="235" y="170" text-anchor="middle" class="svg-m" font-size="10.5" fill="#8f2f20">Set-Cookie sid (HttpOnly)</text>
+          <path d="M588 135 H464" stroke="#3f6f4e" stroke-width="1.8" stroke-dasharray="5 4" marker-end="url(#b4)"/>
+          <text x="525" y="170" text-anchor="middle" class="svg-m" font-size="10.5" fill="#1f6b5e">ricerca su ogni richiesta</text>
+          <defs>
+            <marker id="b1" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M0 0 L9 4.5 L0 9 Z" fill="#b8402e"/></marker>
+            <marker id="b2" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M0 0 L9 4.5 L0 9 Z" fill="#3f6f4e"/></marker>
+            <marker id="b3" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M0 0 L9 4.5 L0 9 Z" fill="#b8402e"/></marker>
+            <marker id="b4" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M0 0 L9 4.5 L0 9 Z" fill="#3f6f4e"/></marker>
+          </defs>
+        </svg>
+      </div>
+      <figcaption>FIG 8, Stateful: la prova vive nel negozio; il cookie punta solo ad esso.</figcaption>
+    </figure>
+
+    <h4>Codice: middleware che convalida una sessione</h4>
+    <div class="codepair">
+      <div class="code">
+        <div class="bar"><span class="lang go">Vai</span><span class="dots"><i></i><i></i><i></i></span></div>
+        <pre><code class="language-go">// RequireSession reads the sid cookie and looks it up in Redis.
+func RequireSession(next http.HandlerFunc) http.HandlerFunc {
+    return func(w http.ResponseWriter, r *http.Request) {
+        c, err := r.Cookie("sid")
+        if err != nil {
+            http.Error(w, "authentication failed", http.StatusUnauthorized)
+            return
+        }
+        raw, err := rdb.Get(ctx, "sess:"+c.Value).Result()
+        if err != nil { // missing or expired
+            http.Error(w, "authentication failed", http.StatusUnauthorized)
+            return
+        }
+        var u User
+        json.Unmarshal([]byte(raw), &amp;u)
+        // attach the user to the request context for later handlers
+        ctxWithUser := context.WithValue(r.Context(), "user", u)
+        next(w, r.WithContext(ctxWithUser))
+    }
+}</code></pre>
+      </div>
+      <div class="code">
+        <div class="bar"><span class="lang py">Pitone</span><span class="dots"><i></i><i></i><i></i></span></div>
+        <pre><code class="language-python">from functools import wraps
+from flask import request, g, jsonify
+
+def require_session(view):
+    @wraps(view)
+    def wrapper(*args, **kwargs):
+        sid = request.cookies.get("sid")
+        if not sid:
+            return jsonify(error="authentication failed"), 401
+        raw = rdb.get(f"sess:{sid}")     # None if missing/expired
+        if raw is None:
+            return jsonify(error="authentication failed"), 401
+        g.user = json.loads(raw)          # attach for later handlers
+        return view(*args, **kwargs)
+    return wrapper
+
+@app.get("/notes")
+@require_session
+def notes():
+    return jsonify(owner=g.user["id"])</code></pre>
+      </div>
+    </div>
+  </section>
+
+  <!-- 08 -->
+  <section id="s08">
+    <h2><span class="badge">08</span> Autenticazione senza stato</h2>
+    <div class="underh"></div>
+    <p>Il client invia e-mail/nome utente e password sulla richiesta di accesso. Il server verifica l'autenticità; se corretto, genera a <strong>firmato JWT</strong> utilizzando il proprio <strong>chiave segreta</strong> (conservato in modo sicuro in modo che possa sia firmare che verificare). Il token incorpora le informazioni dell'utente, l'ID utente, il ruolo e così via e viene restituito al client. In tutte le richieste successive il client si identifica inviando il JWT, per convenzione nel file <code class="ic">Authorization</code> intestazione. Il server estrae il token, lo verifica con il segreto, recupera l'ID utente e, in caso di successo, completa la richiesta; altrimenti ritorna <strong>401 Non autorizzato</strong> o <strong>403 Proibito</strong>.</p>
+    <p>Si chiama <em>senza stato</em> proprio perché, a differenza dell'autenticazione con stato, esiste <strong>nessuna ricerca nell'archivio persistente</strong>. Tutto ciò di cui il server ha bisogno riguardo all'utente risiede all'interno del token autonomo e firmato; solo la chiave segreta dimostra l'autenticità del token.</p>
+
+    <figure>
+      <div class="fig-wrap">
+        <svg viewBox="0 0 760 200" role="img" aria-label="Flusso di autenticazione senza stato">
+          <rect x="40" y="70" width="160" height="70" rx="10" fill="rgba(255,255,255,.5)" stroke="#b8402e" stroke-width="1.4"/>
+          <text x="120" y="100" text-anchor="middle" class="svg-t" font-size="15" font-weight="700" fill="#211e1a">Cliente</text>
+          <text x="120" y="120" text-anchor="middle" class="svg-t" font-size="11.5" fill="#8d8475">browser/mobile</text>
+
+          <rect x="560" y="70" width="160" height="70" rx="10" fill="rgba(255,255,255,.5)" stroke="#211e1a" stroke-width="1.4"/>
+          <text x="640" y="100" text-anchor="middle" class="svg-t" font-size="15" font-weight="700" fill="#211e1a">Server</text>
+          <text x="640" y="120" text-anchor="middle" class="svg-t" font-size="11.5" fill="#8d8475">detiene la chiave SEGRETA</text>
+
+          <path d="M202 92 H558" stroke="#b8402e" stroke-width="1.8" marker-end="url(#c1)"/>
+          <text x="380" y="84" text-anchor="middle" class="svg-m" font-size="11" fill="#8f2f20">1 / login -&gt; il server firma JWT con segreto</text>
+          <path d="M558 122 H204" stroke="#3f6f4e" stroke-width="1.8" marker-end="url(#c2)"/>
+          <text x="380" y="116" text-anchor="middle" class="svg-m" font-size="11" fill="#1f6b5e">2 / JWT è tornato</text>
+          <path d="M202 152 H558" stroke="#8d8475" stroke-width="1.8" stroke-dasharray="5 4" marker-end="url(#c3)"/>
+          <text x="380" y="172" text-anchor="middle" class="svg-m" font-size="11" fill="#8d8475">3 / ogni richiesta: Autorizzazione: Bearer &lt;JWT&gt;, verificato con segreto, no DB</text>
+          <defs>
+            <marker id="c1" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M0 0 L9 4.5 L0 9 Z" fill="#b8402e"/></marker>
+            <marker id="c2" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M0 0 L9 4.5 L0 9 Z" fill="#3f6f4e"/></marker>
+            <marker id="c3" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M0 0 L9 4.5 L0 9 Z" fill="#8d8475"/></marker>
+          </defs>
+        </svg>
+      </div>
+      <figcaption>FIG 9, Stateless: la prova viaggia all'interno del token; il server non memorizza nulla.</figcaption>
+    </figure>
+
+    <h4>Codice: middleware token al portatore</h4>
+    <div class="codepair">
+      <div class="code">
+        <div class="bar"><span class="lang go">Vai</span><span class="dots"><i></i><i></i><i></i></span></div>
+        <pre><code class="language-go">import "strings"
+
+func RequireJWT(next http.HandlerFunc) http.HandlerFunc {
+    return func(w http.ResponseWriter, r *http.Request) {
+        h := r.Header.Get("Authorization")
+        if !strings.HasPrefix(h, "Bearer ") {
+            http.Error(w, "authentication failed", http.StatusUnauthorized)
+            return
+        }
+        claims, err := Verify(strings.TrimPrefix(h, "Bearer "))
+        if err != nil {
+            http.Error(w, "authentication failed", http.StatusUnauthorized)
+            return
+        }
+        // no store lookup, identity comes from the verified token
+        u := User{ID: claims["sub"].(string), Role: claims["role"].(string)}
+        next(w, r.WithContext(context.WithValue(r.Context(), "user", u)))
+    }
+}</code></pre>
+      </div>
+      <div class="code">
+        <div class="bar"><span class="lang py">Pitone</span><span class="dots"><i></i><i></i><i></i></span></div>
+        <pre><code class="language-python">def require_jwt(view):
+    @wraps(view)
+    def wrapper(*args, **kwargs):
+        h = request.headers.get("Authorization", "")
+        if not h.startswith("Bearer "):
+            return jsonify(error="authentication failed"), 401
+        try:
+            claims = verify(h.removeprefix("Bearer "))
+        except jwt.PyJWTError:
+            return jsonify(error="authentication failed"), 401
+        # no store lookup, identity comes from the verified token
+        g.user = {"id": claims["sub"], "role": claims["role"]}
+        return view(*args, **kwargs)
+    return wrapper</code></pre>
+      </div>
+    </div>
+  </section>
+
+  <!-- 09 -->
+  <section id="s09">
+    <h2><span class="badge">09</span> Stateful vs Stateless: la scelta</h2>
+    <div class="underh"></div>
+    <p>I contro dell’uno sono in gran parte i pro dell’altro. Scegli in base alla provenienza della richiesta.</p>
+    <div class="tbl">
+      <table>
+        <thead><tr><th>Dimensione</th><th>Con stato (sessione)</th><th>senza stato (JWT)</th></tr></thead>
+        <tbody>
+          <tr><td>Controllo sulle sessioni</td><td class="yes">Visualizzazione centralizzata e in tempo reale delle sessioni attive</td><td class="no">Nessuna visione globale</td></tr>
+          <tr><td>Revocare/disconnettere un utente</td><td class="yes">Facile, basta abbandonare la sessione</td><td class="no">Complesso, valido fino alla scadenza</td></tr>
+          <tr><td>Dipendenza dall'archiviazione</td><td class="no">Ha bisogno di un archivio di sessioni</td><td class="yes">Nessuno</td></tr>
+          <tr><td>Scalabilità tra regioni</td><td class="no">Latenza di sincronizzazione, maggiore complessità delle operazioni</td><td class="yes">Ideale per sistemi distribuiti</td></tr>
+          <tr><td>Funzionalità mobile/API</td><td class="no">I cookie non sono una soluzione ottimale</td><td class="yes">Eccellente</td></tr>
+          <tr><td>Atteggiamento di sicurezza</td><td class="yes">Generalmente considerato più sicuro</td><td class="no">Furto di token = imitazione</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>In pratica, la maggior parte delle applicazioni dovrebbero snellirsi <strong>statale</strong>: la natura sicura, la comodità di revocare i token e di disconnettere gli utenti e la visibilità in tempo reale delle sessioni attive valgono molto. I suoi costi sono limiti di scalabilità e maggiore complessità operativa in grandi sistemi distribuiti su più regioni. Lo stateless vince dove è necessaria la scalabilità e non hai alcuna dipendenza dal session-store: API, architetture distribuite, client mobili. Il suo principale punto debole è la revoca dura.</p>
+    <div class="note teal">
+      <span class="lbl">La scissione ibrida</span>
+      <p>Puoi dividere per cliente. Utilizzare <strong>statale</strong> auth per l'app Web del browser principale (dove si desidera il controllo e la revoca) e <strong>senza stato</strong> JWT per app mobili e integrazioni server-server di terze parti (dove desideri scalabilità e semplicità). Questo batte i contro di entrambi.</p>
+    </div>
+  </section>
+
+  <!-- 10 -->
+  <section id="s10">
+    <h2><span class="badge">10</span> Autenticazione della chiave API</h2>
+    <div class="underh"></div>
+    <p>Le chiavi API soddisfano una serie di casi d'uso completamente diversi rispetto all'autenticazione con stato/senza stato. Il flusso è semplice: nell'interfaccia utente di una piattaforma fai clic <em>&quot;genera una chiave API&quot;</em>, ricevi una stringa crittograficamente casuale e crittograficamente sicura e da quel momento in poi usa quella stringa per guadagnare <strong>programmatico</strong> accedere al server dietro l'interfaccia utente, senza mai toccare l'interfaccia utente.</p>
+    <p>L'esempio canonico è OpenAI. La maggior parte delle persone utilizza ChatGPT tramite la sua interfaccia utente: digita nella casella e ottieni una risposta ben resa. Ma dietro quell’interfaccia utente si trovano molti server. OpenAI offre anche <strong>Chiavi API</strong> per le persone che non vogliono l'interfaccia utente, che vogliono le funzionalità del modello all'interno <em>i propri</em> prodotto o server, a livello di codice. Per concedere l'accesso al tuo <em>servitore</em> (non la tua interfaccia utente, non la tua piattaforma) a un diverso gruppo di utenti in a <strong>confinato, basato su autorizzazioni, basato sulla scadenza</strong> in questo modo, dai loro una chiave API. Lo allegano (nelle intestazioni, o come previsto dal server), lo rispediscono e possono eseguire le operazioni consentite dalla piattaforma nativa, ma tramite codice.</p>
+
+    <figure>
+      <div class="fig-wrap">
+        <svg viewBox="0 0 760 200" role="img" aria-label="Da macchina a macchina con chiave API">
+          <rect x="30" y="60" width="180" height="90" rx="10" fill="rgba(255,255,255,.5)" stroke="#b8402e" stroke-width="1.4"/>
+          <text x="120" y="92" text-anchor="middle" class="svg-t" font-size="14" font-weight="700" fill="#211e1a">Il tuo server</text>
+          <text x="120" y="112" text-anchor="middle" class="svg-t" font-size="11" fill="#8d8475">nessuna interfaccia utente / nessun essere umano</text>
+          <text x="120" y="130" text-anchor="middle" class="svg-m" font-size="10.5" fill="#8f2f20">contiene API_KEY in env</text>
+
+          <rect x="540" y="60" width="190" height="90" rx="10" fill="rgba(63,111,78,.08)" stroke="#3f6f4e" stroke-width="1.4"/>
+          <text x="635" y="92" text-anchor="middle" class="svg-t" font-size="14" font-weight="700" fill="#211e1a">Server del fornitore</text>
+          <text x="635" y="112" text-anchor="middle" class="svg-t" font-size="11" fill="#8d8475">ad es. OpenAI</text>
+          <text x="635" y="130" text-anchor="middle" class="svg-m" font-size="10.5" fill="#1f6b5e">tasto mappe -&gt; piano/quota</text>
+
+          <path d="M212 95 H538" stroke="#b8402e" stroke-width="1.8" marker-end="url(#d1)"/>
+          <text x="375" y="86" text-anchor="middle" class="svg-m" font-size="11" fill="#8f2f20">richiesta + autorizzazione: Bearer API_KEY</text>
+          <path d="M538 125 H214" stroke="#3f6f4e" stroke-width="1.8" marker-end="url(#d2)"/>
+          <text x="375" y="145" text-anchor="middle" class="svg-m" font-size="11" fill="#1f6b5e">risposta (identificata, autorizzata, misurata)</text>
+          <defs>
+            <marker id="d1" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M0 0 L9 4.5 L0 9 Z" fill="#b8402e"/></marker>
+            <marker id="d2" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M0 0 L9 4.5 L0 9 Z" fill="#3f6f4e"/></marker>
+          </defs>
+        </svg>
+      </div>
+      <figcaption>FIG 10, Machine-to-machine: nessun modulo di accesso, nessun trigger umano, solo un tasto per ogni chiamata.</figcaption>
+    </figure>
+
+    <p>Perché i team hanno creato chiavi API:</p>
+    <ul>
+      <li><strong>Facile da generare</strong>: fai clic su un pulsante nell'interfaccia utente, ottieni una chiave, usala.</li>
+      <li><strong>Ideale per la comunicazione machine-to-machine (M2M).</strong> Il nostro flusso abituale è client-server: un essere umano utilizza un'interfaccia utente (mouse, tastiera), l'interfaccia utente invia richieste programmatiche, il server esegue la logica applicativa e risponde, l'interfaccia utente la esegue il rendering per l'essere umano. M2M rimuove l'essere umano: il mio server vuole utilizzare la funzionalità di ChatGPT, supponiamo che un utente chieda alla mia app di &quot;riassumere questo paragrafo&quot; e il mio server chiami il provider dietro le quinte. Non c'è interfaccia utente e nessuna interazione umana; tutto è fatto in codice.</li>
+    </ul>
+    <p>L'autenticazione con stato/senza stato presuppone un trigger umano: un modulo di accesso in cui digitare, un token da salvare. M2M non ha bisogno di tutto ciò, dai alla macchina una chiave segreta, la memorizza in una variabile di ambiente o in un archivio sicuro e la invia ad ogni richiesta per identificarsi. Le chiavi API servono esattamente a questo: interazioni programmatiche da macchina a macchina.</p>
+
+    <h4>Codice: verifica di una chiave API</h4>
+    <div class="codepair">
+      <div class="code">
+        <div class="bar"><span class="lang go">Vai</span><span class="dots"><i></i><i></i><i></i></span></div>
+        <pre><code class="language-go">import (
+    "crypto/sha256"
+    "crypto/subtle"
+    "encoding/hex"
+)
+
+// Store only the HASH of issued keys (like passwords).
+// On each call, hash the presented key and constant-time compare.
+func hashKey(k string) string {
+    sum := sha256.Sum256([]byte(k))
+    return hex.EncodeToString(sum[:])
+}
+
+func RequireAPIKey(lookup func(hash string) (*Client, bool)) func(http.HandlerFunc) http.HandlerFunc {
+    return func(next http.HandlerFunc) http.HandlerFunc {
+        return func(w http.ResponseWriter, r *http.Request) {
+            key := r.Header.Get("X-API-Key")
+            client, ok := lookup(hashKey(key))
+            // subtle.ConstantTimeCompare avoids timing leaks
+            if !ok || subtle.ConstantTimeCompare([]byte(key), []byte(key)) != 1 {
+                http.Error(w, "authentication failed", http.StatusUnauthorized)
+                return
+            }
+            _ = client // check scopes, quota, expiry here
+            next(w, r)
+        }
+    }
+}</code></pre>
+      </div>
+      <div class="code">
+        <div class="bar"><span class="lang py">Pitone</span><span class="dots"><i></i><i></i><i></i></span></div>
+        <pre><code class="language-python">import hashlib, hmac
+
+# Store only the HASH of issued keys (like passwords).
+def hash_key(k: str) -&gt; str:
+    return hashlib.sha256(k.encode()).hexdigest()
+
+def require_api_key(view):
+    @wraps(view)
+    def wrapper(*args, **kwargs):
+        key = request.headers.get("X-API-Key", "")
+        client = lookup_client(hash_key(key))   # your DB lookup
+        if client is None:
+            return jsonify(error="authentication failed"), 401
+        # check scopes, quota, expiry on `client` here
+        # hmac.compare_digest is constant-time
+        if not hmac.compare_digest(hash_key(key), client["key_hash"]):
+            return jsonify(error="authentication failed"), 401
+        g.client = client
+        return view(*args, **kwargs)
+    return wrapper</code></pre>
+      </div>
+    </div>
+  </section>
+
+  <!-- PART IV -->
+  <div class="part">Parte IV / OAuth e OpenID Connect</div>
+
+  <!-- 11 -->
+  <section id="s11">
+    <h2><span class="badge">11</span> Il problema della delega</h2>
+    <div class="underh"></div>
+    <p>Fino ad ora la configurazione è semplice: crea un account con nome utente/password per piattaforma, autenticati, ricevi un token. Ma più piattaforme usi, più credenziali crei e devi ricordare. Sono emersi due problemi:</p>
+    <ul>
+      <li><strong>Rischio per la sicurezza.</strong> Il riutilizzo delle password era molto comune all'inizio (si pensi <code class="ic">12345</code> o <code class="ic">password</code>), quindi una singola violazione ha compromesso molti account.</li>
+      <li><strong>Fatica.</strong> La gestione di un numero enorme di account ha sopraffatto gli utenti.</li>
+    </ul>
+    <p>Quindi è apparsa una nuova classe di problemi: <strong>un sito Web che necessita dell'accesso alle risorse di un altro sito Web</strong>. Un'app di viaggio/prenotazione deve scansionare Gmail per i biglietti aerei. Un'app social vuole importare i tuoi contatti da Google o da un'altra rete. Una piattaforma richiede la risorsa di un'altra piattaforma, a livello di programmazione. Questo è il <strong>problema della delega</strong>.</p>
+    <div class="note">
+      <span class="lbl">La prima soluzione disastrosa</span>
+      <p>Gli utenti semplicemente <strong>condiviso le loro password</strong>. Questo è stato catastrofico: una password garantisce <em>pieno</em> accesso a tutto nell'account, senza modo di limitare le autorizzazioni ed era impossibile revocare l'accesso senza modificare la password <em>ovunque</em> (poiché la stessa password veniva riutilizzata su più siti e l'avevi semplicemente consegnata a una terza parte che ora poteva fare qualsiasi cosa).</p>
+    </div>
+    <p>Dentro <strong>2007</strong>, gli ingegneri di aziende come Google e Twitter hanno deciso di standardizzare l'accesso delegato <em>senza condividere le password</em>. Il risultato è stato <strong>OAuth</strong>: <em>Apri autorizzazione</em>, non solo un protocollo ma un'idea rivoluzionaria. La loro tecnica: <strong>condividi token, non password</strong>. Una password garantisce l'accesso totale; un token garantisce <strong>specifico, circoscritto</strong> accedere a una parte specifica del tuo account.</p>
+    <div class="note teal">
+      <span class="lbl">Token e password</span>
+      <p>Se condividi la tua password Google con me, posso visualizzare le tue foto, la cronologia di Maps, i tuoi contatti, aggiungere/rimuovere eventi del calendario, tutto. Ma se condividi a <em>gettone</em> limitato solo a &quot;leggere i contatti&quot;, posso leggere i tuoi contatti e nient'altro. Questo ambito è il punto centrale.</p>
+    </div>
+  </section>
+
+  <!-- 12 -->
+  <section id="s12">
+    <h2><span class="badge">12</span> OAuth 1.0: quattro ruoli</h2>
+    <div class="underh"></div>
+    <p>OAuth introduce quattro componenti. Prendi l'esempio: Facebook (l'app) vuole i tuoi contatti Google.</p>
+    <div class="tbl">
+      <table>
+        <thead><tr><th>Ruolo</th><th>Chi è</th><th>Nell'esempio</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Proprietario della risorsa</strong></td><td>L'utente proprietario dei dati</td><td>Tu</td></tr>
+          <tr><td><strong>Cliente</strong></td><td>L'app che richiede l'accesso</td><td>Facebook</td></tr>
+          <tr><td><strong>Server delle risorse</strong></td><td>Il server che contiene i dati</td><td>Google (il tuo account)</td></tr>
+          <tr><td><strong>Server di autorizzazione</strong></td><td>Il server che emette il token dopo aver autenticato l'utente</td><td>Il server di autenticazione di Google</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>Il flusso OAuth 1.0</h3>
+    <ol>
+      <li>Il <strong>cliente</strong> (Facebook) reindirizza l'utente al <strong>server di autorizzazione</strong>.</li>
+      <li>L'utente <strong>autentica e concede l'autorizzazione</strong>: &quot;sì, autorizzo questi ambiti.&quot;</li>
+      <li>Il server di autorizzazione invia un <strong>gettone</strong> al cliente.</li>
+      <li>Il client utilizza il token per accedere a <strong>risorsa</strong> (i tuoi contatti) sul server delle risorse.</li>
+    </ol>
+    <p>È così che un client ottiene l'accesso mirato alla risorsa di un'altra piattaforma, in modo programmatico, senza che tu condivida mai la tua password, sradicando magnificamente il problema della condivisione della password.</p>
+
+    <figure>
+      <div class="fig-wrap">
+        <svg viewBox="0 0 760 250" role="img" aria-label="Flusso OAuth 1.0">
+          <rect x="30" y="30" width="150" height="60" rx="10" fill="rgba(255,255,255,.5)" stroke="#b8402e" stroke-width="1.4"/>
+          <text x="105" y="58" text-anchor="middle" class="svg-t" font-size="13" font-weight="700">Cliente</text>
+          <text x="105" y="76" text-anchor="middle" class="svg-t" font-size="11" fill="#8d8475">Facebook</text>
+
+          <rect x="300" y="30" width="160" height="60" rx="10" fill="rgba(176,125,43,.08)" stroke="#b07d2b" stroke-width="1.4"/>
+          <text x="380" y="55" text-anchor="middle" class="svg-t" font-size="13" font-weight="700">Autorizzazione</text>
+          <text x="380" y="73" text-anchor="middle" class="svg-t" font-size="11" fill="#8d8475">server (Google)</text>
+
+          <rect x="580" y="30" width="150" height="60" rx="10" fill="rgba(63,111,78,.08)" stroke="#3f6f4e" stroke-width="1.4"/>
+          <text x="655" y="55" text-anchor="middle" class="svg-t" font-size="13" font-weight="700">Risorsa</text>
+          <text x="655" y="73" text-anchor="middle" class="svg-t" font-size="11" fill="#8d8475">server (Google)</text>
+
+          <rect x="300" y="180" width="160" height="50" rx="10" fill="rgba(255,255,255,.5)" stroke="#211e1a" stroke-width="1.4"/>
+          <text x="380" y="210" text-anchor="middle" class="svg-t" font-size="13" font-weight="700">Tu (proprietario)</text>
+
+          <path d="M180 60 H298" stroke="#b8402e" stroke-width="1.7" marker-end="url(#e1)"/>
+          <text x="239" y="52" text-anchor="middle" class="svg-m" font-size="10" fill="#8f2f20">1 reindirizzamento</text>
+          <path d="M380 92 V178" stroke="#b07d2b" stroke-width="1.7" marker-end="url(#e2)"/>
+          <text x="430" y="140" text-anchor="middle" class="svg-m" font-size="10" fill="#8a6210">2 autenticare + concedere</text>
+          <path d="M300 75 H182" stroke="#b07d2b" stroke-width="1.7" marker-end="url(#e3)"/>
+          <text x="240" y="92" text-anchor="middle" class="svg-m" font-size="10" fill="#8a6210">3 token -&gt; cliente</text>
+          <path d="M180 90 C 250 150, 520 150, 578 90" stroke="#3f6f4e" stroke-width="1.7" fill="none" marker-end="url(#e4)"/>
+          <text x="380" y="160" text-anchor="middle" class="svg-m" font-size="10" fill="#1f6b5e">4 utilizzare token -&gt; recupera risorsa con ambito</text>
+          <defs>
+            <marker id="e1" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto"><path d="M0 0 L8 4 L0 8 Z" fill="#b8402e"/></marker>
+            <marker id="e2" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto"><path d="M0 0 L8 4 L0 8 Z" fill="#b07d2b"/></marker>
+            <marker id="e3" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto"><path d="M0 0 L8 4 L0 8 Z" fill="#b07d2b"/></marker>
+            <marker id="e4" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto"><path d="M0 0 L8 4 L0 8 Z" fill="#3f6f4e"/></marker>
+          </defs>
+        </svg>
+      </div>
+      <figcaption>FIG 11, OAuth 1.0: reindirizzamento -&gt; concessione -&gt; token -&gt; accesso alle risorse con ambito.</figcaption>
+    </figure>
+  </section>
+
+  <!-- 13 -->
+  <section id="s13">
+    <h2><span class="badge">13</span> OAuth 2.0</h2>
+    <div class="underh"></div>
+    <p>OAuth 1.0 era rivoluzionario ma presentava dei limiti: lo era <strong>complesso per gli sviluppatori</strong> da implementare e su cui ha fatto affidamento <strong>firme crittografiche</strong> che erano soggetti a errori. <strong>OAuth 2.0</strong> (intorno <strong>2010</strong>) ha affrontato entrambi:</p>
+    <ul>
+      <li><strong>Gettoni al portatore.</strong> Molto più semplice che firmare ogni richiesta. Più vulnerabile in teoria, ma notevolmente più facile da implementare, &quot;portatore&quot; significa che chiunque detiene il token può usarlo.</li>
+      <li><strong>Flussi per tipo di app.</strong> Gli sviluppatori scelgono un flusso in base al tipo di app.</li>
+    </ul>
+    <div class="tbl">
+      <table>
+        <thead><tr><th>Flusso</th><th>Per</th><th>Nota</th></tr></thead>
+        <tbody>
+          <tr><td>Codice di autorizzazione</td><td>App lato server</td><td>Il flusso standard e più sicuro</td></tr>
+          <tr><td>Implicito</td><td>App basate su browser</td><td class="no">Ora scoraggiato, rischi per la sicurezza</td></tr>
+          <tr><td>Credenziali del cliente</td><td>Da macchina a macchina</td><td>Server&lt;-&gt;server, nessun utente/browser coinvolto</td></tr>
+          <tr><td>Codice dispositivo</td><td>Dispositivi a input limitato</td><td>ad es. Smart TV (senza tastiera/mouse)</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <h3>Approfondimento: il flusso del codice di autorizzazione con PKCE</h3>
+    <p>Il flusso del codice di autorizzazione è quello da comprendere effettivamente, perché è ciò che utilizza &quot;Accedi con...&quot;. Funziona in due fasi su HTTP reale.</p>
+
+    <h4>Tappa 1: la richiesta di autorizzazione (canale frontale, nel browser)</h4>
+    <p>Il client invia l'utente al server di autorizzazione con i parametri di query:</p>
+    <div class="code">
+      <div class="bar"><span class="lang">HTTP/reindirizzamento</span><span class="dots"><i></i><i></i><i></i></span></div>
+      <pre><code class="language-http">GET /authorize?
+    response_type=code
+    &amp;client_id=note_app
+    &amp;redirect_uri=https://notes.app/callback
+    &amp;scope=openid%20email%20keep.read
+    &amp;state=xyz123                       # anti-CSRF / anti-mixup nonce
+    &amp;code_challenge=E9Melh...           # = BASE64URL(SHA256(verifier))
+    &amp;code_challenge_method=S256</code></pre>
+    </div>
+    <p>Dopo che l'utente ha effettuato l'accesso e ha acconsentito, il server reindirizza di nuovo: <code class="ic">https://notes.app/callback?code=AUTH_CODE&amp;state=xyz123</code>. Il cliente <strong>deve verificare <code class="ic">state</code> partite</strong> ciò che ha inviato, è ciò che impedisce un CSRF/confusione sul reindirizzamento.</p>
+
+    <h4>Tappa 2: lo scambio di token (back channel, server-to-server)</h4>
+    <div class="code">
+      <div class="bar"><span class="lang">HTTP/POST/token</span><span class="dots"><i></i><i></i><i></i></span></div>
+      <pre><code class="language-http">POST /token
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=authorization_code
+&amp;code=AUTH_CODE
+&amp;redirect_uri=https://notes.app/callback
+&amp;client_id=note_app
+&amp;code_verifier=dBjftJeZ4CVP...         # the original random secret
+
+-&gt; 200 OK
+{ "access_token": "...",               # call the resource server
+  "refresh_token": "...",
+  "id_token": "eyJ...",                # the OIDC identity JWT (sec 14)
+  "token_type": "Bearer",
+  "expires_in": 600 }</code></pre>
+    </div>
+
+    <h4>Perché PKCE?</h4>
+    <p><strong>PKCE</strong> (Proof Key for Code Exchange) protegge <strong>clienti pubblici</strong>: app a pagina singola e app mobili che <em>non posso mantenere un segreto</em>. Il client genera un file random <code class="ic">code_verifier</code>, invia solo il suo hash (<code class="ic">code_challenge</code>) nella gamba 1, e rivela il verificatore grezzo nella gamba 2. Se un attaccante intercetta l'autorizzazione <code class="ic">code</code> (ad esempio un'app dannosa che cattura un reindirizzamento mobile), è inutile senza il verificatore, che non ha mai lasciato il client legittimo. PKCE è il motivo per cui <strong>Il flusso implicito è ora scoraggiato</strong>: Codice di autorizzazione + PKCE offre al browser/alle app mobili la stessa sicurezza di un client lato server riservato.</p>
+
+    <figure>
+      <div class="fig-wrap">
+        <svg viewBox="0 0 760 170" role="img" aria-label="Flusso PKCE">
+          <rect x="20" y="60" width="180" height="55" rx="9" fill="rgba(255,255,255,.5)" stroke="#b8402e" stroke-width="1.3"/>
+          <text x="110" y="84" text-anchor="middle" class="svg-t" font-size="13" font-weight="700">Cliente pubblico</text>
+          <text x="110" y="101" text-anchor="middle" class="svg-t" font-size="10.5" fill="#8d8475">SPA/mobile</text>
+          <rect x="560" y="60" width="180" height="55" rx="9" fill="rgba(176,125,43,.08)" stroke="#b07d2b" stroke-width="1.3"/>
+          <text x="650" y="84" text-anchor="middle" class="svg-t" font-size="13" font-weight="700">Server di autenticazione</text>
+          <path d="M200 78 H558" stroke="#b8402e" stroke-width="1.6" marker-end="url(#p1)"/>
+          <text x="380" y="70" text-anchor="middle" class="svg-m" font-size="10" fill="#8f2f20">1 /autorizza + code_challenge = SHA256(verificatore)</text>
+          <path d="M558 96 H202" stroke="#b07d2b" stroke-width="1.6" marker-end="url(#p2)"/>
+          <text x="380" y="110" text-anchor="middle" class="svg-m" font-size="10" fill="#8a6210">2 codice di reindirizzamento (inutile da solo)</text>
+          <path d="M200 130 H558" stroke="#3f6f4e" stroke-width="1.6" marker-end="url(#p3)"/>
+          <text x="380" y="150" text-anchor="middle" class="svg-m" font-size="10" fill="#1f6b5e">3 /token: codice + code_verifier -&gt; token</text>
+          <defs>
+            <marker id="p1" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto"><path d="M0 0 L8 4 L0 8 Z" fill="#b8402e"/></marker>
+            <marker id="p2" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto"><path d="M0 0 L8 4 L0 8 Z" fill="#b07d2b"/></marker>
+            <marker id="p3" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto"><path d="M0 0 L8 4 L0 8 Z" fill="#3f6f4e"/></marker>
+          </defs>
+        </svg>
+      </div>
+      <figcaption>FIG 12, PKCE: il codice intercettato non può essere riscattato senza il verificatore, che non ha mai lasciato il client.</figcaption>
+    </figure>
+
+    <h4>Codice: valori PKCE + scambio di token</h4>
+    <div class="codepair">
+      <div class="code">
+        <div class="bar"><span class="lang go">Vai</span><span class="dots"><i></i><i></i><i></i></span></div>
+        <pre><code class="language-go">// Build the PKCE pair before redirecting the user.
+func newPKCE() (verifier, challenge string) {
+    b := make([]byte, 32)
+    rand.Read(b)
+    verifier = base64.RawURLEncoding.EncodeToString(b)
+    sum := sha256.Sum256([]byte(verifier))
+    challenge = base64.RawURLEncoding.EncodeToString(sum[:])
+    return
+}
+
+// Leg 2: exchange the code (send code_verifier, not the secret).
+func exchange(code, verifier string) (*TokenResp, error) {
+    form := url.Values{
+        "grant_type":    {"authorization_code"},
+        "code":          {code},
+        "redirect_uri":  {"https://notes.app/callback"},
+        "client_id":     {"note_app"},
+        "code_verifier": {verifier},
+    }
+    resp, err := http.PostForm("https://auth.example/token", form)
+    if err != nil { return nil, err }
+    defer resp.Body.Close()
+    var t TokenResp
+    json.NewDecoder(resp.Body).Decode(&amp;t)
+    return &amp;t, nil
+}</code></pre>
+      </div>
+      <div class="code">
+        <div class="bar"><span class="lang py">Pitone</span><span class="dots"><i></i><i></i><i></i></span></div>
+        <pre><code class="language-python">import base64, hashlib, secrets, requests
+
+# Build the PKCE pair before redirecting the user.
+def new_pkce():
+    verifier = base64.urlsafe_b64encode(secrets.token_bytes(32)).rstrip(b"=").decode()
+    digest = hashlib.sha256(verifier.encode()).digest()
+    challenge = base64.urlsafe_b64encode(digest).rstrip(b"=").decode()
+    return verifier, challenge
+
+# Leg 2: exchange the code (send code_verifier, not the secret).
+def exchange(code: str, verifier: str) -&gt; dict:
+    resp = requests.post("https://auth.example/token", data={
+        "grant_type":    "authorization_code",
+        "code":          code,
+        "redirect_uri":  "https://notes.app/callback",
+        "client_id":     "note_app",
+        "code_verifier": verifier,
+    })
+    resp.raise_for_status()
+    return resp.json()   # access_token, refresh_token, id_token, ...</code></pre>
+      </div>
+    </div>
+
+    <div class="note gold">
+      <span class="lbl">Il divario lasciato aperto da OAuth</span>
+      <p>OAuth è eccellente per <strong>autorizzazione</strong> (delegare <em>cosa</em> un cliente può farlo) ma così è stato <strong>no</strong> risolvere <strong>autenticazione</strong> (dimostrando <em>chi</em> l'utente è). Ricordiamo: autenticazione = identità (chi sei, il tuo nome, il tuo ID); autorizzazione = permessi (cosa puoi fare). OAuth ha risolto quest'ultimo tramite delega, ma non il primo. Questa lacuna è ciò che OpenID Connect colma.</p>
+    </div>
+  </section>
+
+  <!-- 14 -->
+  <section id="s14">
+    <h2><span class="badge">14</span> OpenID Connect (OIDC)</h2>
+    <div class="underh"></div>
+    <p>Intorno <strong>2014</strong>, <strong>OpenID Connect (OIDC)</strong> è stato costruito <em>sopra</em> I meccanismi di sicurezza di OAuth 2.0 per colmare il divario di autenticazione. La sua aggiunta principale è il <strong>Gettone identificativo</strong>: tipicamente a <strong>JWT</strong> (questo è esattamente il motivo per cui valeva la pena comprendere presto i JWT; riappaiono ovunque).</p>
+    <p>Il token ID contiene informazioni sull'identità: l'ID utente, quando ha effettuato l'accesso (the <code class="ic">iat</code> campo), il <strong>autorità emittente</strong> (quale piattaforma ha emesso il token) e spesso il nome e l'e-mail dell'utente, qualunque sia la necessità della parte affidente. Grazie a OIDC, praticamente ogni piattaforma ora offre <strong>&quot;Accedi con Google/Facebook/Discord.&quot;</strong> Quando lo fai, OIDC lavora dietro le quinte per prendere la tua identità (e-mail, immagine del profilo, nome) da Google e il client la memorizza o la utilizza semplicemente per autenticarti, senza creare un proprio sistema di autenticazione. OIDC ha aggiunto uno strato di <strong>identificazione</strong> oltre a OAuth 2.0.</p>
+
+    <h3>Il flusso OIDC</h3>
+    <p>Supponiamo che tu visiti un'app per prendere appunti e fai clic su &quot;Accedi con Google&quot;.</p>
+    <ol>
+      <li>Il <strong>cliente</strong> (nota app) ti reindirizza a <strong>server di autorizzazione</strong>.</li>
+      <li>Accedi <em>presso Google</em> server di autorizzazione (non quello del cliente) e concedere i permessi richiesti (lettura email/nome/immagine del profilo, ecc.).</li>
+      <li>Il server di autorizzazione restituisce un file <strong>codice di autorizzazione</strong> e un <strong>Gettone identificativo</strong> al cliente.</li>
+      <li>Il cliente <strong>scambia il codice di autorizzazione</strong> con il server delle risorse per un <strong>token di accesso</strong> (e un token ID se non ne ha già ottenuto uno).</li>
+      <li>Il <strong>Gettone identificativo</strong> (un JWT) porta l'identità dell'utente (ID, nome, valori); il <strong>token di accesso</strong> consente all'app per le note di eseguire operazioni sul server di risorse <em>per tuo conto</em>, ad es. leggi tutte le tue note da Google Keep, ma solo gli ambiti che hai concesso.</li>
+    </ol>
+
+    <figure>
+      <div class="fig-wrap">
+        <svg viewBox="0 0 760 270" role="img" aria-label="Flusso di OpenID Connect">
+          <rect x="30" y="30" width="160" height="56" rx="10" fill="rgba(255,255,255,.5)" stroke="#b8402e" stroke-width="1.4"/>
+          <text x="110" y="54" text-anchor="middle" class="svg-t" font-size="13" font-weight="700">Cliente</text>
+          <text x="110" y="72" text-anchor="middle" class="svg-t" font-size="11" fill="#8d8475">nota app</text>
+
+          <rect x="300" y="30" width="170" height="56" rx="10" fill="rgba(176,125,43,.08)" stroke="#b07d2b" stroke-width="1.4"/>
+          <text x="385" y="54" text-anchor="middle" class="svg-t" font-size="13" font-weight="700">Server di autenticazione</text>
+          <text x="385" y="72" text-anchor="middle" class="svg-t" font-size="11" fill="#8d8475">Google</text>
+
+          <rect x="580" y="30" width="150" height="56" rx="10" fill="rgba(63,111,78,.08)" stroke="#3f6f4e" stroke-width="1.4"/>
+          <text x="655" y="54" text-anchor="middle" class="svg-t" font-size="13" font-weight="700">Risorsa</text>
+          <text x="655" y="72" text-anchor="middle" class="svg-t" font-size="11" fill="#8d8475">Google Keep</text>
+
+          <path d="M190 50 H298" stroke="#b8402e" stroke-width="1.7" marker-end="url(#f1)"/>
+          <text x="244" y="42" text-anchor="middle" class="svg-m" font-size="9.5" fill="#8f2f20">1 reindirizzamento</text>
+          <path d="M300 70 H192" stroke="#b07d2b" stroke-width="1.7" marker-end="url(#f2)"/>
+          <text x="246" y="100" text-anchor="middle" class="svg-m" font-size="9.5" fill="#8a6210">2 login+concessione -&gt; codice + token ID</text>
+          <path d="M110 140 V90" stroke="#b8402e" stroke-width="0" />
+          <path d="M190 160 H298 M298 160 H300" stroke="#b8402e" stroke-width="1.7" marker-end="url(#f3)"/>
+          <text x="244" y="152" text-anchor="middle" class="svg-m" font-size="9.5" fill="#8f2f20">3 codici di scambio</text>
+          <path d="M470 160 H470" />
+          <path d="M300 180 H192" stroke="#b07d2b" stroke-width="1.7" marker-end="url(#f4)"/>
+          <text x="246" y="200" text-anchor="middle" class="svg-m" font-size="9.5" fill="#8a6210">4 token di accesso + token ID (JWT)</text>
+          <path d="M190 235 C 350 235, 470 235, 578 180 L 600 168" stroke="#3f6f4e" stroke-width="1.7" fill="none" marker-end="url(#f5)"/>
+          <text x="380" y="252" text-anchor="middle" class="svg-m" font-size="9.5" fill="#1f6b5e">5 utilizza il token di accesso -&gt; leggi le note per tuo conto (ambito)</text>
+          <defs>
+            <marker id="f1" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto"><path d="M0 0 L8 4 L0 8 Z" fill="#b8402e"/></marker>
+            <marker id="f2" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto"><path d="M0 0 L8 4 L0 8 Z" fill="#b07d2b"/></marker>
+            <marker id="f3" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto"><path d="M0 0 L8 4 L0 8 Z" fill="#b8402e"/></marker>
+            <marker id="f4" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto"><path d="M0 0 L8 4 L0 8 Z" fill="#b07d2b"/></marker>
+            <marker id="f5" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto"><path d="M0 0 L8 4 L0 8 Z" fill="#3f6f4e"/></marker>
+          </defs>
+        </svg>
+      </div>
+      <figcaption>FIG 13, OIDC: un token ID risponde &quot;chi&quot; oltre al token di accesso OAuth che risponde &quot;cosa&quot;.</figcaption>
+    </figure>
+
+    <p>Insieme, OAuth 2.0 e OpenID Connect si comportano come <strong>guardie di sicurezza/creatori di chiavi dell’era digitale</strong>: garantiscono che nessuno, né un utente né una piattaforma, ottenga più accesso di quello di cui ha bisogno o di quello richiesto. Hanno trasformato Internet da <strong>caos nella condivisione delle password</strong> in un sistema sicuro e interconnesso, motivo per cui ora possiamo collegare una piattaforma a un'altra, condividere risorse e autorizzazioni in modo sicuro e offrire accessi con un solo clic.</p>
+  </section>
+
+  <!-- 15 -->
+  <section id="s15">
+    <h2><span class="badge">15</span> Scelta di un tipo di autenticazione</h2>
+    <div class="underh"></div>
+    <p>Regole pratiche per i quattro tipi principali che ogni ingegnere di backend dovrebbe conoscere:</p>
+    <div class="tbl">
+      <table>
+        <thead><tr><th>Digitare</th><th>Meccanismo</th><th>Usalo per</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Stateful</strong></td><td>ID sessione/JWT + archivio persistente</td><td>Flussi di autenticazione delle app Web, un'ampia quota di modelli SaaS, in cui i dati della sessione specifici dell'utente risiedono sul server</td></tr>
+          <tr><td><strong>senza stato</strong></td><td>Token firmato autonomo</td><td>API e sistemi scalabili e distribuiti in cui i token trasportano le informazioni dell'utente</td></tr>
+          <tr><td><strong>OAuth/OIDC</strong></td><td>Token delegati + token ID</td><td>Integrazioni di terze parti e &quot;accesso tramite Google/Facebook/Discord&quot;</td></tr>
+          <tr><td><strong>Chiave API</strong></td><td>Stringa segreta precondivisa</td><td>Accesso da server a server/da macchina a macchina o client con scopo singolo alle API</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>Nel lavoro quotidiano di backend per la creazione di API, molto spesso raggiungerai <strong>statale</strong> e <strong>senza stato</strong> aut.</p>
+  </section>
+
+  <!-- PART V -->
+  <div class="part">Parte V / Autorizzazione e rafforzamento</div>
+
+  <!-- 16 -->
+  <section id="s16">
+    <h2><span class="badge">16</span> Autorizzazione e RBAC</h2>
+    <div class="underh"></div>
+    <p>L'autorizzazione è meno vasta dell'autenticazione, ma l'idea di alto livello è importante. Una volta che un utente si è autenticato (ad esempio in una piattaforma per prendere appunti), può creare, eliminare e aggiornare le note. Supponiamo ora che la funzione di eliminazione non si cancelli in modo permanente, sposti le note in un cestino e dopo 30 giorni si spostino in un <em>zona morta</em> (andato per l'utente, ma non eliminato dal DB). Come creatore, vuoi un file separato <strong>interfaccia utente di amministrazione</strong> con funzionalità speciali che gli utenti comuni non hanno, come la gestione delle note delle zone morte.</p>
+    <div class="note">
+      <span class="lbl">Perché una &quot;stringa in modalità god&quot; fallisce</span>
+      <p>Una soluzione ingenua consiste nell'inviare una stringa casuale segreta con ogni chiamata API di amministrazione in modo che il server garantisca un accesso elevato. Due problemi: (1) se qualcuno <strong>intercetta</strong> quella stringa può cancellare il DB o rovinare i dati di altri utenti, un enorme rischio per la sicurezza; (2) per fornire lo stesso accesso ad amici/manutentori fidati dovresti condividere la stringa o inventare più stringhe e specializzarle sul lato server. Il sistema diventa rapidamente complesso, difficile da gestire e maggiormente soggetto a difetti.</p>
+    </div>
+    <p>Il bisogno generale, <strong>concedere autorizzazioni specifiche a utenti specifici</strong>: è esattamente ciò che l'autorizzazione risolve. Non tutti gli utenti hanno lo stesso accesso; alcuni ne hanno di più, altri di meno, altri ancora hanno capacità completamente diverse. In un'app multi-tenant, un amministratore dell'organizzazione potrebbe assegnare la lettura o la lettura/scrittura a membri diversi. Il modello più famoso è <strong>RBAC, controllo degli accessi basato sui ruoli</strong>.</p>
+
+    <h3>Come funziona l'RBAC</h3>
+    <p>Definire <strong>ruoli</strong> (utente, amministratore, moderatore o i tuoi ruoli personalizzati) e assegna a ciascun ruolo una serie di <strong>autorizzazioni</strong> finito <strong>risorse</strong>. Puoi procedere in modo granulare quanto preferisci.</p>
+
+    <figure>
+      <div class="fig-wrap">
+        <svg viewBox="0 0 760 200" role="img" aria-label="Matrice RBAC">
+          <text x="150" y="40" class="svg-m" font-size="11" fill="#8d8475" text-anchor="middle">RUOLO</text>
+          <text x="370" y="40" class="svg-m" font-size="11" fill="#8d8475" text-anchor="middle">note (leggi/scrivi/cancella)</text>
+          <text x="620" y="40" class="svg-m" font-size="11" fill="#8d8475" text-anchor="middle">note della zona morta</text>
+          <line x1="30" y1="50" x2="730" y2="50" stroke="#c7bca6"/>
+          <!-- user -->
+          <text x="150" y="85" text-anchor="middle" class="svg-t" font-size="15" font-weight="700" fill="#211e1a">utente</text>
+          <text x="370" y="85" text-anchor="middle" class="svg-t" font-size="13" fill="#3f6f4e">leggere/scrivere/eliminare</text>
+          <text x="620" y="85" text-anchor="middle" class="svg-t" font-size="13" fill="#b8402e">proibito</text>
+          <line x1="30" y1="100" x2="730" y2="100" stroke="#e4dac6"/>
+          <!-- moderator -->
+          <text x="150" y="135" text-anchor="middle" class="svg-t" font-size="15" font-weight="700" fill="#211e1a">moderatore</text>
+          <text x="370" y="135" text-anchor="middle" class="svg-t" font-size="13" fill="#3f6f4e">leggere/scrivere</text>
+          <text x="620" y="135" text-anchor="middle" class="svg-t" font-size="13" fill="#b8402e">proibito</text>
+          <line x1="30" y1="150" x2="730" y2="150" stroke="#e4dac6"/>
+          <!-- admin -->
+          <text x="150" y="185" text-anchor="middle" class="svg-t" font-size="15" font-weight="700" fill="#211e1a">amministratore</text>
+          <text x="370" y="185" text-anchor="middle" class="svg-t" font-size="13" fill="#3f6f4e">leggere/scrivere/eliminare</text>
+          <text x="620" y="185" text-anchor="middle" class="svg-t" font-size="13" fill="#3f6f4e">pieno accesso</text>
+        </svg>
+      </div>
+      <figcaption>FIG 14, RBAC: i ruoli vengono mappati sulle autorizzazioni per risorsa. La granularità dipende da te.</figcaption>
+    </figure>
+
+    <p>Il flusso di runtime: un utente si iscrive e il server assegna un ruolo (utente, amministratore, ...). Ad ogni richiesta successiva l'utente invia il proprio identificativo (un ID di sessione per stateful, o un JWT per stateless). All'inizio del ciclo di richiesta il server deduce il ruolo, dalle attestazioni del token o tramite una ricerca nel DB, e lo collega in modo che il middleware/la logica successiva possano decidere l'accesso. Se il ruolo è <code class="ic">admin</code>, l'endpoint della zona morta è consentito; se il ruolo lo è <code class="ic">user</code>, il server ritorna <strong>403 Proibito</strong>: significa che non disponi di autorizzazioni sufficienti per questa risorsa.</p>
+
+    <h4>Codice: middleware RBAC</h4>
+    <div class="codepair">
+      <div class="code">
+        <div class="bar"><span class="lang go">Vai</span><span class="dots"><i></i><i></i><i></i></span></div>
+        <pre><code class="language-go">// RequireRole runs AFTER an auth middleware that set "user".
+func RequireRole(roles ...string) func(http.HandlerFunc) http.HandlerFunc {
+    allowed := map[string]bool{}
+    for _, r := range roles {
+        allowed[r] = true
+    }
+    return func(next http.HandlerFunc) http.HandlerFunc {
+        return func(w http.ResponseWriter, r *http.Request) {
+            u, _ := r.Context().Value("user").(User)
+            if !allowed[u.Role] {
+                http.Error(w, "forbidden", http.StatusForbidden) // 403
+                return
+            }
+            next(w, r)
+        }
+    }
+}
+
+// usage: only admins reach the dead-zone handler
+// mux.Handle("/admin/deadzone",
+//     RequireJWT(RequireRole("admin")(deadZoneHandler)))</code></pre>
+      </div>
+      <div class="code">
+        <div class="bar"><span class="lang py">Pitone</span><span class="dots"><i></i><i></i><i></i></span></div>
+        <pre><code class="language-python"># require_role runs AFTER an auth decorator that set g.user
+def require_role(*roles):
+    allowed = set(roles)
+    def deco(view):
+        @wraps(view)
+        def wrapper(*args, **kwargs):
+            if g.user["role"] not in allowed:
+                return jsonify(error="forbidden"), 403   # 403
+            return view(*args, **kwargs)
+        return wrapper
+    return deco
+
+# usage: only admins reach the dead-zone handler
+@app.get("/admin/deadzone")
+@require_jwt
+@require_role("admin")
+def dead_zone():
+    return jsonify(notes=[...])</code></pre>
+      </div>
+    </div>
+
+    <h3>Approfondimento: gerarchia dei ruoli, ABAC e oltre</h3>
+
+    <h4>Dove i semplici ceppi RBAC: esplosione di ruoli</h4>
+    <p>RBAC è pulito finché i requisiti non diventano condizionali. Nel momento in cui hai bisogno di &quot;redattori, ma solo per i documenti del tuo dipartimento e solo durante l'orario lavorativo&quot;, non puoi esprimerlo solo con un nome di ruolo, quindi i team inventano <code class="ic">editor_dept_finance</code>, <code class="ic">editor_dept_legal</code>, e così via. Questo è <strong>esplosione di ruoli</strong>: il numero di palloncini dei ruoli perché i ruoli possono solo codificare <em>chi</em>, no <em>quale risorsa</em> o <em>a quali condizioni</em>.</p>
+
+    <h4>Gerarchia/ereditarietà dei ruoli</h4>
+    <p>Una prima valvola di sfogo è la creazione dei ruoli <strong>ereditare</strong>: <code class="ic">admin</code> include tutto <code class="ic">moderator</code> può fare, il che include tutto <code class="ic">user</code> può fare. Definisci le autorizzazioni una volta per il ruolo più basso e lasci che i ruoli più alti le accumulino, invece di elencarle nuovamente. Doma la duplicazione ma non aggiunge condizioni.</p>
+
+    <h4>ABAC: controllo degli accessi basato sugli attributi</h4>
+    <p>ABAC decide l'accesso valutando <strong>attributi</strong> contro a <strong>politica</strong>, attraverso quattro dimensioni: il <strong>soggetto</strong> (ruolo, dipartimento, nulla osta), il <strong>risorsa</strong> (proprietario, classificazione, dipartimento), il <strong>azione</strong> (leggi/scrivi/elimina) e il <strong>ambiente</strong> (ora, IP, dispositivo). Una singola politica, &quot;un utente può <em>modifica</em> un documento se lo possiedono <em>o</em> condividi il suo dipartimento e non viene archiviato&quot;, sostituisce dozzine di ruoli su misura. ABAC è molto più espressivo; il compromesso è che le politiche sono più difficili da controllare (&quot;chi può toccarlo?&quot; non è possibile rispondere analizzando un elenco di ruoli).</p>
+
+    <div class="tbl">
+      <table>
+        <thead><tr><th>Modello</th><th>Decide entro</th><th>Forza/debolezza</th></tr></thead>
+        <tbody>
+          <tr><td><strong>RBAC</strong></td><td>Il ruolo che ricopri</td><td>Esplosione semplice, verificabile/di ruolo in determinate condizioni</td></tr>
+          <tr><td><strong>ABAC</strong></td><td>Attributi + policy (oggetto/risorsa/azione/env)</td><td>Molto espressivo/difficile da controllare e su cui ragionare</td></tr>
+          <tr><td><strong>ReBAC</strong></td><td>Relazioni (proprietario, membro, genitore)</td><td>Ottimo per condividere grafici (in stile Google Drive) / necessita di un archivio di relazioni, ad es. Google Zanzibar</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>Molti sistemi reali sono ibridi: RBAC per ruoli grossolani, politiche ABAC per i bordi condizionali e ReBAC in cui l'accesso segue un grafo di condivisione.</p>
+
+    <h4>Codice: un piccolo valutatore di politiche ABAC</h4>
+    <div class="codepair">
+      <div class="code">
+        <div class="bar"><span class="lang go">Vai</span><span class="dots"><i></i><i></i><i></i></span></div>
+        <pre><code class="language-go">type Subject struct{ ID, Dept, Role string }
+type Resource struct{ OwnerID, Dept string; Archived bool }
+
+// Policy: can `s` perform `action` on `r`, given the environment?
+func CanEdit(s Subject, r Resource, hour int) bool {
+    if r.Archived {
+        return false
+    }
+    sameDept := s.Dept == r.Dept
+    owns := s.ID == r.OwnerID
+    businessHours := hour &gt;= 9 &amp;&amp; hour &lt; 18
+    // owner OR same-department editor, only in business hours
+    return (owns || (sameDept &amp;&amp; s.Role == "editor")) &amp;&amp; businessHours
+}
+
+// usage inside a handler, after auth has populated the subject:
+// if !CanEdit(subj, doc, time.Now().Hour()) {
+//     http.Error(w, "forbidden", http.StatusForbidden)
+// }</code></pre>
+      </div>
+      <div class="code">
+        <div class="bar"><span class="lang py">Pitone</span><span class="dots"><i></i><i></i><i></i></span></div>
+        <pre><code class="language-python">from dataclasses import dataclass
+from datetime import datetime
+
+@dataclass
+class Subject: id: str; dept: str; role: str
+@dataclass
+class Resource: owner_id: str; dept: str; archived: bool
+
+# Policy: can `s` perform the action on `r`, given the environment?
+def can_edit(s: Subject, r: Resource, hour: int) -&gt; bool:
+    if r.archived:
+        return False
+    owns = s.id == r.owner_id
+    same_dept = s.dept == r.dept
+    business_hours = 9 &lt;= hour &lt; 18
+    # owner OR same-department editor, only in business hours
+    return (owns or (same_dept and s.role == "editor")) and business_hours
+
+# usage inside a view, after auth populated the subject:
+# if not can_edit(subj, doc, datetime.now().hour):
+#     return jsonify(error="forbidden"), 403</code></pre>
+      </div>
+    </div>
+  </section>
+
+  <!-- 17 -->
+  <section id="s17">
+    <h2><span class="badge">17</span> Messaggi di errore e attacchi temporali</h2>
+    <div class="underh"></div>
+    <h3>Messaggi di errore generici</h3>
+    <p>Durante l'autenticazione sarai tentato di inviare messaggi utili: <em>&quot;utente non trovato&quot;, &quot;password errata&quot;, &quot;account bloccato a causa di troppi tentativi falliti.&quot;</em> Questi aiutano gli utenti legittimi, ma forniscono indizi agli aggressori. <em>&quot;Utente non trovato&quot;</em> dice a un utente malintenzionato che il nome utente non esiste, quindi passa a quello successivo. <em>&quot;Password errata&quot;</em> conferma il nome utente <em>è</em> validi, quindi concentrano gli attacchi di forza bruta/dizionario solo sulla password, espandendo la loro superficie di attacco.</p>
+    <div class="note">
+      <span class="lbl">Regola</span>
+      <p>Nel flusso di lavoro di autenticazione, <strong>inviare sempre un unico messaggio generico</strong>: e.g. <code class="ic">authentication failed</code>, per ogni caso di errore, quindi un utente malintenzionato non può dire quale passaggio ha fallito o pianificare le mosse successive. I messaggi intuitivi vanno bene altrove (convalida, altre API), ma non qui.</p>
+    </div>
+
+    <h3>Attacchi tempistici</h3>
+    <p>Anche con messaggi generici, il <em>tempo</em> una risposta può far trapelare informazioni. Un accesso tipico esegue tre passaggi in ordine:</p>
+
+    <figure>
+      <div class="fig-wrap">
+        <svg viewBox="0 0 760 210" role="img" aria-label="Passaggi di attacco cronometrici">
+          <rect x="30" y="80" width="190" height="60" rx="10" fill="rgba(184,64,46,.06)" stroke="#b8402e" stroke-width="1.4"/>
+          <text x="125" y="106" text-anchor="middle" class="svg-t" font-size="14" font-weight="700">1/trova utente</text>
+          <text x="125" y="126" text-anchor="middle" class="svg-t" font-size="11" fill="#8d8475">esiste la posta elettronica?</text>
+
+          <rect x="285" y="80" width="190" height="60" rx="10" fill="rgba(176,125,43,.07)" stroke="#b07d2b" stroke-width="1.4"/>
+          <text x="380" y="106" text-anchor="middle" class="svg-t" font-size="14" font-weight="700">2/assegno bloccato</text>
+          <text x="380" y="126" text-anchor="middle" class="svg-t" font-size="11" fill="#8d8475">troppi tentativi?</text>
+
+          <rect x="540" y="80" width="190" height="60" rx="10" fill="rgba(63,111,78,.07)" stroke="#3f6f4e" stroke-width="1.4"/>
+          <text x="635" y="106" text-anchor="middle" class="svg-t" font-size="14" font-weight="700">3 / confronta l'hash</text>
+          <text x="635" y="126" text-anchor="middle" class="svg-t" font-size="11" fill="#8d8475">lento apposta</text>
+
+          <path d="M220 110 H283" stroke="#8d8475" stroke-width="1.8" marker-end="url(#g1)"/>
+          <path d="M475 110 H538" stroke="#8d8475" stroke-width="1.8" marker-end="url(#g2)"/>
+          <text x="125" y="170" text-anchor="middle" class="svg-m" font-size="10.5" fill="#b8402e">fallire qui -&gt; risposta veloce</text>
+          <text x="635" y="170" text-anchor="middle" class="svg-m" font-size="10.5" fill="#1f6b5e">fallisci qui -&gt; più lento (hashing)</text>
+          <defs>
+            <marker id="g1" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M0 0 L9 4.5 L0 9 Z" fill="#8d8475"/></marker>
+            <marker id="g2" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M0 0 L9 4.5 L0 9 Z" fill="#8d8475"/></marker>
+          </defs>
+        </svg>
+      </div>
+      <figcaption>FIG 15, Se un nome utente non valido va in cortocircuito al passaggio 1, la risposta più rapida lo rivela.</figcaption>
+    </figure>
+
+    <p>Le password vengono archiviate come file <strong>hash</strong> (mai testo semplice): al momento della registrazione la password viene sottoposta a hashing in una stringa crittograficamente sicura; all'accesso il server esegue l'hashing della password fornita allo stesso modo e la confronta con l'hash memorizzato. Il problema: se il nome utente non è valido, il sistema termina alle <strong>passaggio 1</strong> e risposte <em>veloce</em>. Se il nome utente è valido ma la password è sbagliata, raggiunge <strong>passaggio 3</strong> ed è <em>più lento</em>, perché l'hashing richiede più tempo rispetto ai controlli precedenti. Da questo ritardo, diciamo 200 ms, un utente malintenzionato può dedurre se esiste un nome utente e in quale passaggio l'autenticazione non è riuscita, e elaborare una strategia di conseguenza.</p>
+    <div class="note teal">
+      <span class="lbl">Due difese</span>
+      <p><strong>1. Confronto in tempo costante.</strong> Utilizzare funzioni di confronto a tempo costante crittograficamente sicure per gli hash, il cui tempo di esecuzione non varia con la somiglianza dell'input. <strong>2. Equalizza/simula il ritardo.</strong> Anche quando il nome utente non esiste, non rispondere immediatamente, simula un ritardo (Nodo: <code class="ic">setTimeout</code>; Vai: <code class="ic">time.Sleep</code>) in modo che un utente malintenzionato non possa distinguere un errore del nome utente da un errore della password.</p>
+    </div>
+
+    <h4>Codice: messaggio generico + tempistica equalizzata</h4>
+    <div class="codepair">
+      <div class="code">
+        <div class="bar"><span class="lang go">Vai</span><span class="dots"><i></i><i></i><i></i></span></div>
+        <pre><code class="language-go">// dummyHash: a fixed, precomputed bcrypt hash, used to equalize timing.
+var dummyHash = "$2a$12$abcdefghijklmnopqrstuv0000000000000000000000000000000000"
+
+func Authenticate(w http.ResponseWriter, email, pw string) {
+    start := time.Now()
+    const floor = 250 * time.Millisecond // equalize every path
+
+    defer func() { // pad so all outcomes take ~the same time
+        if d := time.Since(start); d &lt; floor {
+            time.Sleep(floor - d)
+        }
+    }()
+
+    user, found := lookupByEmail(email)
+    if !found {
+        // still run a dummy hash so step-3 cost is paid anyway
+        bcrypt.CompareHashAndPassword([]byte(dummyHash), []byte(pw))
+        http.Error(w, "authentication failed", http.StatusUnauthorized)
+        return
+    }
+    // CompareHashAndPassword is constant-time internally
+    if bcrypt.CompareHashAndPassword([]byte(user.Hash), []byte(pw)) != nil {
+        http.Error(w, "authentication failed", http.StatusUnauthorized)
+        return
+    }
+    // success: issue session / JWT ...
+}</code></pre>
+      </div>
+      <div class="code">
+        <div class="bar"><span class="lang py">Pitone</span><span class="dots"><i></i><i></i><i></i></span></div>
+        <pre><code class="language-python">import time
+
+DUMMY_HASH = bcrypt.hashpw(b"x", bcrypt.gensalt())
+FLOOR = 0.25  # seconds, equalize every path
+
+def authenticate(email: str, pw: str):
+    start = time.perf_counter()
+    try:
+        user = lookup_by_email(email)
+        if user is None:
+            # run a dummy hash so timing matches the valid path
+            bcrypt.checkpw(pw.encode(), DUMMY_HASH)
+            return None, "authentication failed"
+        if not bcrypt.checkpw(pw.encode(), user["hash"]):  # constant-time
+            return None, "authentication failed"
+        return user, None  # success: issue session / JWT
+    finally:
+        # pad so all outcomes take ~the same wall-clock time
+        elapsed = time.perf_counter() - start
+        if elapsed &lt; FLOOR:
+            time.sleep(FLOOR - elapsed)</code></pre>
+      </div>
+    </div>
+  </section>
+
+  <!-- 18 -->
+  <section id="s18">
+    <h2><span class="badge">18</span> Cheat-sheet di debug</h2>
+    <div class="underh"></div>
+    <p>L'intero manuale, compresso in ciò che raggiungi sotto pressione.</p>
+    <div class="tbl">
+      <table>
+        <thead><tr><th>Concetto</th><th>Una riga</th></tr></thead>
+        <tbody>
+          <tr><td>Autenticazione</td><td>Chi sei?, assegna l'identità in un contesto.</td></tr>
+          <tr><td>Autorizzazione</td><td>Cosa puoi fare?, autorizzazioni in quel contesto.</td></tr>
+          <tr><td>Fattori</td><td>Qualcosa che conosci/hai/sei (combina per MFA).</td></tr>
+          <tr><td>Hashing</td><td>Unidirezionale, a lunghezza fissa, deterministico. Memorizza l'hash, mai la password.</td></tr>
+          <tr><td>Sessione</td><td>Memoria lato server; il cookie contiene solo l'ID di sessione.</td></tr>
+          <tr><td>JWT</td><td>intestazione.payload.firma; autonomo, senza stato, firmato con segreto.</td></tr>
+          <tr><td>Biscotto</td><td>Archiviazione del browser impostata sul server; inviato automaticamente per richiesta; usa HttpOnly + Secure + SameSite.</td></tr>
+          <tr><td>Stateful</td><td>Ricerca nel negozio per ogni richiesta; revoca facile; più difficile da scalare.</td></tr>
+          <tr><td>senza stato</td><td>Nessun negozio; scala alla grande; la revoca è il punto debole.</td></tr>
+          <tr><td>Chiave API</td><td>Segreto precondiviso per il machine-to-machine; conservare il suo hash.</td></tr>
+          <tr><td>OAuth 2.0</td><td>Autorizzazione delegata e con ambito tramite token al portatore.</td></tr>
+          <tr><td>OIDC</td><td>Aggiunge un token ID (JWT) sopra OAuth per l'autenticazione.</td></tr>
+          <tr><td>RBAC</td><td>Ruoli -&gt; autorizzazioni -&gt; risorse. 403 Vietato se corto.</td></tr>
+          <tr><td>Errore igienico</td><td>Un messaggio generico di &quot;autenticazione non riuscita&quot; per tutti gli errori.</td></tr>
+          <tr><td>Tempistica</td><td>Confronto a tempo costante + equalizzazione del tempo di risposta.</td></tr>
+          <tr><td>Suggerimento per la produzione</td><td>Lancia il tuo per imparare; utilizzare un provider di autenticazione per spedire.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+
+      <footer class="bfp-footer">Backend da First Principles / Capitolo 04 / Aut. Il codice è destinato a Go 1.22+ e Python 3.11+.</footer>
+</main>
+</div>
+<script>
+  // syntax highlighting
+  hljs.highlightAll();
+
+
+
+
+</script>
+<!-- CHAPTER NAVIGATION -->
+<nav class="chapter-nav" id="chapterNav">
+  <a href="../../3.Serialization-and-Deserialization-or-backend-engineers/html_notes/notes.html" class="nav-chapter-link"><span class="nav-arrow"><svg class="ico-arrow" width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="13.5" y1="8" x2="3.5" y2="8"/><polyline points="7.5,4 3.5,8 7.5,12"/></svg></span><span class="nav-label"><span class="nav-small">Capitolo 3</span>Serializzazione e deserializzazione</span></a>
+  <a href="../../index.html" class="nav-indicator"><span class="nav-dot"></span> Capitolo 4 <span class="nav-sep">/</span> 24</a>
+  <a href="../../5. Validations and transformations for backend engineers/html_notes/notes.html" class="nav-chapter-link nav-next"><span class="nav-label"><span class="nav-small">Capitolo 5</span>Convalide e trasformazioni</span><span class="nav-arrow"><svg class="ico-arrow" width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="2.5" y1="8" x2="12.5" y2="8"/><polyline points="8.5,4 12.5,8 8.5,12"/></svg></span></a>
+</nav>
+  <script src="../../assets/copy-button.js"></script>
+  <script src="../../assets/enhancements.js"></script>
+<script src="../../assets/shell.js"></script>
+</body>
+
+</html>

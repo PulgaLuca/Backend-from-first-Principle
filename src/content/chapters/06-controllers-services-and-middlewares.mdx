@@ -1,0 +1,1198 @@
+---
+order: 6
+title: "Gestori, servizi e repository."
+navTitle: "Controller, servizi e middleware"
+summary: "Una panoramica dei principi primi su come una singola richiesta HTTP viaggia all'interno del tuo server, attraverso il routing, i tre livelli dell'architettura, la catena del middleware e il contesto della richiesta che lega il tutto. Implementazioni complete in Go, Python, JavaScript, TypeScript e Java mostrate fianco a fianco."
+readingTime: "2-3 ore"
+keywords:
+  - "controllers"
+  - "services"
+  - "repositories"
+  - "middleware"
+  - "request"
+  - "context"
+  - "layers"
+---
+## 01Cliente e server
+
+Tutto inizia con due partecipanti che parlano tramite **HTTP**: un **client** (un browser, un'app mobile, un altro servizio) e un **server**. Il client invia una richiesta; il server alla fine invia una risposta.
+
+Abbiamo già studiato il ciclo di vita _esterno_ al server, come la richiesta viene impacchettata, inviata attraverso la rete e come ritorna la risposta. Ciò che _non_ abbiamo ancora tracciato è ciò che accade _all'interno_ del server: la lunga sequenza di eventi tra l'istante in cui arriva una richiesta e l'istante in cui parte una risposta. Tale sequenza interna è l'oggetto del presente manuale.
+
+<Diagram>
+<svg viewBox="0 0 760 200" role="img" aria-label="Client e server che comunicano tramite HTTP"><rect x="40" y="60" width="170" height="80" rx="10" fill="none" stroke="var(--dg-ink)" stroke-width="2"></rect><text x="125" y="95" text-anchor="middle" class="sv-ttl" font-size="20" fill="var(--dg-ink)">Cliente</text><text x="125" y="118" text-anchor="middle" class="sv-sub" font-size="13" fill="var(--dg-ink-3)">browser/app</text><rect x="550" y="60" width="170" height="80" rx="10" fill="none" stroke="var(--dg-ink)" stroke-width="2"></rect><text x="635" y="95" text-anchor="middle" class="sv-ttl" font-size="20" fill="var(--dg-ink)">Server</text><text x="635" y="118" text-anchor="middle" class="sv-sub" font-size="13" fill="var(--dg-ink-3)">il tuo back-end</text><line x1="212" y1="82" x2="548" y2="82" stroke="var(--dg-accent)" stroke-width="2" marker-end="url(#ah)"></line><text x="380" y="74" text-anchor="middle" class="sv-mono" font-size="12" fill="var(--dg-accent-2)">Richiesta HTTP →</text><line x1="548" y1="120" x2="212" y2="120" stroke="var(--dg-ink)" stroke-width="2" marker-end="url(#ahd)"></line><text x="380" y="142" text-anchor="middle" class="sv-mono" font-size="12" fill="var(--dg-ink-2)">← Risposta HTTP</text><defs><marker id="ah" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 Z" fill="var(--dg-accent)"></path></marker><marker id="ahd" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 Z" fill="var(--dg-ink)"></path></marker></defs></svg>
+</Diagram>
+
+Le due estremità di ogni interazione. Questo manuale si ingrandisce nel **riquadro di destra**.
+
+## 02Il ciclo di vita della richiesta all'interno del server
+
+Dal momento in cui una richiesta raggiunge il server fino al momento in cui viene restituita una risposta, accadono molte cose. Lo chiamiamo **ciclo di vita della richiesta**. Per comprendere l'architettura, è utile tracciare la richiesta dall'_alto verso il basso_, seguendola nell'ordine esatto in cui viene elaborata: arrivo, instradamento, gestore, servizio, repository e infine la risposta in uscita.
+
+Questo ordinamento dall'alto verso il basso è intenzionale. Ogni argomento si basa sull'ultimo, rispecchiando il percorso che i dati seguono fisicamente attraverso il codice.
+
+<Diagram>
+<svg viewBox="0 0 760 300" role="img" aria-label="Richiedi il ciclo di vita all'interno del server"><text x="380" y="26" text-anchor="middle" class="sv-lbl" fill="var(--dg-ink)">Il viaggio di una richiesta</text><g font-family="var(--font-prose)" font-weight="700" font-size="15"><rect x="250" y="44" width="260" height="36" rx="7" fill="var(--dg-ink)"></rect><text x="380" y="68" text-anchor="middle" fill="var(--dg-on-accent)">Punto di ingresso</text><rect x="250" y="92" width="260" height="36" rx="7" fill="none" stroke="var(--dg-line-2)" stroke-width="1.5"></rect><text x="380" y="116" text-anchor="middle" fill="var(--dg-ink)">Instradamento</text><rect x="250" y="140" width="260" height="36" rx="7" fill="var(--dg-accent-tint)" stroke="var(--dg-accent)" stroke-width="1.5"></rect><text x="380" y="164" text-anchor="middle" fill="var(--dg-accent-2)">Gestore/Controllore</text><rect x="250" y="188" width="260" height="36" rx="7" fill="none" stroke="var(--dg-line-2)" stroke-width="1.5"></rect><text x="380" y="212" text-anchor="middle" fill="var(--dg-ink)">Servizio</text><rect x="250" y="236" width="260" height="36" rx="7" fill="none" stroke="var(--dg-line-2)" stroke-width="1.5"></rect><text x="380" y="260" text-anchor="middle" fill="var(--dg-ink)">Archivio → Banca dati</text></g><g stroke="var(--dg-ink-3)" stroke-width="1.5" marker-end="url(#dn)"><line x1="380" y1="80" x2="380" y2="90"></line><line x1="380" y1="128" x2="380" y2="138"></line><line x1="380" y1="176" x2="380" y2="186"></line><line x1="380" y1="224" x2="380" y2="234"></line></g><text x="540" y="64" class="sv-mono" font-size="11" fill="var(--dg-ink-3)">Sistema operativo in avanti: 3000</text><text x="540" y="112" class="sv-mono" font-size="11" fill="var(--dg-ink-3)">/users/:id → fn</text><defs><marker id="dn" markerWidth="10" markerHeight="10" refX="3" refY="8" orient="auto"><path d="M0,0 L6,0 L3,8 Z" fill="var(--dg-ink-3)"></path></marker></defs></svg>
+</Diagram>
+
+Le cinque fermate interne. La risposta poi risale lo stesso percorso.
+
+## 03Punto di ingresso e percorso
+
+Quando arriva una richiesta, il sistema operativo inoltra la richiesta HTTP a qualunque **porta** su cui è in ascolto il tuo server, `:3000`, `:4000`o qualsiasi porta configurata. Il punto in cui il tuo server riceve per primo quella richiesta è il suo **punto di ingresso**. Il tuo server è sempre in _ascolto_ su quella porta e quell'ascolto è il modo in cui raccoglie le richieste in arrivo.
+
+### Instradamento
+
+Immediatamente dopo il punto di ingresso arriva il **routing**. Un server espone molti percorsi, `/users`, `/users/123`, percorsi dinamici come `/users/:id`, e così via. L'**algoritmo di routing** ispeziona il metodo e il percorso della richiesta in entrata e **lo mappa su un particolare gestore**: una funzione predefinita responsabile di quel percorso.
+
+<Callout type="info" title="Definizione/Gestore">
+Un **gestore** (chiamato anche **controller**) è qualsiasi funzione predefinita per gestire le richieste per un determinato percorso. L'intero compito del routing è decidere _quale_ gestore viene eseguito per _quale_ richiesta in arrivo.
+</Callout>
+
+## 04Perché tre strati?
+
+Una volta che il routing sceglie un gestore, incontriamo la struttura in tre parti al centro di un backend ben organizzato: **gestori (controller)**, **servizi** e **repository**. Una domanda naturale: perché dividere le cose in tre componenti invece di concentrare tutta la logica in un unico gestore?
+
+La risposta onesta: non esiste **nessun requisito difficile** per separarli. Puoi _fare_ tutto in un unico gestore. La separazione è un **design pattern**: una scelta che ti offre vantaggi reali:
+
+- La tua codebase diventa **scalabile** man mano che cresce.
+- È più **manutenibile** nel tempo.
+- È **più semplice aggiungere funzionalità** senza interrompere parti non correlate.
+- È **più facile eseguire il debug** perché ogni livello ha una responsabilità chiara.
+
+Questo è il principio della **separazione degli interessi**. Il resto della Parte II percorre ogni livello nell'ordine in cui la richiesta li soddisfa.
+
+<Diagram>
+<svg viewBox="0 0 760 240" role="img" aria-label="I tre livelli e le loro responsabilità"><g><rect x="40" y="50" width="210" height="150" rx="10" fill="var(--dg-accent-tint)" stroke="var(--dg-accent)" stroke-width="1.6"></rect><text x="145" y="78" text-anchor="middle" class="sv-ttl" font-size="17" fill="var(--dg-accent-2)">Gestore</text><text x="145" y="96" text-anchor="middle" class="sv-sub" font-size="12" fill="var(--dg-ink-3)">controllore</text><text x="145" y="128" text-anchor="middle" class="sv-mono" font-size="11" fill="var(--dg-ink-2)">dati in entrata/uscita</text><text x="145" y="148" text-anchor="middle" class="sv-mono" font-size="11" fill="var(--dg-ink-2)">convalidare</text><text x="145" y="168" text-anchor="middle" class="sv-mono" font-size="11" fill="var(--dg-ink-2)">codici di stato</text></g><g><rect x="275" y="50" width="210" height="150" rx="10" fill="none" stroke="var(--dg-ink)" stroke-width="1.6"></rect><text x="380" y="78" text-anchor="middle" class="sv-ttl" font-size="17" fill="var(--dg-ink)">Servizio</text><text x="380" y="96" text-anchor="middle" class="sv-sub" font-size="12" fill="var(--dg-ink-3)">logica applicativa</text><text x="380" y="128" text-anchor="middle" class="sv-mono" font-size="11" fill="var(--dg-ink-2)">elaborazione</text><text x="380" y="148" text-anchor="middle" class="sv-mono" font-size="11" fill="var(--dg-ink-2)">orchestrare</text><text x="380" y="168" text-anchor="middle" class="sv-mono" font-size="11" fill="var(--dg-ink-2)">niente HTTP</text></g><g><rect x="510" y="50" width="210" height="150" rx="10" fill="none" stroke="var(--dg-ink)" stroke-width="1.6"></rect><text x="615" y="78" text-anchor="middle" class="sv-ttl" font-size="17" fill="var(--dg-ink)">Deposito</text><text x="615" y="96" text-anchor="middle" class="sv-sub" font-size="12" fill="var(--dg-ink-3)">banca dati</text><text x="615" y="128" text-anchor="middle" class="sv-mono" font-size="11" fill="var(--dg-ink-2)">creare una query</text><text x="615" y="148" text-anchor="middle" class="sv-mono" font-size="11" fill="var(--dg-ink-2)">leggere/scrivere</text><text x="615" y="168" text-anchor="middle" class="sv-mono" font-size="11" fill="var(--dg-ink-2)">un lavoro ciascuno</text></g><line x1="252" y1="125" x2="273" y2="125" stroke="var(--dg-accent)" stroke-width="2" marker-end="url(#a3)"></line><line x1="487" y1="125" x2="508" y2="125" stroke="var(--dg-ink)" stroke-width="2" marker-end="url(#a3b)"></line><defs><marker id="a3" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="var(--dg-accent)"></path></marker><marker id="a3b" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="var(--dg-ink)"></path></marker></defs></svg>
+</Diagram>
+
+Una responsabilità per livello. La richiesta scorre da sinistra a destra, il risultato ritorna da destra a sinistra.
+
+## 05Il livello Controller/Gestore
+
+Il gestore è il punto di ingresso di un percorso una volta che il routing lo ha abbinato. Il suo compito generale è **controllare il flusso di dati**: dal client al server e dal server di nuovo al client. Fondamentalmente, in quasi tutti i framework e linguaggi, al tuo gestore vengono _date_ due cose dal runtime stesso.
+
+Fornito dall'oggetto runtimeThe request
+
+Trasporta tutto ciò che il client ha inviato: metodo, percorso, intestazioni, parametri di query, corpo. **Non** lo crei, Go, Express, Flask, ecc. te lo consegnano ad ogni richiesta.
+
+Fornito dall'oggetto risposta runtimeThe
+
+L'handle attraverso il quale imposti i codici di stato, modifichi le intestazioni di risposta e invii il corpo. Anche fornito automaticamente, lo ricevi, non lo costruisci.
+
+Con questi due oggetti in mano, il gestore esegue un flusso di lavoro preciso e ordinato.
+
+1. Estrazione dati
+
+   Estrarre i dati rilevanti dall'oggetto della richiesta. _Ciò_ che estrai dipende dal metodo: **GET** → parametri di query; **POST / PUT / PATCH** → il corpo della richiesta; **DELETE** → solitamente niente, a volte un corpo.
+
+2. Associazione (Deserializzazione)
+
+   Il corpo è arrivato come stringa **JSON** perché JSON è un formato serializzabile che viaggia bene oltre il confine front-end/back-end. Il gestore lo **deserializza** nel tipo nativo del linguaggio, una struttura Go, un dict/classe Python, una struttura Rust. I framework lo chiamano **vincolante**. Se fallisce, fermati immediatamente e restituisci 400 Bad Request.
+
+3. Validazione
+
+   Conferma che i dati corrispondano alla forma prevista: campi obbligatori presenti, tipi corretti, nessun payload dannoso. Convalida _tutto_ da un client esterno, parametri di percorso, parametri di query e corpo e sii il più specifico possibile.
+
+4. Trasformazione
+
+   Facoltativamente, rimodellare i dati convalidati per comodità dei livelli downstream, ad esempio inserendo valori predefiniti.
+
+5. Delegazione
+
+   Passa i dati puliti, convalidati e trasformati (più il contesto come l'ID utente autenticato) **fino al livello di servizio**.
+
+6. Invio della risposta
+
+   Quando il servizio ritorna, scegli il codice di stato corretto e invia la risposta finale al cliente.
+
+### Una nota su Node.js vs Go e Python
+
+In un'app Node.js/Express la fase di deserializzazione avviene spesso _upstream_ in un middleware (il `json()` body parser), quindi JSON è già un oggetto JavaScript nel momento in cui viene eseguito il gestore. Spring va ancora oltre e lega il corpo in un record prima ancora che il tuo metodo venga chiamato. In **Go** e **Python** in genere si deserializza _esplicitamente_ all'interno del gestore, in una struttura, un dizionario o una classe. Il passo non scompare mai, si muove soltanto: più corre controcorrente, meno ne scrivi tu stesso.
+
+#### Passaggio 1: 2 / Estrarre e legare il corpo; 400 in caso di fallimento
+
+```go title="create_book / handler Go Python JavaScript TypeScript Java"
+// CreateBookRequest is our native format, the bind target.
+type CreateBookRequest struct {
+    Title  string `json:"title"`
+    Author string `json:"author"`
+}
+
+func CreateBookHandler(w http.ResponseWriter, r *http.Request) {
+    var req CreateBookRequest
+
+    // Step 1 + 2: extract the body and deserialize (bind) into the struct.
+    if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+        // Deserialization failed -> the payload is malformed.
+        http.Error(w, "invalid request body", http.StatusBadRequest) // 400
+        return // terminate the request here; do not proceed.
+    }
+    // ... validation, transformation, delegation follow ...
+}
+```
+
+```python
+from dataclasses import dataclass
+from flask import request, jsonify
+
+@dataclass
+class CreateBookRequest:
+    title: str
+    author: str
+
+def create_book_handler():
+    # Step 1 + 2: extract body and deserialize into a native dict/class.
+    payload = request.get_json(silent=True)
+    if payload is None:
+        # Deserialization failed -> malformed payload.
+        return jsonify({"error": "invalid request body"}), 400
+    req = CreateBookRequest(**payload)
+    # ... validation, transformation, delegation follow ...
+```
+
+```js
+// Express's json() body parser has already deserialized the body upstream,
+// so req.body is a JavaScript object by the time the handler runs. That
+// makes step 1 free and turns step 2 into "check the shape you expected".
+app.post('/books', (req, res) => {
+  // Step 1 + 2: extract the body and bind the fields we accept.
+  const { title, author } = req.body ?? {}
+
+  // express.json() leaves req.body empty when the payload is malformed.
+  if (typeof title !== 'string' || typeof author !== 'string') {
+    // Binding failed -> the payload is malformed.
+    return res.status(400).json({ error: 'invalid request body' }) // 400
+  }
+
+  const createBookRequest = { title, author }
+  // ... validation, transformation, delegation follow ...
+})
+```
+
+```ts
+import type { Request, Response } from 'express'
+
+// CreateBookRequest is our native format, the bind target.
+interface CreateBookRequest {
+  title: string
+  author: string
+}
+
+// A parsed body is `unknown` until something proves its shape. A type
+// guard is that proof, and it is what lets the rest of the handler treat
+// `req.body` as a CreateBookRequest without a cast.
+function isCreateBookRequest(value: unknown): value is CreateBookRequest {
+  const body = value as Partial<CreateBookRequest> | null
+  return typeof body?.title === 'string' && typeof body?.author === 'string'
+}
+
+export function createBookHandler(req: Request, res: Response): void {
+  // Step 1 + 2: extract the body and deserialize (bind) into the type.
+  if (!isCreateBookRequest(req.body)) {
+    // Deserialization failed -> the payload is malformed.
+    res.status(400).json({ error: 'invalid request body' }) // 400
+    return // terminate the request here; do not proceed.
+  }
+
+  const body: CreateBookRequest = req.body
+  // ... validation, transformation, delegation follow ...
+}
+```
+
+```java
+// CreateBookRequest is our native format, the bind target.
+public record CreateBookRequest(String title, String author) {}
+
+@RestController
+class BookController {
+
+    // Step 1 + 2 happen BEFORE this method runs: @RequestBody tells Spring
+    // to read the body and let Jackson deserialize it into the record.
+    @PostMapping("/books")
+    ResponseEntity<?> createBook(@RequestBody CreateBookRequest req) {
+        // ... validation, transformation, delegation follow ...
+        return ResponseEntity.status(HttpStatus.CREATED).build(); // 201
+    }
+
+    // A body Jackson cannot read never reaches the handler, it arrives
+    // here instead. Same outcome as the explicit `if` above: 400.
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    ResponseEntity<?> onUnreadableBody() {
+        return ResponseEntity.badRequest()
+            .body(Map.of("error", "invalid request body")); // 400
+    }
+}
+```
+
+#### Passaggio 3: 4 / Convalida, quindi trasforma (inserisci un valore predefinito per un parametro di query facoltativo)
+
+Una buona regola di progettazione API: rendere i parametri di query **facoltativi** ove possibile. Considera `GET /books?sort=name|date`. Se il client non invia nulla, la convalida deve comunque passare, quindi il passaggio di trasformazione inserisce un valore predefinito sensato.
+
+```go title="list_books / validate + transform Go Python JavaScript TypeScript Java"
+func ListBooksHandler(w http.ResponseWriter, r *http.Request) {
+    sort := r.URL.Query().Get("sort") // "" if absent
+
+    // VALIDATION: if present, it must be one of the allowed values.
+    if sort != "" && sort != "name" && sort != "date" {
+        http.Error(w, "sort must be 'name' or 'date'", http.StatusBadRequest)
+        return
+    }
+
+    // TRANSFORMATION: query params are optional -> inject a default.
+    if sort == "" {
+        sort = "date" // downstream layers never see an empty value
+    }
+
+    books, err := bookService.ListBooks(r.Context(), sort) // delegate
+    if err != nil {
+        http.Error(w, "could not fetch books", http.StatusInternalServerError) // 500
+        return
+    }
+    w.Header().Set("Content-Type", "application/json")
+    json.NewEncoder(w).Encode(books) // 200 with the array of books
+}
+```
+
+```python
+def list_books_handler():
+    sort = request.args.get("sort")  # None if absent
+
+    # VALIDATION: if present, must be an allowed value.
+    if sort is not None and sort not in ("name", "date"):
+        return jsonify({"error": "sort must be 'name' or 'date'"}), 400
+
+    # TRANSFORMATION: optional param -> inject a default.
+    if sort is None:
+        sort = "date"
+
+    try:
+        books = book_service.list_books(sort)  # delegate
+    except Exception:
+        return jsonify({"error": "could not fetch books"}), 500
+
+    return jsonify(books), 200  # array of books
+```
+
+```js
+app.get('/books', async (req, res) => {
+  const sort = req.query.sort // undefined if absent
+
+  // VALIDATION: if present, it must be one of the allowed values.
+  if (sort !== undefined && sort !== 'name' && sort !== 'date') {
+    return res.status(400).json({ error: "sort must be 'name' or 'date'" })
+  }
+
+  // TRANSFORMATION: query params are optional -> inject a default.
+  const sortBy = sort ?? 'date' // downstream layers never see undefined
+
+  try {
+    const books = await bookService.listBooks(sortBy) // delegate
+    res.status(200).json(books) // 200 with the array of books
+  } catch {
+    res.status(500).json({ error: 'could not fetch books' }) // 500
+  }
+})
+```
+
+```ts
+import type { Request, Response } from 'express'
+
+const SORTS = ['name', 'date'] as const
+type Sort = (typeof SORTS)[number]
+
+export async function listBooksHandler(req: Request, res: Response): Promise<void> {
+  const sort = req.query.sort // string | string[] | undefined | ...
+
+  // VALIDATION: if present, it must be one of the allowed values.
+  if (sort !== undefined && !SORTS.includes(sort as Sort)) {
+    res.status(400).json({ error: "sort must be 'name' or 'date'" })
+    return
+  }
+
+  // TRANSFORMATION: optional param -> inject a default. Note what the
+  // narrowed type buys you: the service takes a `Sort`, so a typo in a
+  // future edit stops compiling instead of reaching the database.
+  const sortBy: Sort = (sort as Sort | undefined) ?? 'date'
+
+  try {
+    const books = await bookService.listBooks(sortBy) // delegate
+    res.status(200).json(books) // 200 with the array of books
+  } catch {
+    res.status(500).json({ error: 'could not fetch books' }) // 500
+  }
+}
+```
+
+```java
+@GetMapping("/books")
+ResponseEntity<?> listBooks(@RequestParam(required = false) String sort) {
+    // VALIDATION: if present, it must be one of the allowed values.
+    if (sort != null && !sort.equals("name") && !sort.equals("date")) {
+        return ResponseEntity.badRequest()
+            .body(Map.of("error", "sort must be 'name' or 'date'")); // 400
+    }
+
+    // TRANSFORMATION: query params are optional -> inject a default.
+    // (@RequestParam(defaultValue = "date") would do exactly this for you;
+    // it is spelled out here so the step stays visible.)
+    String sortBy = (sort == null) ? "date" : sort;
+
+    try {
+        List<Book> books = bookService.listBooks(sortBy); // delegate
+        return ResponseEntity.ok(books); // 200 with the array of books
+    } catch (DataAccessException e) {
+        return ResponseEntity.internalServerError()
+            .body(Map.of("error", "could not fetch books")); // 500
+    }
+}
+```
+
+## 06Il livello di servizio
+
+Il livello di servizio è il luogo in cui avviene l'**elaborazione effettiva**: la logica applicativa. La regola più importante lo governa:
+
+<Callout type="info" title="La regola d'oro dei servizi">
+Il livello di servizio non dovrebbe sapere **assolutamente nulla di HTTP**. Nessun oggetto di richiesta/risposta, nessun codice di stato, nessun problema di convalida. Se dai un'occhiata a un metodo di servizio, _non_ dovresti essere in grado di dire che è utilizzato in un'API. È solo una funzione: ingresso dati, elaborazione, uscita dati.
+</Callout>
+
+Questo isolamento è ciò che mantiene il sistema disaccoppiato. Il servizio decide _cosa fare_; il gestore decide _come segnalarlo su HTTP_. È qui che tracciamo la linea di responsabilità.
+
+#### Orchestrazione
+
+Un unico metodo di servizio può fare molto. Può chiamare **uno o più metodi di repository** e unire i relativi risultati, effettuare chiamate API esterne, inviare e-mail, attivare notifiche e tutto ciò che l'operazione aziendale richiede. Questo ruolo di coordinamento è chiamato **orchestrazione**: il servizio unisce dati provenienti da più fonti e restituisce un unico risultato pulito al gestore. Un servizio che invia solo un'e-mail potrebbe non toccare mai il repository.
+
+```go title="book_service / pure business logic Go Python JavaScript TypeScript Java"
+// Notice: no http.Request, no ResponseWriter, no status codes.
+// You cannot tell from this signature that it serves an API.
+func (s *BookService) ListBooks(ctx context.Context, sort string) ([]Book, error) {
+    // Orchestration: call the repository for the data it needs.
+    books, err := s.repo.FindAllBooks(ctx, sort)
+    if err != nil {
+        return nil, err // bubble the error up; the handler decides the code
+    }
+    // Could also: enrich, merge other repo calls, send notifications...
+    return books, nil
+}
+
+// A service that needs no database at all is perfectly valid:
+func (s *BookService) NotifyOwner(email string) error {
+    return s.mailer.Send(email, "Your book was added")
+}
+```
+
+```python
+class BookService:
+    def __init__(self, repo, mailer):
+        self.repo = repo
+        self.mailer = mailer
+
+    # No request, no response, no status codes, just logic.
+    def list_books(self, sort: str) -> list:
+        # Orchestration: ask the repository for what it needs.
+        books = self.repo.find_all_books(sort)
+        # Could merge other repo calls, enrich, notify, etc.
+        return books
+
+    # A purely-logic service that never touches the DB:
+    def notify_owner(self, email: str) -> None:
+        self.mailer.send(email, "Your book was added")
+```
+
+```js
+// Notice: no req, no res, no status codes.
+// You cannot tell from these methods that they serve an API.
+class BookService {
+  constructor(repo, mailer) {
+    this.repo = repo
+    this.mailer = mailer
+  }
+
+  async listBooks(sort) {
+    // Orchestration: call the repository for the data it needs.
+    const books = await this.repo.findAllBooks(sort)
+    // Could also: enrich, merge other repo calls, send notifications...
+    return books
+  }
+
+  // A service that needs no database at all is perfectly valid:
+  async notifyOwner(email) {
+    await this.mailer.send(email, 'Your book was added')
+  }
+}
+```
+
+```ts
+// The types tell the same story the comments do: every name in this
+// signature is a domain word (Book, Sort, Mailer). Not one of them is
+// an HTTP word, which is exactly the isolation we are after.
+export class BookService {
+  constructor(
+    private readonly repo: BookRepo,
+    private readonly mailer: Mailer,
+  ) {}
+
+  async listBooks(sort: Sort): Promise<Book[]> {
+    // Orchestration: ask the repository for what it needs.
+    const books = await this.repo.findAllBooks(sort)
+    // Could merge other repo calls, enrich, notify, etc.
+    return books
+  }
+
+  // A purely-logic service that never touches the DB:
+  async notifyOwner(email: string): Promise<void> {
+    await this.mailer.send(email, 'Your book was added')
+  }
+}
+```
+
+```java
+// No HttpServletRequest, no ResponseEntity, no status codes. Nothing here
+// says "web", this class would work unchanged behind a CLI or a queue.
+@Service
+public class BookService {
+    private final BookRepo repo;
+    private final Mailer mailer;
+
+    BookService(BookRepo repo, Mailer mailer) {
+        this.repo = repo;
+        this.mailer = mailer;
+    }
+
+    public List<Book> listBooks(String sort) {
+        // Orchestration: call the repository for the data it needs.
+        List<Book> books = repo.findAllBooks(sort);
+        // Could also: enrich, merge other repo calls, send notifications...
+        return books;
+    }
+
+    // A service that needs no database at all is perfectly valid:
+    public void notifyOwner(String email) {
+        mailer.send(email, "Your book was added");
+    }
+}
+```
+
+## 07Il livello del repository
+
+Il livello repository (o _database_) ha un'unica preoccupazione: **parlare con il database**. Riceve i dati dal servizio, **costruisce la query del database**: per l'inserimento, il filtraggio o l'ordinamento, la esegue e restituisce il risultato grezzo al servizio.
+
+<Callout type="info" title="Responsabilità unica">
+Un metodo di repository dovrebbe fare **una cosa** e restituire **un tipo di dati**. _Non_ scrivere un singolo metodo che, a seconda di un parametro opzionale, restituisca un libro o tutti i libri. Scrivi invece due metodi distinti: `FindAllBooks()` e `FindBookByID(id)`.
+</Callout>
+
+```go title="book_repository / one job per method Go Python JavaScript TypeScript Java"
+// ONE method, ONE shape of result: all books, sorted.
+func (r *BookRepo) FindAllBooks(ctx context.Context, sort string) ([]Book, error) {
+    // Build the query from the data the service handed down.
+    query := fmt.Sprintf("SELECT id, title, author FROM books ORDER BY %s", sort)
+    rows, err := r.db.QueryContext(ctx, query)
+    if err != nil { return nil, err }
+    defer rows.Close()
+
+    var books []Book
+    for rows.Next() {
+        var b Book
+        rows.Scan(&b.ID, &b.Title, &b.Author)
+        books = append(books, b)
+    }
+    return books, nil
+}
+
+// A SEPARATE method for the single-book case. No optional toggles.
+func (r *BookRepo) FindBookByID(ctx context.Context, id int) (Book, error) {
+    var b Book
+    err := r.db.QueryRowContext(ctx,
+        "SELECT id, title, author FROM books WHERE id = $1", id).
+        Scan(&b.ID, &b.Title, &b.Author)
+    return b, err
+}
+```
+
+```python
+class BookRepo:
+    def __init__(self, db):
+        self.db = db
+
+    # ONE method, ONE result shape: all books, sorted.
+    def find_all_books(self, sort: str) -> list:
+        # Build the query from data passed down by the service.
+        query = f"SELECT id, title, author FROM books ORDER BY {sort}"
+        cur = self.db.execute(query)
+        return [dict(row) for row in cur.fetchall()]
+
+    # SEPARATE method for one book. No optional toggle parameter.
+    def find_book_by_id(self, book_id: int) -> dict:
+        cur = self.db.execute(
+            "SELECT id, title, author FROM books WHERE id = ?", (book_id,))
+        return dict(cur.fetchone())
+```
+
+```js
+class BookRepo {
+  constructor(db) {
+    this.db = db // a node-postgres Pool
+  }
+
+  // ONE method, ONE shape of result: all books, sorted.
+  async findAllBooks(sort) {
+    // A column name can never be a bound parameter, so it goes through a
+    // fixed lookup rather than into the string. Values always use $1, $2.
+    const column = { name: 'title', date: 'created_at' }[sort] ?? 'created_at'
+    const { rows } = await this.db.query(
+      `SELECT id, title, author FROM books ORDER BY ${column}`)
+    return rows
+  }
+
+  // SEPARATE method for one book. No optional toggle parameter.
+  async findBookById(id) {
+    const { rows } = await this.db.query(
+      'SELECT id, title, author FROM books WHERE id = $1', [id])
+    return rows[0] ?? null
+  }
+}
+```
+
+```ts
+import type { Pool } from 'pg'
+
+const SORT_COLUMNS: Record<Sort, string> = { name: 'title', date: 'created_at' }
+
+export class BookRepo {
+  constructor(private readonly db: Pool) {}
+
+  // ONE method, ONE shape of result: all books, sorted.
+  async findAllBooks(sort: Sort): Promise<Book[]> {
+    // Because `sort` is a `Sort` and not a `string`, the lookup is total:
+    // there is no value it could hold that produces a column we did not
+    // write ourselves. The type is the injection defence.
+    const { rows } = await this.db.query<Book>(
+      `SELECT id, title, author FROM books ORDER BY ${SORT_COLUMNS[sort]}`)
+    return rows
+  }
+
+  // SEPARATE method for one book. No optional toggle parameter.
+  // The return type says "may be missing" out loud, so the service has
+  // to decide what that means instead of tripping over undefined.
+  async findBookById(id: number): Promise<Book | null> {
+    const { rows } = await this.db.query<Book>(
+      'SELECT id, title, author FROM books WHERE id = $1', [id])
+    return rows[0] ?? null
+  }
+}
+```
+
+```java
+@Repository
+public class BookRepo {
+    // A column name can never be a bound parameter, so it goes through a
+    // fixed map rather than into the string. Values always use ?.
+    private static final Map<String, String> SORT_COLUMNS =
+        Map.of("name", "title", "date", "created_at");
+
+    private final JdbcClient db;
+
+    BookRepo(JdbcClient db) {
+        this.db = db;
+    }
+
+    // ONE method, ONE shape of result: all books, sorted.
+    public List<Book> findAllBooks(String sort) {
+        String column = SORT_COLUMNS.getOrDefault(sort, "created_at");
+        return db.sql("SELECT id, title, author FROM books ORDER BY " + column)
+                 .query(Book.class)
+                 .list();
+    }
+
+    // SEPARATE method for one book. No optional toggle parameter.
+    public Optional<Book> findBookById(long id) {
+        return db.sql("SELECT id, title, author FROM books WHERE id = ?")
+                 .param(id)
+                 .query(Book.class)
+                 .optional();
+    }
+}
+```
+
+## 08L'intero ciclo di vita, dall'inizio alla fine
+
+Mettendo insieme i livelli, ecco il percorso completo di andata e ritorno per una singola chiamata API, ad esempio `GET /books`:
+
+1. Vincolante
+
+   Il gestore estrae i dati dall'oggetto della richiesta e li deserializza nel formato nativo.
+
+2. Validazione e trasformazione
+
+   Il gestore convalida i dati e inserisce valori predefiniti/rimodella secondo necessità.
+
+3. Chiamata di servizio
+
+   L'handler delega al servizio, che esegue l'elaborazione vera e propria, chiamando il repository per qualsiasi lavoro sul database.
+
+4. Ritorna il risultato
+
+   Il repository restituisce le righe al servizio; il servizio restituisce un risultato pulito al gestore.
+
+5. Risposta
+
+   Il gestore sceglie il codice di stato e invia la risposta. 200 / 201 / 204 sul successo; 400 per errore cliente; 500 per errore del server.
+
+200 OK 201 Creato 204 Nessun contenuto 400 Richiesta errata 500 Errore interno del server
+
+<Diagram>
+<svg viewBox="0 0 760 250" role="img" aria-label="Flusso di dati completo attraverso i tre livelli e ritorno"><g font-family="var(--font-prose)" font-weight="700" font-size="14"><rect x="30" y="100" width="120" height="50" rx="9" fill="var(--dg-ink)"></rect><text x="90" y="130" text-anchor="middle" fill="var(--dg-on-accent)">Cliente</text><rect x="190" y="100" width="130" height="50" rx="9" fill="var(--dg-accent-tint)" stroke="var(--dg-accent)" stroke-width="1.5"></rect><text x="255" y="123" text-anchor="middle" fill="var(--dg-accent-2)" font-size="13">Gestore</text><text x="255" y="140" text-anchor="middle" class="sv-mono" font-size="9" fill="var(--dg-ink-3)">convalidare</text><rect x="360" y="100" width="130" height="50" rx="9" fill="none" stroke="var(--dg-ink)" stroke-width="1.5"></rect><text x="425" y="123" text-anchor="middle" fill="var(--dg-ink)" font-size="13">Servizio</text><text x="425" y="140" text-anchor="middle" class="sv-mono" font-size="9" fill="var(--dg-ink-3)">logica</text><rect x="530" y="100" width="130" height="50" rx="9" fill="none" stroke="var(--dg-ink)" stroke-width="1.5"></rect><text x="595" y="123" text-anchor="middle" fill="var(--dg-ink)" font-size="13">Deposito</text><text x="595" y="140" text-anchor="middle" class="sv-mono" font-size="9" fill="var(--dg-ink-3)">domanda</text><rect x="690" y="100" width="50" height="50" rx="9" fill="none" stroke="var(--dg-ink-3)" stroke-width="1.5" stroke-dasharray="3 3"></rect><text x="715" y="130" text-anchor="middle" fill="var(--dg-ink-3)" font-size="11">DB</text></g><g stroke="var(--dg-accent)" stroke-width="2" marker-end="url(#fwd)"><line x1="152" y1="115" x2="188" y2="115"></line><line x1="322" y1="115" x2="358" y2="115"></line><line x1="492" y1="115" x2="528" y2="115"></line><line x1="662" y1="115" x2="688" y2="115"></line></g><g stroke="var(--dg-ink)" stroke-width="2" marker-end="url(#bwd)"><line x1="688" y1="138" x2="662" y2="138"></line><line x1="528" y1="138" x2="492" y2="138"></line><line x1="358" y1="138" x2="322" y2="138"></line><line x1="188" y1="138" x2="152" y2="138"></line></g><text x="380" y="55" text-anchor="middle" class="sv-mono" font-size="11" fill="var(--dg-accent-2)">la richiesta scorre → lungo i livelli</text><text x="380" y="200" text-anchor="middle" class="sv-mono" font-size="11" fill="var(--dg-ink-2)">← risultato ritorna indietro → risposta</text><defs><marker id="fwd" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="var(--dg-accent)"></path></marker><marker id="bwd" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="var(--dg-ink)"></path></marker></defs></svg>
+</Diagram>
+
+I gestori spostano i **formati di dati** dentro e fuori / il servizio esegue l'**elaborazione** / il repository esegue il **lavoro del database**.
+
+## 09Che cos'è il middleware
+
+Ora riproduci il ciclo di vita, ma fai attenzione alle _lacune_. Tra il punto di ingresso e il routing, tra il routing e il gestore e tra il gestore e la risposta, ci sono dei **confini**: punti in cui possono essere eseguite funzioni extra. Le funzioni eseguite in questi spazi sono **middleware**. Il nome è letterale: vengono eseguiti _nel mezzo_ degli altri contesti di esecuzione.
+
+I middleware sono **facoltativi**. Potrebbero essercene molti, o nessuno; una richiesta può fluire direttamente dal routing al gestore. Li aggiungi solo quando un requisito ne richiede uno.
+
+Un middleware è essenzialmente un tipo speciale di gestore. Come un normale gestore, riceve l'**oggetto richiesta** e l'**oggetto risposta** dal runtime, quindi anch'esso può leggere valori dalla richiesta, modificare le intestazioni di risposta e persino inviare una risposta direttamente al client. Ma riceve anche una terza cosa, come spiega la Parte 10.
+
+<Diagram>
+<svg viewBox="0 0 760 150" role="img" aria-label="Catena del middleware tra punto di ingresso e risposta"><g font-family="var(--font-diagram-mono)" font-size="11"><rect x="20" y="55" width="60" height="42" rx="7" fill="var(--dg-ink)"></rect><text x="50" y="80" text-anchor="middle" fill="var(--dg-on-accent)" font-size="10">ingresso</text><rect x="100" y="55" width="74" height="42" rx="7" fill="none" stroke="var(--dg-accent)" stroke-width="1.4"></rect><text x="137" y="80" text-anchor="middle" fill="var(--dg-accent-2)" font-size="10">MW1</text><rect x="194" y="55" width="74" height="42" rx="7" fill="none" stroke="var(--dg-line-2)" stroke-width="1.4"></rect><text x="231" y="80" text-anchor="middle" fill="var(--dg-ink)" font-size="10">instradamento</text><rect x="288" y="55" width="74" height="42" rx="7" fill="none" stroke="var(--dg-accent)" stroke-width="1.4"></rect><text x="325" y="80" text-anchor="middle" fill="var(--dg-accent-2)" font-size="10">MW2</text><rect x="382" y="55" width="84" height="42" rx="7" fill="var(--dg-accent-tint)" stroke="var(--dg-accent)" stroke-width="1.4"></rect><text x="424" y="80" text-anchor="middle" fill="var(--dg-accent-2)" font-size="10">gestore</text><rect x="486" y="55" width="74" height="42" rx="7" fill="none" stroke="var(--dg-accent)" stroke-width="1.4"></rect><text x="523" y="80" text-anchor="middle" fill="var(--dg-accent-2)" font-size="10">MW3</text><rect x="600" y="55" width="74" height="42" rx="7" fill="var(--dg-ink)"></rect><text x="637" y="80" text-anchor="middle" fill="var(--dg-on-accent)" font-size="10">risposta</text></g><g stroke="var(--dg-ink-3)" stroke-width="1.6" marker-end="url(#mw)"><line x1="82" y1="76" x2="98" y2="76"></line><line x1="176" y1="76" x2="192" y2="76"></line><line x1="270" y1="76" x2="286" y2="76"></line><line x1="364" y1="76" x2="380" y2="76"></line><line x1="468" y1="76" x2="484" y2="76"></line><line x1="562" y1="76" x2="598" y2="76"></line></g><text x="347" y="120" text-anchor="middle" class="sv-mono" font-size="10" fill="var(--dg-ink-3)">ogni riquadro rosso è un middleware opzionale situato in un confine</text><defs><marker id="mw" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="var(--dg-ink-3)"></path></marker></defs></svg>
+</Diagram>
+
+I middleware occupano i **confini** tra i contesti di esecuzione.
+
+## 10La funzione next()
+
+La terza cosa che riceve un middleware è **`next`**, una funzione. Chiamando `next()` **passa l'esecuzione al contesto successivo**: che si tratti del middleware successivo, della fase di routing o del gestore finale. È il modo in cui la richiesta passa da un confine a quello successivo.
+
+<Callout type="info" title="Due modi in cui finisce un middleware">
+**(1)** Fai il suo lavoro, poi chiama `next()` per continuare la catena. **(2)** _Non_ chiamata `next()` e invece **invia una risposta immediatamente**: cortocircuitando la richiesta prima che raggiunga il gestore. Questa uscita anticipata è esattamente il motivo per cui un controllo di autenticazione fallito o un limite di velocità superato possono interrompere una richiesta in modo economico.
+</Callout>
+
+Poiché un middleware ha sia gli oggetti richiesta che risposta, può leggere e modificare la richiesta e può terminarla esattamente dove si trova restituendo una risposta. Questa è l'intera portata del potere di un middleware.
+
+```go title="middleware shape / req, res, next Go Python JavaScript TypeScript Java"
+// In Go, middleware wraps the "next" handler. Calling next.ServeHTTP
+// is the equivalent of next(): pass execution along the chain.
+func LoggingMiddleware(next http.Handler) http.Handler {
+    return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+        log.Printf("%s %s", r.Method, r.URL.Path) // do work
+
+        // EARLY EXIT example (short-circuit, never calls next):
+        if r.Header.Get("X-Blocked") == "yes" {
+            http.Error(w, "forbidden", http.StatusForbidden)
+            return // request stops here
+        }
+
+        next.ServeHTTP(w, r) // === next(): continue the chain ===
+    })
+}
+```
+
+```python
+# A WSGI/Flask-style middleware receives the request and a `next`
+# callable that invokes the rest of the chain.
+def logging_middleware(next):
+    def wrapper(request):
+        print(f"{request.method} {request.path}")  # do work
+
+        # EARLY EXIT example (short-circuit, never calls next):
+        if request.headers.get("X-Blocked") == "yes":
+            return Response("forbidden", status=403)  # stops here
+
+        return next(request)  # === next(): continue the chain ===
+    return wrapper
+```
+
+```js
+// Express middleware is the shape the whole idea is named after:
+// (req, res, next). Calling next() passes execution along the chain.
+function loggingMiddleware(req, res, next) {
+  console.log(`${req.method} ${req.path}`) // do work
+
+  // EARLY EXIT example (short-circuit, never calls next):
+  if (req.get('X-Blocked') === 'yes') {
+    return res.status(403).send('forbidden') // request stops here
+  }
+
+  next() // === next(): continue the chain ===
+}
+
+app.use(loggingMiddleware)
+```
+
+```ts
+import type { NextFunction, Request, Response } from 'express'
+
+// The three parameters, spelled out by their types: the request, the
+// response, and the `next` callable that invokes the rest of the chain.
+// The `void` return is the reminder that a middleware communicates by
+// calling next() or by writing a response, never by returning a value.
+function loggingMiddleware(req: Request, res: Response, next: NextFunction): void {
+  console.log(`${req.method} ${req.path}`) // do work
+
+  // EARLY EXIT example (short-circuit, never calls next):
+  if (req.get('X-Blocked') === 'yes') {
+    res.status(403).send('forbidden') // request stops here
+    return
+  }
+
+  next() // === next(): continue the chain ===
+}
+
+app.use(loggingMiddleware)
+```
+
+```java
+// A servlet Filter is Java's middleware. It receives the request, the
+// response, and a FilterChain, and chain.doFilter IS next(): pass
+// execution to the next filter, or on to the controller.
+@Component
+public class LoggingFilter extends OncePerRequestFilter {
+
+    @Override
+    protected void doFilterInternal(HttpServletRequest req,
+                                    HttpServletResponse res,
+                                    FilterChain chain)
+            throws ServletException, IOException {
+        log.info("{} {}", req.getMethod(), req.getRequestURI()); // do work
+
+        // EARLY EXIT example (short-circuit, never calls the chain):
+        if ("yes".equals(req.getHeader("X-Blocked"))) {
+            res.sendError(HttpServletResponse.SC_FORBIDDEN, "forbidden");
+            return; // request stops here
+        }
+
+        chain.doFilter(req, res); // === next(): continue the chain ===
+    }
+}
+```
+
+#### Perché il middleware?
+
+Lo stesso motivo per cui usiamo le funzioni: per evitare di ripetere le stesse righe ovunque. Un backend può servire migliaia o milioni di richieste ed esporre centinaia di endpoint. Le operazioni comuni, sicurezza, registrazione, autenticazione, analisi, compressione, devono essere eseguite per _ogni_ richiesta. Senza middleware duplicheresti quel codice in ogni gestore. Anche l'estrazione di una funzione helper ti costringe comunque a _chiamarla_ in ogni gestore. Il middleware **centralizza** la logica comune e la applica automaticamente lungo tutta la catena.
+
+## 11Perché l'ordine è importante
+
+Ogni middleware utilizza `next()` per passare l'esecuzione a quello successivo, in modo che la richiesta li attraversi **in sequenza, nell'ordine in cui li registri**. Quell'ordine non è cosmetico, cambia il comportamento.
+
+L'esempio più evidente è la **gestione globale degli errori**, che in genere viene posizionata **per ultima**. Poiché la richiesta scorre in _una direzione_, un middleware può rilevare solo errori che hanno origine _a monte_ di esso. Se si posiziona il gestore degli errori nel mezzo, un errore generato successivamente nel gestore lo supererebbe e non verrebbe mai rilevato. Posizionalo per ultimo e potrà acquisire errori da qualsiasi punto precedente della catena.
+
+<Callout type="info" title="Un ordinamento predefinito sensato">
+**CORS** prima (rifiutare origini straniere il prima possibile) → **logging** → **autenticazione** → controlli specifici dell'applicazione → **gestore** → **gestione globale degli errori per ultima**. Dedica tempo reale alla decisione di questo ordine per la tua app.
+</Callout>
+
+## 12 Middleware comuni
+
+Ciascuno dei seguenti si qualifica come middleware per gli stessi due motivi: deve essere eseguito per _ogni_ richiesta e deve leggere la richiesta e/o modificare la risposta.
+
+SicurezzaCORS
+
+I browser applicano una politica della stessa origine: un'app Web su `example.com` può accedere solo alle risorse da `example.com` a meno che il server remoto non invii le intestazioni corrette. Il middleware CORS legge l'**origine** della richiesta (fornita automaticamente dal runtime); se corrisponde a un'origine front-end consentita, aggiunge le intestazioni di risposta appropriate in modo che il browser non blocchi la risposta, quindi chiama `next()`. In caso contrario, omette le intestazioni e il browser lo blocca per impostazione predefinita. Posizionato **presto**.
+
+Intestazioni SecuritySecurity
+
+Imposta le intestazioni come `Content-Security-Policy` su ogni risposta, quindi inoltra al middleware successivo.
+
+Autenticazione di sicurezza
+
+Estrae un token (JWT, ID sessione, ecc.) dalle intestazioni o dal payload e lo verifica. In caso di **fallimento**, restituisce immediatamente 401 Unauthorized e termina la richiesta, senza gestore, senza ulteriore middleware. In caso di successo**, estrae i dettagli dell'utente (ID utente, ruolo, autorizzazioni) e li memorizza nel **contesto della richiesta** prima di chiamare `next()`.
+
+Limitazione di SecurityRate
+
+Tiene traccia del numero di richieste effettuate da un IP all'interno di una finestra da te definita (ad esempio 30 chiamate in 2 secondi). Oltre la soglia, restituisce 429 Too Many Requests per proteggere le risorse del server; sotto di esso, chiama `next()`.
+
+OsservabilitàRegistrazione e monitoraggio
+
+Registra i dettagli della richiesta, il percorso, il metodo, i parametri della query, il corpo, nel terminale o in un file di registro per il debug, il reporting e il controllo.
+
+AffidabilitàGestione globale degli errori
+
+Rileva qualsiasi errore non strutturato da qualsiasi punto a monte, decide se si tratta di un errore del client (4xx) o del server (5xx) e restituisce un messaggio pulito e strutturato (spesso con un `message` e un errore `code` il front-end può mappare un messaggio amichevole). Posizionato **ultimo**.
+
+Compressione delle prestazioni
+
+Comprime risposte di grandi dimensioni (ad esempio gzip) in modo che viaggino in modo efficiente; i browser moderni li decomprimono in modo trasparente nuovamente in un formato utilizzabile.
+
+ConvenienzaAnalisi dei dati
+
+La serializzazione/deserializzazione e persino la convalida/trasformazione possono essere delegate a un middleware (ad esempio un parser del corpo) in modo che i gestori non lo ripetano. Questo è esattamente il motivo per cui Node's `json()` parser del corpo significa che JSON è già un oggetto JS nel momento in cui viene eseguito un gestore.
+
+#### I middleware CORS e di autenticazione nel codice
+
+```go title="cors + auth middleware Go Python JavaScript TypeScript Java"
+var allowedOrigin = "https://app.example.com"
+
+func CORSMiddleware(next http.Handler) http.Handler {
+    return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+        origin := r.Header.Get("Origin") // runtime gives us this
+        if origin == allowedOrigin {
+            w.Header().Set("Access-Control-Allow-Origin", origin)
+        }
+        next.ServeHTTP(w, r) // pass along; browser blocks if header absent
+    })
+}
+
+func AuthMiddleware(next http.Handler) http.Handler {
+    return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+        token := r.Header.Get("Authorization")
+        userID, role, err := verifyToken(token)
+        if err != nil {
+            http.Error(w, "unauthorized", http.StatusUnauthorized) // 401, stop
+            return
+        }
+        // SUCCESS: stash identity in the request context, then continue.
+        ctx := context.WithValue(r.Context(), "userID", userID)
+        ctx = context.WithValue(ctx, "role", role)
+        next.ServeHTTP(w, r.WithContext(ctx))
+    })
+}
+```
+
+```python
+ALLOWED_ORIGIN = "https://app.example.com"
+
+def cors_middleware(next):
+    def wrapper(request):
+        resp = next(request)
+        origin = request.headers.get("Origin")  # runtime gives us this
+        if origin == ALLOWED_ORIGIN:
+            resp.headers["Access-Control-Allow-Origin"] = origin
+        return resp
+    return wrapper
+
+def auth_middleware(next):
+    def wrapper(request):
+        token = request.headers.get("Authorization")
+        try:
+            user_id, role = verify_token(token)
+        except Exception:
+            return Response("unauthorized", status=401)  # stop
+        # SUCCESS: stash identity in the request context, then continue.
+        request.context["user_id"] = user_id
+        request.context["role"] = role
+        return next(request)
+    return wrapper
+```
+
+```js
+const ALLOWED_ORIGIN = 'https://app.example.com'
+
+function corsMiddleware(req, res, next) {
+  const origin = req.get('Origin') // runtime gives us this
+  if (origin === ALLOWED_ORIGIN) {
+    res.set('Access-Control-Allow-Origin', origin)
+  }
+  next() // pass along; browser blocks if header absent
+}
+
+function authMiddleware(req, res, next) {
+  const token = req.get('Authorization')
+  let claims
+  try {
+    claims = verifyToken(token)
+  } catch {
+    return res.status(401).send('unauthorized') // 401, stop
+  }
+  // SUCCESS: stash identity in the request context, then continue.
+  req.context = { ...req.context, userId: claims.userId, role: claims.role }
+  next()
+}
+```
+
+```ts
+import type { NextFunction, Request, Response } from 'express'
+
+const ALLOWED_ORIGIN = 'https://app.example.com'
+
+export function corsMiddleware(req: Request, res: Response, next: NextFunction): void {
+  const origin = req.get('Origin') // runtime gives us this
+  if (origin === ALLOWED_ORIGIN) {
+    res.set('Access-Control-Allow-Origin', origin)
+  }
+  next() // pass along; browser blocks if header absent
+}
+
+export function authMiddleware(req: Request, res: Response, next: NextFunction): void {
+  const token = req.get('Authorization')
+  let claims: TokenClaims
+  try {
+    claims = verifyToken(token)
+  } catch {
+    res.status(401).send('unauthorized') // 401, stop
+    return
+  }
+  // SUCCESS: stash identity in the request context, then continue.
+  // `req.context` is typed once via declaration merging (next section),
+  // so every handler downstream reads it without a cast.
+  req.context = { ...req.context, userId: claims.userId, role: claims.role }
+  next()
+}
+```
+
+```java
+@Component
+public class CorsFilter extends OncePerRequestFilter {
+    private static final String ALLOWED_ORIGIN = "https://app.example.com";
+
+    @Override
+    protected void doFilterInternal(HttpServletRequest req, HttpServletResponse res,
+                                    FilterChain chain)
+            throws ServletException, IOException {
+        String origin = req.getHeader("Origin"); // runtime gives us this
+        if (ALLOWED_ORIGIN.equals(origin)) {
+            res.setHeader("Access-Control-Allow-Origin", origin);
+        }
+        chain.doFilter(req, res); // pass along; browser blocks if header absent
+    }
+}
+
+@Component
+public class AuthFilter extends OncePerRequestFilter {
+
+    @Override
+    protected void doFilterInternal(HttpServletRequest req, HttpServletResponse res,
+                                    FilterChain chain)
+            throws ServletException, IOException {
+        String token = req.getHeader("Authorization");
+        TokenClaims claims;
+        try {
+            claims = verifyToken(token);
+        } catch (InvalidTokenException e) {
+            res.sendError(HttpServletResponse.SC_UNAUTHORIZED, "unauthorized"); // 401, stop
+            return;
+        }
+        // SUCCESS: stash identity in the request context, then continue.
+        // Request attributes ARE the servlet request context: a key-value
+        // map that lives and dies with this one request.
+        req.setAttribute("userId", claims.userId());
+        req.setAttribute("role", claims.role());
+        chain.doFilter(req, res);
+    }
+}
+```
+
+## 13Che cos'è il contesto della richiesta
+
+Il middleware di autenticazione ha semplicemente fatto qualcosa di sottile: ha memorizzato l'ID utente e il ruolo da qualche parte in modo che un gestore successivo potesse leggerli. Quel "da qualche parte" è il **contesto della richiesta**.
+
+<Callout type="info" title="Definizione/Contesto della richiesta">
+Un pezzo di **archiviazione o stato**: solitamente un semplice archivio chiave-valore, **limitato a una singola richiesta HTTP**. Ogni richiesta ha il proprio contesto; non si perde in altre richieste. Ogni framework in ogni lingua fornisce un'implementazione di questo concetto, Go's `context.Context`, Espresso `req` oggetto, gli attributi della richiesta di un servlet, i valori globali con ambito della richiesta di Python; la meccanica è diversa, l'idea è la stessa.
+</Callout>
+
+Perché esiste? Perché una richiesta passa attraverso molti **limiti di funzioni isolate**: CORS, registrazione, routing, autenticazione, controlli delle autorizzazioni, gestore, gestore degli errori. Il contesto offre a tutti loro un luogo condiviso in cui leggere e scrivere lo stato **senza accoppiarli strettamente**, senza che un middleware debba passare manualmente i valori in modo esplicito al successivo.
+
+<Diagram>
+<svg viewBox="0 0 760 180" role="img" aria-label="Richiedi contesto condiviso lungo la catena"><g font-family="var(--font-diagram-mono)" font-size="10"><rect x="40" y="30" width="90" height="40" rx="7" fill="none" stroke="var(--dg-accent)" stroke-width="1.4"></rect><text x="85" y="55" text-anchor="middle" fill="var(--dg-accent-2)">autenticazione MW</text><rect x="170" y="30" width="90" height="40" rx="7" fill="none" stroke="var(--dg-line-2)" stroke-width="1.4"></rect><text x="215" y="55" text-anchor="middle" fill="var(--dg-ink)">registrazione</text><rect x="300" y="30" width="90" height="40" rx="7" fill="none" stroke="var(--dg-line-2)" stroke-width="1.4"></rect><text x="345" y="55" text-anchor="middle" fill="var(--dg-ink)">controllo permessi</text><rect x="430" y="30" width="90" height="40" rx="7" fill="var(--dg-accent-tint)" stroke="var(--dg-accent)" stroke-width="1.4"></rect><text x="475" y="55" text-anchor="middle" fill="var(--dg-accent-2)">gestore</text><rect x="560" y="30" width="90" height="40" rx="7" fill="none" stroke="var(--dg-line-2)" stroke-width="1.4"></rect><text x="605" y="55" text-anchor="middle" fill="var(--dg-ink)">errore MW</text></g><rect x="40" y="105" width="610" height="48" rx="9" fill="var(--dg-accent-tint)" stroke="var(--dg-accent)" stroke-width="1.4" stroke-dasharray="5 4"></rect><text x="345" y="125" text-anchor="middle" class="sv-mono" font-size="11" fill="var(--dg-accent-2)">CONTESTO DELLA RICHIESTA · stato chiave-valore condiviso, limitato a questa richiesta</text><text x="345" y="142" text-anchor="middle" class="sv-mono" font-size="10" fill="var(--dg-ink-3)">{ user_id, ruolo, request_id, scadenza }</text><g stroke="var(--dg-ink-3)" stroke-width="1.2" stroke-dasharray="2 3"><line x1="85" y1="70" x2="85" y2="104"></line><line x1="215" y1="70" x2="215" y2="104"></line><line x1="345" y1="70" x2="345" y2="104"></line><line x1="475" y1="70" x2="475" y2="104"></line><line x1="605" y1="70" x2="605" y2="104"></line></g></svg>
+</Diagram>
+
+Ogni confine può leggere e scrivere lo **stesso archivio per richiesta**: non è necessario alcun passaggio manuale.
+
+## 14Caso d'uso/Trasmissione dei dati di autenticazione
+
+L'uso canonico. Il middleware di autenticazione verifica le credenziali, estrae il file `user_id` e `role`e li scrive nel contesto. Molto più a valle, a `POST /books` il conduttore deve timbrare il nuovo libro con il suo proprietario. Invece di fidarsi di a `user_id` inviato nel payload JSON del client, legge l'ID **dal contesto**.
+
+<Callout type="info" title="Sicurezza, perché è importante">
+Se hai preso il `user_id` dal payload del client, un client dannoso potrebbe inviare l'ID di _qualcun altro_ e agire come tale. Leggere l'identità dal contesto, popolato solo dal middleware di autenticazione verificata, chiude quel buco. Lo stesso ruolo memorizzato nel contesto guida i controlli delle autorizzazioni (questo utente è un amministratore? Ha accesso in scrittura?).
+</Callout>
+
+```go title="handler reads identity from context Go Python JavaScript TypeScript Java"
+func CreateBookHandler(w http.ResponseWriter, r *http.Request) {
+    var req CreateBookRequest
+    json.NewDecoder(r.Body).Decode(&req)
+
+    // Read the trusted user ID FROM THE CONTEXT, not from req.
+    // The auth middleware put it there after verifying the token.
+    userID := r.Context().Value("userID").(int)
+    role := r.Context().Value("role").(string)
+
+    if role != "admin" && role != "user" {
+        http.Error(w, "forbidden", http.StatusForbidden)
+        return
+    }
+
+    // Persist with the SERVER-VERIFIED owner id, never the client's.
+    book, _ := bookService.Create(r.Context(), req, userID)
+    w.WriteHeader(http.StatusCreated) // 201
+    json.NewEncoder(w).Encode(book)
+}
+```
+
+```python
+def create_book_handler(request):
+    req = CreateBookRequest(**request.get_json())
+
+    # Read the trusted user id FROM THE CONTEXT, not from the body.
+    # The auth middleware put it there after verifying the token.
+    user_id = request.context["user_id"]
+    role = request.context["role"]
+
+    if role not in ("admin", "user"):
+        return Response("forbidden", status=403)
+
+    # Persist with the SERVER-VERIFIED owner id, never the client's.
+    book = book_service.create(req, user_id)
+    return jsonify(book), 201
+```
+
+```js
+app.post('/books', async (req, res) => {
+  const { title, author } = req.body ?? {}
+
+  // Read the trusted user id FROM THE CONTEXT, not from the body.
+  // The auth middleware put it there after verifying the token.
+  const { userId, role } = req.context
+
+  if (role !== 'admin' && role !== 'user') {
+    return res.status(403).send('forbidden')
+  }
+
+  // Persist with the SERVER-VERIFIED owner id, never the client's.
+  const book = await bookService.create({ title, author }, userId)
+  res.status(201).json(book) // 201
+})
+```
+
+```ts
+import type { Request, Response } from 'express'
+
+// Declare the context's shape ONCE and every handler in the codebase
+// sees it. This is how you stop `req.context` from decaying into an
+// `any` bag that each handler guesses at.
+declare module 'express-serve-static-core' {
+  interface Request {
+    context: { userId: number; role: string; requestId: string }
+  }
+}
+
+export async function createBookHandler(req: Request, res: Response): Promise<void> {
+  const body = req.body as CreateBookRequest
+
+  // Read the trusted user id FROM THE CONTEXT, not from the body.
+  // The auth middleware put it there after verifying the token.
+  const { userId, role } = req.context
+
+  if (role !== 'admin' && role !== 'user') {
+    res.status(403).send('forbidden')
+    return
+  }
+
+  // Persist with the SERVER-VERIFIED owner id, never the client's.
+  const book = await bookService.create(body, userId)
+  res.status(201).json(book) // 201
+}
+```
+
+```java
+@PostMapping("/books")
+ResponseEntity<?> createBook(@RequestBody CreateBookRequest req,
+                             HttpServletRequest http) {
+    // Read the trusted user id FROM THE REQUEST CONTEXT, not from req.
+    // The auth filter put it there after verifying the token.
+    long userId = (long) http.getAttribute("userId");
+    String role = (String) http.getAttribute("role");
+
+    if (!role.equals("admin") && !role.equals("user")) {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body("forbidden");
+    }
+
+    // Persist with the SERVER-VERIFIED owner id, never the client's.
+    Book book = bookService.create(req, userId);
+    return ResponseEntity.status(HttpStatus.CREATED).body(book); // 201
+}
+```
+
+## 15Casi d'uso/Tracciamento e cancellazione
+
+### Richiedi il tracciamento
+
+Un primo middleware può generare un ID univoco (un UUID) e salvarlo nel contesto. Per l'intero ciclo di vita di tale richiesta, ogni riga di registro può includere questo ID e qualsiasi chiamata in uscita ad altri microservizi può inoltrarlo in un'intestazione come `X-Request-ID`. Quando successivamente controlli i tuoi log per eseguire il debug di un problema, quel singolo ID ti consente di **tracciare una richiesta su ogni servizio toccato**: dove è iniziata e ovunque sia andata.
+
+```go title="request-id middleware Go Python JavaScript TypeScript Java"
+func RequestIDMiddleware(next http.Handler) http.Handler {
+    return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+        id := uuid.NewString() // one unique id for this request
+        ctx := context.WithValue(r.Context(), "requestID", id)
+        w.Header().Set("X-Request-ID", id) // echo it back / forward it
+        log.Printf("[%s] %s %s", id, r.Method, r.URL.Path)
+        next.ServeHTTP(w, r.WithContext(ctx))
+    })
+}
+```
+
+```python
+import uuid
+
+def request_id_middleware(next):
+    def wrapper(request):
+        rid = str(uuid.uuid4())  # one unique id for this request
+        request.context["request_id"] = rid
+        print(f"[{rid}] {request.method} {request.path}")
+        resp = next(request)
+        resp.headers["X-Request-ID"] = rid  # echo it back / forward it
+        return resp
+    return wrapper
+```
+
+```js
+import { randomUUID } from 'node:crypto'
+
+function requestIdMiddleware(req, res, next) {
+  const id = randomUUID() // one unique id for this request
+  req.context = { ...req.context, requestId: id }
+  res.set('X-Request-ID', id) // echo it back / forward it
+  console.log(`[${id}] ${req.method} ${req.path}`)
+  next()
+}
+```
+
+```ts
+import { randomUUID } from 'node:crypto'
+import type { NextFunction, Request, Response } from 'express'
+
+export function requestIdMiddleware(req: Request, res: Response, next: NextFunction): void {
+  const id = randomUUID() // one unique id for this request
+  req.context = { ...req.context, requestId: id }
+  res.set('X-Request-ID', id) // echo it back / forward it
+  console.log(`[${id}] ${req.method} ${req.path}`)
+  // Node also ships AsyncLocalStorage, which carries the id through
+  // awaits into code that never sees `req` at all, the logger, the
+  // database layer, an outbound fetch. Same context, no hand-off.
+  next()
+}
+```
+
+```java
+@Component
+public class RequestIdFilter extends OncePerRequestFilter {
+
+    @Override
+    protected void doFilterInternal(HttpServletRequest req, HttpServletResponse res,
+                                    FilterChain chain)
+            throws ServletException, IOException {
+        String id = UUID.randomUUID().toString(); // one unique id for this request
+        req.setAttribute("requestId", id);
+        res.setHeader("X-Request-ID", id); // echo it back / forward it
+
+        // MDC is the logging framework's own per-request context. Put the
+        // id in once and EVERY log line from this request carries it, with
+        // no logging call having to pass it along by hand.
+        MDC.put("requestId", id);
+        try {
+            log.info("{} {}", req.getMethod(), req.getRequestURI());
+            chain.doFilter(req, res);
+        } finally {
+            MDC.clear(); // threads are pooled, never leak it to the next request
+        }
+    }
+}
+```
+
+### Cancellazione, segnali di interruzione e scadenze
+
+Il contesto della richiesta è anche il luogo standard in cui riportare i **segnali di cancellazione** e le **scadenze**. Se un client si disconnette o scade una scadenza, tali segnali si propagano alle chiamate esterne downstream, quindi un servizio non **si blocca mai perennemente** in attesa di un lavoro che non ha più importanza. In Go questo è il built-in `context.Context` con `WithTimeout`; in Python emerge come timeout/token di cancellazione passati lungo la catena di chiamate.
+
+<Callout type="info" title="L'intero quadro">
+Una richiesta entra nel punto di ingresso, scorre attraverso una catena ordinata di middleware e routing, arriva a un gestore che convalida e trasforma i dati, delega a un servizio che orchestra la logica applicativa, che chiama repository per il lavoro sul database, il tutto mentre un **contesto** per richiesta porta con sé identità, un ID di traccia e scadenze. Il risultato risale e il gestore sceglie un codice di stato e invia la risposta. Questo è l'intero ciclo di vita della richiesta.
+</Callout>
+
+Backend da Primi Principi / Capitolo 06 / Livelli. Il codice è destinato a Go 1.22+, Python 3.11+, Node.js 20+, TypeScript 5+ e Java 17+ (Spring Boot).

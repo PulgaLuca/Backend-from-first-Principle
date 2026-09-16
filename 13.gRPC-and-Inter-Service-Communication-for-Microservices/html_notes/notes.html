@@ -1,0 +1,3220 @@
+<!DOCTYPE html>
+<html lang="it">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="referrer" content="no-referrer">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>gRPC e comunicazione interservizi / Capitolo 13 / Backend dai primi principi</title>
+  <meta name="description" content="Capitolo 13 di Backend dai primi principi: gRPC e comunicazione inter-servizio. Note sui principi primi, diagrammi ed esempi eseguibili in Go e Python.">
+  <meta name="theme-color" content="#f3ede2">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2032%2032'%3E%3Crect%20width='32'%20height='32'%20rx='7'%20fill='%23b8402e'/%3E%3Ctext%20x='16'%20y='23'%20font-family='Georgia,serif'%20font-size='19'%20font-weight='700'%20fill='%23f3ede2'%20text-anchor='middle'%3EB%3C/text%3E%3C/svg%3E">
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+
+    <link rel="stylesheet"
+        href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/go.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/python.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/protobuf.min.js"></script>
+
+    <style>
+        :root{
+  --paper: #f3ede2;
+  --paper-2: #ece3d4;
+  --ink: #211e1a;
+  --ink-soft: #5b5347;
+  --rust: #b8402e;
+  --rust-deep: #8f2f20;
+  --gold: #b07d2b;
+  --teal: #3f6f4e;
+  --line: #d8cfbe;
+  --code-bg: #232019;
+  --code-bar: #1a1813;
+  --shadow: 0 1px 0 rgba(0,0,0,.04),0 18px 40px -28px rgba(40,30,20,.5);
+}
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0
+        }
+
+        html {
+            scroll-behavior: smooth;
+            scroll-padding-top: 24px
+        }
+
+        body {
+            background: var(--paper);
+            color: var(--ink);
+            font-family:"Spline Sans", system-ui, sans-serif;
+            font-size: 17px;
+            line-height: 1.7;
+            -webkit-font-smoothing: antialiased;
+            background-image: radial-gradient(circle at 12% 8%, rgba(184,64,46, .05), transparent 38%), radial-gradient(circle at 88% 92%, rgba(63,111,78, .05), transparent 42%);
+        }
+
+        .hero {
+            margin-bottom: 64px;
+        }
+
+        .kicker {
+            font-family:"JetBrains Mono", ui-monospace, monospace;
+            font-size: 12.5px;
+            letter-spacing: .3em;
+            text-transform: uppercase;
+            color: var(--rust);
+            font-weight: 700;
+            margin-bottom: 20px;
+        }
+
+        .hero h1 {
+            font-family:"Fraunces", Georgia, serif;
+            font-weight: 900;
+            font-size: clamp(40px, 6.5vw, 78px);
+            line-height: .95;
+            letter-spacing: -.025em;
+            margin-bottom: 24px;
+        }
+
+        .hero h1 em {
+            font-style: italic;
+            color: var(--rust);
+            font-weight: 500;
+        }
+
+        .hero .lede{
+            font-size: 19px;
+            max-width:64ch;
+            color: var(--ink-soft);
+            line-height: 1.6;
+        }
+
+        .hero .meta {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 32px;
+        }
+
+        .hero .meta span {
+            font-family:"JetBrains Mono", ui-monospace, monospace;
+            font-size: 12px;
+            border: 1px solid var(--line);
+            background: var(--paper-2);
+            padding: 6px 13px;
+            border-radius: 30px;
+            color: var(--ink-soft);
+        }
+
+        .hero .rule {
+            height: 3px;
+            width:120px;
+            background: var(--rust);
+            margin-top: 38px;
+        }
+
+        .part-label {
+            font-family:"JetBrains Mono", ui-monospace, monospace;
+            font-size: 12px;
+            letter-spacing: .22em;
+            text-transform: uppercase;
+            color: var(--rust);
+            font-weight: 700;
+            margin: 64px 0 8px;
+            padding-bottom: 6px;
+            border-bottom: 1px dashed var(--line);
+        }
+
+        .part-label:first-of-type {
+            margin-top: 0;
+        }
+
+        section {
+            margin-bottom: 72px;
+            scroll-margin-top: 20px;
+        }
+
+        .sec-head {
+            display: flex;
+            align-items: flex-start;
+            gap: 18px;
+            margin-bottom: 24px;
+            border-bottom: 1px solid var(--line);
+            padding-bottom: 16px;
+        }
+
+        .sec-num {
+            font-family:"JetBrains Mono", ui-monospace, monospace;
+            font-weight: 700;
+            font-size: 14px;
+            color: #fff;
+            background: var(--rust);
+            border-radius: 8px;
+            padding: 7px 11px;
+            line-height: 1;
+            margin-top: 8px;
+            white-space: nowrap;
+            box-shadow: 0 3px 10px rgba(184,64,46, .3);
+        }
+
+        h2 {
+            font-family:"Fraunces", Georgia, serif;
+            font-weight: 600;
+            font-size: clamp(27px, 3.6vw, 38px);
+            line-height: 1.06;
+            letter-spacing: -.015em;
+        }
+
+        h3 {
+            font-family:"Fraunces", Georgia, serif;
+            font-weight: 600;
+            font-size: 22px;
+            margin: 34px 0 12px;
+            letter-spacing: -.01em;
+        }
+
+        h4 {
+            font-size: 14px;
+            font-weight: 700;
+            letter-spacing: .04em;
+            text-transform: uppercase;
+            color: var(--rust-deep);
+            margin: 24px 0 9px;
+        }
+
+        p {
+            margin-bottom: 15px;
+            max-width:76ch;
+        }
+
+        strong {
+            font-weight: 700;
+            color: var(--ink);
+        }
+
+        ul,
+        ol {
+            margin: 0 0 17px 0;
+            padding-left:0;
+            max-width:76ch;
+        }
+
+        li {
+            margin: 0 0 9px 28px;
+        }
+
+        li::marker {
+            color: var(--rust);
+            font-weight: 700;
+        }
+
+        code:not(pre code) {
+            font-family:"JetBrains Mono", ui-monospace, monospace;
+            font-size: .85em;
+            background: var(--paper-2);
+            border: 1px solid var(--line);
+            padding: .12em .42em;
+            border-radius: 5px;
+            color: var(--rust-deep);
+            white-space: nowrap;
+        }
+
+        .box {
+            border-radius: 12px;
+            padding: 18px 22px;
+            margin: 22px 0;
+            border: 1px solid var(--line);
+            background: var(--paper-2);
+        }
+
+        .box .tag {
+            font-family:"JetBrains Mono", ui-monospace, monospace;
+            font-size: 11px;
+            letter-spacing: .16em;
+            text-transform: uppercase;
+            font-weight: 700;
+            margin-bottom: 7px;
+            display: block;
+        }
+
+        .box p:last-child {
+            margin-bottom: 0;
+        }
+
+        .box.key {
+            background: linear-gradient(180deg, rgba(176,125,43, .1), rgba(176,125,43, .04));
+            border-color: rgba(176,125,43, .4);
+        }
+
+        .box.key .tag {
+            color: var(--gold);
+        }
+
+        .box.gotcha {
+            background: linear-gradient(180deg, rgba(184,64,46, .1), rgba(184,64,46, .03));
+            border-color: rgba(184,64,46, .4);
+        }
+
+        .box.gotcha .tag {
+            color: var(--rust);
+        }
+
+        .box.note {
+            background: linear-gradient(180deg, rgba(63,111,78, .09), rgba(63,111,78, .03));
+            border-color: rgba(63,111,78, .4);
+        }
+
+        .box.note .tag {
+            color: var(--teal);
+        }
+
+        .analogy {
+            font-style: italic;
+            color: var(--ink-soft);
+            font-family:"Fraunces", Georgia, serif;
+            font-size: 18px;
+            line-height: 1.55;
+            border-left: 3px solid var(--gold);
+            padding: 6px 0 6px 22px;
+            margin: 20px 0;
+        }
+
+        .tbl-wrap {
+            overflow-x: auto;
+            margin: 22px 0;
+            border: 1px solid var(--line);
+            border-radius: 12px;
+        }
+
+        table {
+            border-collapse: collapse;
+            width:100%;
+            font-size: 14px;
+        }
+
+        th,
+        td {
+            text-align: left;
+            padding: 11px 15px;
+            border-bottom: 1px solid var(--line);
+            vertical-align: top;
+        }
+
+        th {
+            background: var(--paper-2);
+            font-weight: 700;
+            font-size: 11.5px;
+            letter-spacing: .05em;
+            text-transform: uppercase;
+            color: var(--rust-deep);
+        }
+
+        tr:last-child td {
+            border-bottom: none;
+        }
+
+        td code {
+            white-space: nowrap;
+        }
+
+        .mono-cell {
+            font-family:"JetBrains Mono", ui-monospace, monospace;
+            font-weight: 700;
+            color: var(--rust-deep);
+            font-size: 13px;
+        }
+
+        .yes {
+            color: #3f6f4e;
+            font-weight: 700;
+        }
+
+        .no {
+            color: #b8402e;
+            font-weight: 700;
+        }
+
+        .cond {
+            color: #b07d2b;
+            font-weight: 700;
+        }
+
+        .sc {
+            font-family:"JetBrains Mono", ui-monospace, monospace;
+            font-weight: 700;
+            padding: 2px 8px;
+            border-radius: 6px;
+            font-size: 13px;
+            white-space: nowrap;
+        }
+
+        .sc.s1 {
+            background: #dee5ee;
+            color: #3f6f4e;
+        }
+
+        .sc.s2 {
+            background: #e0e9dd;
+            color: #3f6f4e;
+        }
+
+        .sc.s3 {
+            background: #f0e5c9;
+            color: #b07d2b;
+        }
+
+        .sc.s4 {
+            background: #f4ded6;
+            color: #b8402e;
+        }
+
+        .sc.s5 {
+            background: #eccdc2;
+            color: #8f2f20;
+        }
+
+        .codeblock {
+      background: var(--code-bg);
+            margin: 20px 0;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 14px 30px -16px var(--shadow);
+            border: 1px solid #35302a;
+        }
+
+        .code-bar {
+            display: flex;
+            align-items: center;
+            background: var(--code-bar);
+            padding: 0 14px;
+            border-bottom: 1px solid #35302a;
+        }
+
+        .code-bar .dots {
+            display: flex;
+            gap: 7px;
+            margin-right: 14px;
+        }
+
+        .code-bar .dots i {
+            width:11px;
+            height: 11px;
+            border-radius: 50%;
+            display: block;
+        }
+
+        .dots i:nth-child(1) {
+            background: #d05a47;
+        }
+
+        .dots i:nth-child(2) {
+            background: #cf9f4b;
+        }
+
+        .dots i:nth-child(3) {
+            background: #5a9a5f;
+        }
+
+        .code-tabs {
+            display: flex;
+        }
+
+        .code-tabs button {
+            font-family:"JetBrains Mono", ui-monospace, monospace;
+            font-size: 12.5px;
+            font-weight: 600;
+            background: none;
+            border: none;
+            color: #9c948a;
+            padding: 13px 18px;
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            transition: .15s;
+        }
+
+        .code-tabs button:hover {
+            color: #e9e2d3;
+        }
+
+        .code-tabs button.on {
+            color: #fff;
+            border-bottom-color: var(--rust);
+        }
+
+        .lang-go {
+            color: #7fb0c9;
+        }
+
+        .lang-py {
+            color: #d8b66a;
+        }
+
+        .code-panel {
+            display: none;
+        }
+
+        .code-panel.on {
+            display: block;
+        }
+
+        .codeblock pre {
+            margin: 0;
+        }
+
+        .codeblock pre code {
+            font-family:"JetBrains Mono", ui-monospace, monospace !important;
+            font-size: 13px;
+            line-height: 1.6;
+            padding: 18px 20px !important;
+            display: block;
+            overflow-x: auto;
+            background: var(--code-bg) !important;
+        }
+
+        .code-cap {
+            font-size: 13px;
+            color: var(--ink-soft);
+            font-style: italic;
+            margin: -8px 2px 22px;
+            font-family:"Fraunces", Georgia, serif;
+        }
+
+        .codeblock.single .code-bar .filename {
+            font-family:"JetBrains Mono", ui-monospace, monospace;
+            font-size: 12.5px;
+            color: #9c948a;
+            padding: 13px 4px;
+        }
+
+        .flow {
+            margin: 22px 0;
+            border: 1px solid var(--line);
+            border-radius: 12px;
+            background: var(--paper-2);
+            padding: 24px 22px;
+        }
+
+        .flow .step {
+            display: flex;
+            gap: 15px;
+            align-items: flex-start;
+            padding: 9px 0;
+        }
+
+        .flow .step .b {
+            font-family:"JetBrains Mono", ui-monospace, monospace;
+            font-weight: 700;
+            font-size: 12px;
+            background: var(--ink);
+            color: var(--paper);
+            min-width:30px;
+            height: 30px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 8px;
+            flex-shrink: 0;
+        }
+
+        .flow .step.srv .b {
+            background: var(--teal);
+        }
+
+        .flow .step.cli .b {
+            background: var(--rust);
+        }
+
+        .flow .step .t {
+            padding-top: 3px;
+            font-size: 14.5px;
+        }
+
+        .flow .arrow {
+            color: var(--line);
+            text-align: center;
+            font-size: 18px;
+            line-height: .4;
+            margin: 0 0 0 14px;
+        }
+
+        /* method card */
+        .method {
+            border: 1px solid var(--line);
+            border-radius: 14px;
+            margin: 26px 0;
+            overflow: hidden;
+            background: var(--paper-2);
+        }
+
+        .method-top {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 14px;
+            padding: 18px 22px;
+            background: linear-gradient(180deg, rgba(33,30,26, .04), transparent);
+            border-bottom: 1px solid var(--line);
+        }
+
+        .method-top .verb {
+            font-family:"JetBrains Mono", ui-monospace, monospace;
+            font-weight: 700;
+            font-size: 18px;
+            color: #fff;
+            background: var(--ink);
+            padding: 6px 14px;
+            border-radius: 8px;
+        }
+
+        .method-top .verb.get {
+            background: #3f6f4e;
+        }
+
+        .method-top .verb.post {
+            background: var(--rust);
+        }
+
+        .method-top .verb.put {
+            background: #8a6420;
+        }
+
+        .method-top .verb.patch {
+            background: #b07d2b;
+        }
+
+        .method-top .verb.delete {
+            background: #8f2f20;
+        }
+
+        .method-top .verb.head {
+            background: #37607f;
+        }
+
+        .method-top .verb.options {
+            background: var(--teal);
+        }
+
+        .method-top .verb.connect {
+            background: #5b5347;
+        }
+
+        .method-top .verb.trace {
+            background: #8d8475;
+        }
+
+        .method-top .props {
+            display: flex;
+            gap: 7px;
+            flex-wrap: wrap;
+            margin-left:auto;
+        }
+
+        .method-top .props span {
+            font-family:"JetBrains Mono", ui-monospace, monospace;
+            font-size: 11px;
+            font-weight: 700;
+            padding: 4px 9px;
+            border-radius: 20px;
+            border: 1px solid var(--line);
+            background: var(--paper);
+        }
+
+        .method-top .props .y {
+            color: #3f6f4e;
+            border-color: #bcd3b6;
+        }
+
+        .method-top .props .c {
+            color: #b07d2b;
+            border-color: #ddc79a;
+        }
+
+        .method-body {
+            padding: 6px 22px 20px;
+        }
+
+        .method-body .gloss {
+            font-family:"Fraunces", Georgia, serif;
+            font-style: italic;
+            font-size: 17px;
+            color: var(--ink-soft);
+            margin: 14px 0;
+        }
+
+        .foot {
+            border-top: 3px solid var(--rust);
+            margin-top: 56px;
+            padding-top: 28px;
+            color: var(--ink-soft);
+            font-size: 14px;
+        }
+
+        .foot strong {
+            color: var(--ink);
+        }
+
+        .toc-toggle {
+            display: none;
+        }
+
+        /* ============ VISUALIZATION STYLES (added) ============ */
+        .viz {
+            margin: 30px 0;
+            border: 1px solid var(--line);
+            border-radius: 14px;
+            background: linear-gradient(180deg, #f6f0e6, var(--paper-2));
+            padding: 24px 22px 18px;
+            box-shadow: 0 10px 26px -18px var(--shadow);
+        }
+
+        .viz-cap {
+            font-family:"JetBrains Mono", ui-monospace, monospace;
+            font-size: 11px;
+            letter-spacing: .18em;
+            text-transform: uppercase;
+            color: var(--rust);
+            font-weight: 700;
+            margin-bottom: 4px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .viz-cap::before {
+            content: "";
+            width:18px;
+            height: 2px;
+            background: var(--rust);
+            display: inline-block;
+        }
+
+        .viz-title {
+            font-family:"Fraunces", Georgia, serif;
+            font-weight: 600;
+            font-size: 18px;
+            letter-spacing: -.01em;
+            margin-bottom: 16px;
+            color: var(--ink);
+        }
+
+        .viz svg {
+            display: block;
+            width:100%;
+            height: auto;
+            overflow: visible;
+        }
+
+        .viz svg text {
+            font-family:"Spline Sans", system-ui, sans-serif;
+        }
+
+        .viz svg .mono {
+            font-family:"JetBrains Mono", ui-monospace, monospace;
+        }
+
+        .viz svg .serif {
+            font-family:"Fraunces", Georgia, serif;
+        }
+
+        .viz-note {
+            font-size: 12.5px;
+            color: var(--ink-soft);
+            font-style: italic;
+            font-family:"Fraunces", Georgia, serif;
+            margin-top: 14px;
+            padding-top: 12px;
+            border-top: 1px dashed var(--line);
+        }
+
+        @media(max-width:980px) {
+
+            .toc-toggle {
+                display: flex;
+                align-items: center;
+                gap: 9px;
+                position: fixed;
+                top: 16px;
+                left:16px;
+                z-index: 60;
+                background: var(--ink);
+                color: var(--paper);
+                border: none;
+                font-family:"JetBrains Mono", ui-monospace, monospace;
+                font-size: 13px;
+                font-weight: 600;
+                padding: 11px 16px;
+                border-radius: 10px;
+                cursor: pointer;
+                box-shadow: 0 6px 18px var(--shadow);
+            }
+
+            .method-top .props {
+                margin-left:0;
+                width:100%;
+            }}
+
+        @media(max-width:560px) {
+            body {
+                font-size: 16px;
+            }}
+
+        ::selection {
+            background: var(--rust);
+            color: #fff;
+        }</style>
+<style>
+.chapter-nav{position:fixed;bottom:0;left:0;right:0;z-index:9998;display:flex;align-items:center;justify-content:space-between;padding:14px clamp(16px,4vw,48px);background:rgba(243,237,226,.88);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border-top:1.5px solid #c7bca6;box-shadow:0 -8px 32px -16px rgba(40,30,20,.18);font-family:"JetBrains Mono", ui-monospace, monospace;}
+.nav-chapter-link{display:flex;align-items:center;gap:12px;text-decoration:none;color:#5b5347;padding:10px 18px;border-radius:10px;transition:all .2s ease;max-width:38%;}
+.nav-chapter-link:hover{background:rgba(184,64,46,.08);color:#b8402e;transform:translateY(-1px);}
+.nav-chapter-link.nav-next{text-align:right;flex-direction:row;}
+.nav-arrow{font-size:22px;color:#b8402e;font-weight:700;flex:none;}
+.nav-label{display:flex;flex-direction:column;gap:2px;font-size:13.5px;line-height:1.3;}
+.nav-small{font-size:10px;letter-spacing:.22em;text-transform:uppercase;color:#8d8475;font-weight:600;}
+.nav-indicator{font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:#b8402e;font-weight:700;text-decoration:none;padding:8px 16px;border:1.5px solid #c7bca6;border-radius:40px;background:rgba(255,255,255,.5);transition:all .2s;white-space:nowrap;}
+.nav-indicator:hover{background:#b8402e;color:#fff;border-color:#b8402e;}
+.nav-dot{display:inline-block;width:7px;height:7px;background:#b8402e;border-radius:50%;margin-right:4px;vertical-align:middle;}
+.nav-sep{color:#c7bca6;margin:0 2px;}
+.nav-disabled{visibility:hidden;pointer-events:none;}
+@media(max-width:700px){.nav-label{font-size:11.5px;}.nav-chapter-link{padding:8px 10px;max-width:38%;}.chapter-nav{padding:10px 12px;}.nav-small{font-size:9px;letter-spacing:.16em;}}
+@media(max-width:520px){.nav-label{display:none;}.nav-chapter-link{max-width:none;padding:8px 12px;}.nav-arrow{font-size:20px;}.nav-indicator{font-size:11px;padding:7px 13px;letter-spacing:.12em;}}
+body{padding-bottom:80px;}
+</style>
+  <link rel="stylesheet" href="../../assets/copy-button.css">
+  <link rel="stylesheet" href="../../assets/enhancements.css">
+  <link rel="stylesheet" href="../../assets/shell.css">
+  <link rel="stylesheet" href="../../assets/theme.css">
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;0,9..144,900;1,9..144,400;1,9..144,600&family=Spline+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="../../assets/theme.js"></script>
+</head>
+
+<body>
+<button class="bfp-toc-toggle" id="bfpTocToggle" aria-controls="bfpToc" aria-expanded="false"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><line x1="2" y1="4" x2="14" y2="4"/><line x1="2" y1="8" x2="14" y2="8"/><line x1="2" y1="12" x2="14" y2="12"/></svg>Contenuto</button>
+<div class="bfp-toc-scrim" id="bfpTocScrim"></div>
+<div class="bfp-shell">
+    <aside class="bfp-toc" id="bfpToc">
+      <div class="bfp-brand"><span class="bfp-brand-name">gRPC</span><span class="bfp-brand-slash">/</span><span class="bfp-brand-lens">l'obiettivo del back-end</span></div>
+      <div class="bfp-brand-sub">Capitolo 13/Manuale da campo</div>
+      <div class="bfp-toc-rule"></div>
+      <nav class="bfp-toc-nav">
+        <a class="bfp-toc-link" href="#s1"><span class="bfp-toc-num">01</span><span class="bfp-toc-text">Cos'è realmente gRPC</span></a>
+        <a class="bfp-toc-link" href="#s2"><span class="bfp-toc-num">02</span><span class="bfp-toc-text">Perché esiste gRPC</span></a>
+        <a class="bfp-toc-link" href="#s3"><span class="bfp-toc-num">03</span><span class="bfp-toc-text">Il modello mentale RPC</span></a>
+        <a class="bfp-toc-link" href="#s4"><span class="bfp-toc-num">04</span><span class="bfp-toc-text">Protocollo Buffer, il Contratto</span></a>
+        <a class="bfp-toc-link" href="#s5"><span class="bfp-toc-num">05</span><span class="bfp-toc-text">Come codifica Protobuf</span></a>
+        <a class="bfp-toc-link" href="#s6"><span class="bfp-toc-num">06</span><span class="bfp-toc-text">HTTP/2, il trasporto</span></a>
+        <a class="bfp-toc-link" href="#s7"><span class="bfp-toc-num">07</span><span class="bfp-toc-text">RPC unario</span></a>
+        <a class="bfp-toc-link" href="#s8"><span class="bfp-toc-num">08</span><span class="bfp-toc-text">Trasmissione in streaming del server</span></a>
+        <a class="bfp-toc-link" href="#s9"><span class="bfp-toc-num">09</span><span class="bfp-toc-text">Streaming del cliente</span></a>
+        <a class="bfp-toc-link" href="#s10"><span class="bfp-toc-num">10</span><span class="bfp-toc-text">Streaming bidirezionale</span></a>
+        <a class="bfp-toc-link" href="#s11"><span class="bfp-toc-num">11</span><span class="bfp-toc-text">Il file .proto -&gt; Flusso di lavoro del codice</span></a>
+        <a class="bfp-toc-link" href="#s12"><span class="bfp-toc-num">12</span><span class="bfp-toc-text">Canali, stub e una chiamata</span></a>
+        <a class="bfp-toc-link" href="#s13"><span class="bfp-toc-num">13</span><span class="bfp-toc-text">Metadati, scadenze e cancellazione</span></a>
+        <a class="bfp-toc-link" href="#s14"><span class="bfp-toc-num">14</span><span class="bfp-toc-text">Codici di stato ed errori</span></a>
+        <a class="bfp-toc-link" href="#s15"><span class="bfp-toc-num">15</span><span class="bfp-toc-text">Intercettori</span></a>
+        <a class="bfp-toc-link" href="#s16"><span class="bfp-toc-num">16</span><span class="bfp-toc-text">Autenticazione e sicurezza</span></a>
+        <a class="bfp-toc-link" href="#s17"><span class="bfp-toc-num">17</span><span class="bfp-toc-text">Resilienza e bilanciamento del carico</span></a>
+        <a class="bfp-toc-link" href="#s18"><span class="bfp-toc-num">18</span><span class="bfp-toc-text">gRPC rispetto a REST</span></a>
+        <a class="bfp-toc-link" href="#s19"><span class="bfp-toc-num">19</span><span class="bfp-toc-text">gRPC-Interoperabilità Web e browser</span></a>
+        <a class="bfp-toc-link" href="#s20"><span class="bfp-toc-num">20</span><span class="bfp-toc-text">Osservabilità e debug</span></a>
+        <a class="bfp-toc-link" href="#s21"><span class="bfp-toc-num">21</span><span class="bfp-toc-text">Cheat-sheet di debug</span></a>
+      </nav>
+    </aside>
+    <main class="bfp-content">
+
+            <header class="hero">
+                <div class="kicker">Un riferimento dettagliato al backend</div>
+                <h1>gRPC, chiamando a <em>remoto</em><br>funzionare come uno locale.</h1>
+                <p class="lede">Una panoramica dei principi primi del framework RPC che alimenta le parti interne di Google,
+                    Netflix,
+                    Uber e le flotte di microservizi più moderne, da <em>contratto</em> (Buffer di protocollo) e
+                    il binario
+                    <em>formato filo</em>, attraverso il <em>Trasporto HTTP/2</em> e le quattro forme in streaming, a
+                    scadenze,
+                    intercettori, mTLS e resilienza produttiva. Scritto per spiegare non solo <em>cosa</em> ogni pezzo
+                    fa ma
+                    <em>perché</em> esiste e <em>come</em> funziona sotto. Implementazioni sia in Go che in Python.
+                </p>
+                <div class="meta">
+                    <span>RPC su HTTP/2</span>
+                    <span>Buffer di protocollo</span>
+                    <span>Vai 1.22+ / Python 3.11+</span>
+                    <span>21 sezioni</span>
+                </div>
+                <div class="rule"></div>
+            </header>
+
+            <div class="part-label">Parte I/Fondamenti</div>
+
+            <!-- 1 -->
+            <section id="s1">
+                <div class="sec-head">
+                    <div class="sec-num">01</div>
+                    <h2>Cos'è realmente gRPC</h2>
+                </div>
+                <p><strong>gRPC è un framework per chiamare una funzione che risiede su un'altra macchina come se fosse un
+                        locale
+                        funzione nel tuo processo.</strong> Il nome si espande in <em>Chiamata di procedura remota gRPC</em>
+                    (un ricorsivo
+                    acronimo; la &quot;g&quot; è stata rinominata con una parola diversa in ogni versione per divertimento). La frase che
+                    conta
+                    è quello di mezzo, <strong>Chiamata di procedura remota</strong>. Tu scrivi <code>user, err :=
+          client.GetUser(ctx, &amp;pb.GetUserRequest{Id: 42})</code> e questo <em>sembra</em> come un metodo ordinario
+                    chiama,
+                    ma dietro le quinte gli argomenti vengono serializzati, spediti attraverso la rete a un server ed eseguiti
+                    lì, e
+                    il valore restituito viene rispedito, tutto nascosto dietro quell'unica riga.</p>
+
+                <p>Tre cose sono vere su gRPC e devi averle tutte e tre in testa contemporaneamente. È (1) a
+                    <strong>prima il contratto
+                        struttura RPC</strong>: descrivi la tua API in a <code>.proto</code> il file e il codice sono
+                    generato da esso; (2)
+                    serializza i dati con <strong>Buffer di protocollo</strong>, un formato binario compatto, invece del testo
+                    come JSON;
+                    e (3) trasporta quei byte <strong>HTTP/2</strong>, che gli conferisce multiplexing e reale
+                    streaming bidirezionale. Tutto il resto di questo manuale è una conseguenza di questi tre fatti.</p>
+
+                <div class="analogy">REST ti consegna un edificio con stanze indirizzabili (<em>risorse</em>) e un fisso
+                    insieme di
+                    cose che puoi fare in ogni stanza (GET, POST, ...). gRPC ti consegna un telecomando con etichettato
+                    pulsanti
+                    (<em>metodi</em>), non pensi alle stanze, premi <code>GetUser</code> o
+                    <code>SendPayment</code>
+                    e il lavoro avviene altrove. Un modello <em>sostantivi</em>; gli altri modelli <em>verbi</em>.</div>
+
+                <div class="viz">
+                    <div class="viz-cap">Dove si trova gRPC</div>
+                    <div class="viz-title">gRPC è composto da tre livelli: l'API generata, Protobuf e HTTP/2</div>
+                    <svg viewBox="0 0 720 270" xmlns="http://www.w3.org/2000/svg" role="img"
+                        aria-label="Lo stack gRPC: stub generati in alto, serializzazione dei buffer di protocollo al centro, trasporto HTTP/2 in basso, TCP/TLS in basso">
+                        <defs>
+                            <linearGradient id="g1" x1="0" y1="0" x2="1" y2="0">
+                                <stop offset="0" stop-color="#b8402e" />
+                                <stop offset="1" stop-color="#8f2f20" />
+                            </linearGradient>
+                        </defs>
+                        <text x="14" y="46" class="mono" font-size="11" font-weight="700" fill="#b8402e"
+                            transform="rotate(-90 14 46)" text-anchor="middle">LAVORI QUI</text>
+                        <path d="M30 16 H38 V76 H30" fill="none" stroke="#b8402e" stroke-width="2" />
+                        <g>
+                            <rect x="52" y="16" width="640" height="60" rx="9" fill="url(#g1)" />
+                            <text x="74" y="42" font-size="15" font-weight="700" fill="#fff">Il tuo servizio, stub e server generati</text>
+                            <text x="74" y="62" class="mono" font-size="11" fill="#f4d9cf">client.GetUser(ctx, req)
+                                / func (s) GetUser(ctx, req) / i metodi che chiami e implementi</text>
+                        </g>
+                        <g>
+                            <rect x="92" y="90" width="600" height="48" rx="9" fill="#ece3d4" stroke="#d8cfbe" />
+                            <text x="114" y="111" font-size="14" font-weight="700" fill="#3f6f4e">Buffer di protocollo, contratto + serializzazione binaria</text>
+                            <text x="114" y="128" class="mono" font-size="10.5" fill="#5b5347">messaggi -&gt; compatto
+                                byte/sec 04-05</text>
+                        </g>
+                        <g>
+                            <rect x="92" y="152" width="600" height="48" rx="9" fill="#ece3d4" stroke="#d8cfbe" />
+                            <text x="114" y="173" font-size="14" font-weight="700" fill="#211e1a">Trasporto frame HTTP/2, multiplex, bidirezionale</text>
+                            <text x="114" y="190" class="mono" font-size="10.5" fill="#5b5347">i flussi trasportano i byte
+                                / abilita tutte e 4 le tipologie di chiamata / sec 06</text>
+                        </g>
+                        <g>
+                            <rect x="92" y="214" width="600" height="40" rx="9" fill="#e6ddcc" stroke="#d8cfbe" />
+                            <text x="114" y="239" font-size="13.5" font-weight="600" fill="#5b5347">TCP + TLS, la pipe affidabile e crittografata</text>
+                        </g>
+                    </svg>
+                    <div class="viz-note">Lo strato superiore è l'unica parte che scrivi a mano. gRPC genera la colla che
+                        trasforma il tuo
+                        chiamate al metodo nei byte Protobuf che fluiscono sui flussi HTTP/2.</div>
+                </div>
+
+                <h3>&quot;Chiamata di procedura&quot; è l'idea stessa</h3>
+                <p>Nel codice ordinario, chiamare una funzione è un'operazione invisibile: passi gli argomenti, la CPU salta al file
+                    funzione,
+                    restituisce un valore. RPC pone una semplice domanda, <em>e se quella funzione vivesse su a
+                        computer diverso?</em>
+                    Il sogno di RPC (che risale agli anni '80) è fare rete <strong>scomparire</strong>,
+                    quindi un
+                    il sistema distribuito sembra un unico programma. gRPC ne è la realizzazione moderna e di livello produttivo
+                    sogno:
+                    non scrivi mai il codice socket, non analizzi mai una risposta manualmente, non crei mai un URL. Chiami un digitato
+                    metodo e
+                    gestire un risultato digitato o un errore digitato.</p>
+
+                <div class="box key"><span class="tag">La definizione di una frase</span>
+                    <p>gRPC = <strong>chiamate al metodo remoto digitate</strong>, definito da a <strong>Protobuff
+                            contratto</strong>,
+                        serializzato come <strong>binario compatto</strong>, riportato <strong>Flussi HTTP/2</strong>: quindi a
+                        il client in qualsiasi lingua può chiamare un server in qualsiasi altra lingua come se fosse locale.</p>
+                </div>
+            </section>
+
+            <!-- 2 -->
+            <section id="s2">
+                <div class="sec-head">
+                    <div class="sec-num">02</div>
+                    <h2>Perché esiste gRPC</h2>
+                </div>
+                <p>gRPC non sostituisce REST ovunque, è stato creato per risolvere i problemi specifici che mostrano
+                    su quando
+                    molti servizi (spesso in lingue diverse) dialogano tra loro costantemente, ad alto volume,
+                    <em>dentro</em> un
+                    sistema. Google lo ha costruito (open source nel 2015, evoluto da un sistema interno chiamato Stubby)
+                    precisamente
+                    perché REST-over-JSON era troppo lento, troppo lento e troppo limitato per il traffico da servizio a servizio
+                    la loro scala.
+                    Cinque problemi concreti ne hanno guidato la progettazione.</p>
+
+                <div class="tbl-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Il problema con REST/JSON</th>
+                                <th>Cosa fa invece gRPC</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><strong>JSON è ingombrante e lento.</strong> Testo, con nomi di campi ripetuti su ogni
+                                    oggetto; l'analisi è pesante per la CPU.</td>
+                                <td>Binario Protobuf: campo <em>numeri</em> non nomi, ricchi di varianti. Spesso
+                                    3-10 volte più piccolo e molto più veloce da (de)serializzare.</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Nessun contratto imposto.</strong> La forma di un payload JSON risiede nei documenti (o
+                                    la testa di qualcuno); la deriva causa interruzioni del runtime.</td>
+                                <td>Il <code>.proto</code> file <em>è</em> il contratto. Generazione client e server
+                                    codice dalla stessa origine, le mancate corrispondenze falliscono in fase di compilazione.</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Streaming debole.</strong> Il semplice HTTP/1.1 REST è richiesta-&gt;risposta;
+                                    lo streaming necessita di componenti aggiuntivi (SSE, polling, WebSocket grezzi).</td>
+                                <td>Quattro tipi di chiamata incluso lo streaming bidirezionale completo, nativo del framework
+                                    HTTP/2.</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Attrito poliglotta.</strong> Ogni lingua scrive a mano il proprio client e
+                                    serializzazione, in modo incoerente.</td>
+                                <td>Uno <code>.proto</code> genera client/server idiomatici per Go, Python, Java,
+                                    C++, Rust e altro ancora.</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Overhead della connessione HTTP/1.1.</strong> Una richiesta per connessione (o
+                                    blocco head-of-line), ripetute strette di mano.</td>
+                                <td>HTTP/2 esegue il multiplexing di molte chiamate simultanee <em>uno</em> legame di lunga durata.
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <h4>L'ambito onesto</h4>
+                <p>Questi punti di forza sono mirati <strong>interno, da macchina a macchina</strong> comunicazione, microservizi,
+                    backend-to-backend, da mobile a backend dove controlli entrambe le estremità. gRPC è <em>più debole</em> che RESTO
+                    per
+                    API pubbliche rivolte al browser (i browser non possono parlare gRPC raw, vedere la sezione 19) e per
+                    debuggabile dall'uomo,
+                    endpoint cache-friendly e ampiamente compatibili. Il confronto completo è sec. 18; per ora, tieni il
+                    telaio:
+                    <strong>gRPC è il sistema nervoso interno; REST è la porta d'ingresso del pubblico.</strong>
+                </p>
+
+                <div class="box note"><span class="tag">Dove lo incontrerai</span>
+                    <p>Mesh di servizi (Istio, Linkerd), macchinari API di Kubernetes, ecc., CockroachDB, xDS di Envoy,
+                        e i grafici delle chiamate interne della maggior parte delle grandi piattaforme fintech/consumer. Se hai inviato un pagamento
+                        o in streaming
+                        un video, gRPC quasi certamente trasportava qualche salto di quella richiesta tra i servizi di backend.</p>
+                </div>
+            </section>
+
+            <!-- 3 -->
+            <section id="s3">
+                <div class="sec-head">
+                    <div class="sec-num">03</div>
+                    <h2>Il modello mentale RPC</h2>
+                </div>
+                <p>Prima di qualsiasi sintassi interiorizzare l'apparato che effettua una chiamata remota <em>guarda</em> locale, perché
+                    ogni gRPC
+                    il concetto in seguito è solo una parte con nome di questa immagine. Una chiamata di funzione locale e una remota differiscono
+                    esattamente
+                    un posto: tra &quot;chiamata&quot; ed &quot;eseguita&quot;, gli argomenti devono attraversare una rete. RPC ne inserisce due
+                    pezzi di
+                    codice generato, a <strong>troncone</strong> sul cliente e a <strong>scheletro/gestore</strong>
+                    sul
+                    server, per nascondere quell'incrocio.</p>
+
+                <div class="viz">
+                    <div class="viz-cap">L'anatomia di una chiamata remota</div>
+                    <div class="viz-title">Stub e skeleton nascondono la rete tra &quot;call&quot; ed &quot;execute&quot;</div>
+                    <svg viewBox="0 0 720 320" xmlns="http://www.w3.org/2000/svg" role="img"
+                        aria-label="Un client chiama uno stub che serializza la richiesta, la invia attraverso la rete allo scheletro del server che deserializza, esegue il metodo reale e la risposta torna indietro nella direzione opposta">
+                        <defs>
+                            <marker id="rar" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto">
+                                <path d="M0 0 L7 3 L0 6 Z" fill="#b8402e" />
+                            </marker>
+                            <marker id="tar" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto">
+                                <path d="M0 0 L7 3 L0 6 Z" fill="#3f6f4e" />
+                            </marker>
+                        </defs>
+                        <!-- client column -->
+                        <text x="120" y="22" class="mono" font-size="12" font-weight="700" fill="#b8402e"
+                            text-anchor="middle">PROCESSO CLIENTE</text>
+                        <rect x="30" y="34" width="180" height="44" rx="8" fill="#b8402e" />
+                        <text x="120" y="54" font-size="13" font-weight="700" fill="#fff" text-anchor="middle">tuo
+                            codice</text>
+                        <text x="120" y="70" class="mono" font-size="9.5" fill="#f4d9cf"
+                            text-anchor="middle">client.GetUser(req)</text>
+                        <rect x="30" y="92" width="180" height="56" rx="8" fill="#ece3d4" stroke="#b8402e" />
+                        <text x="120" y="113" font-size="12.5" font-weight="700" fill="#8f2f20"
+                            text-anchor="middle">STUB (generato)</text>
+                        <text x="120" y="130" class="mono" font-size="9" fill="#5b5347" text-anchor="middle">serializzare
+                            argomenti -&gt; byte</text>
+                        <text x="120" y="143" class="mono" font-size="9" fill="#5b5347" text-anchor="middle">inviare
+                            HTTP/2</text>
+                        <!-- server column -->
+                        <text x="600" y="22" class="mono" font-size="12" font-weight="700" fill="#3f6f4e"
+                            text-anchor="middle">PROCESSO DEL SERVER</text>
+                        <rect x="510" y="34" width="180" height="44" rx="8" fill="#3f6f4e" />
+                        <text x="600" y="54" font-size="13" font-weight="700" fill="#fff" text-anchor="middle">reale
+                            viene eseguito il metodo</text>
+                        <text x="600" y="70" class="mono" font-size="9.5" fill="#dceeea" text-anchor="middle">interroga il DB,
+                            calcolare...</text>
+                        <rect x="510" y="92" width="180" height="56" rx="8" fill="#e0e9dd" stroke="#3f6f4e" />
+                        <text x="600" y="113" font-size="12.5" font-weight="700" fill="#3f6f4e"
+                            text-anchor="middle">SCHELETRO (generato)</text>
+                        <text x="600" y="130" class="mono" font-size="9" fill="#5b5347" text-anchor="middle">deserializzare
+                            byte -&gt; argomenti</text>
+                        <text x="600" y="143" class="mono" font-size="9" fill="#5b5347" text-anchor="middle">spedire a
+                            gestore</text>
+                        <!-- the wire -->
+                        <rect x="250" y="170" width="220" height="40" rx="20" fill="#232019" />
+                        <text x="360" y="194" class="mono" font-size="11" fill="#7fd1c4" text-anchor="middle">rete, Protobuf su HTTP/2</text>
+                        <!-- request arrow down-across -->
+                        <path d="M150 148 C150 210 220 250 250 232" fill="none" stroke="#b8402e" stroke-width="1.8"
+                            marker-end="url(#rar)" />
+                        <text x="170" y="250" class="mono" font-size="10" fill="#8f2f20">richiesta byte -&gt;</text>
+                        <path d="M470 232 C500 250 560 210 580 150" fill="none" stroke="#b8402e" stroke-width="1.8"
+                            marker-end="url(#rar)" />
+                        <!-- response arrow back -->
+                        <path d="M580 90 C560 60 360 60 360 168" fill="none" stroke="#3f6f4e" stroke-width="1.8"
+                            stroke-dasharray="5 3" marker-end="url(#tar)" />
+                        <text x="360" y="285" class="serif" font-size="12.5" font-style="italic" fill="#5b5347"
+                            text-anchor="middle">&lt;- i byte di risposta percorrono il percorso inverso, deserializzati nuovamente in a
+                            valore restituito digitato</text>
+                    </svg>
+                    <div class="viz-note">&quot;Marshalling&quot; = trasformare un oggetto linguistico in byte; &quot;disordinato&quot; = il
+                        inverso. Il
+                        stub effettua il marshalling della richiesta e annulla il marshalling della risposta; lo scheletro fa l'immagine speculare. Tu
+                        non scrivere nessuno dei due.</div>
+                </div>
+
+                <h4>L'avviso di perdita di astrazione</h4>
+                <p>RPC tenta di rendere la rete invisibile, ma la rete lo è <em>mai</em> veramente invisibile,
+                    e fingendo
+                    altrimenti è la classica trappola RPC. Una chiamata locale non può scadere, perdersi o essere riordinata; un telecomando
+                    si può fare
+                    tutti e tre. Ecco perché gRPC offre strumenti di prima classe per le cose che una chiamata locale non ha mai avuto bisogno:
+                    <strong>scadenze</strong>
+                    (sez. 13), <strong>codici di stato</strong> per guasto parziale (sez 14), <strong>riprova</strong>
+                    (sez. 17),
+                    e <strong>cancellazione</strong>. Tratta ogni chiamata remota come &quot;una chiamata locale che può fallire
+                    a forma di rete
+                    modi&quot;, e progetterai sistemi resilienti anziché fragili.</p>
+
+                <div class="box gotcha"><span class="tag">Non far finta che il filo non ci sia</span>
+                    <p>L'errore più grande con RPC è scrivere le chiamate remote come se fossero gratuite e infallibili, no
+                        timeout, nessuna gestione degli errori per <code>UNAVAILABLE</code>, nessun pensiero sulla latenza in un ciclo. Il
+                        astrazione
+                        è una comodità, non una garanzia. Passa sempre un contesto/scadenza e gestisci sempre l'errore.
+                    </p>
+                </div>
+            </section>
+
+            <div class="part-label">Parte II / I due pilastri</div>
+
+            <!-- 4 -->
+            <section id="s4">
+                <div class="sec-head">
+                    <div class="sec-num">04</div>
+                    <h2>Buffer di protocollo: il contratto</h2>
+                </div>
+                <p>Protocol Buffers (&quot;protobuf&quot;) sono due cose che portano lo stesso nome: an <strong>IDL</strong>
+                    (Interfaccia
+                    Linguaggio di definizione) per <em>descrivendo</em> i tuoi messaggi e servizi e a <strong>binario
+                        serializzazione
+                        formato</strong> per <em>codifica</em> loro sul filo. Questa sezione è la metà di IDL, il
+                    <code>.proto</code> file che è l'unica fonte di verità da cui entrambe le parti generano codice. Ottieni il
+                    contratto
+                    giusto e il client e il server non possono letteralmente essere in disaccordo sulla forma dei dati.
+                </p>
+
+                <p>A <code>.proto</code> il file definisce <strong>messaggi</strong> (le strutture dati) e
+                    <strong>servizi</strong>
+                    (raccolte di metodi RPC). Ecco un esempio completo e realistico di un servizio utente, annotato
+                    con ogni regola che conta:</p>
+
+                <div class="codeblock single">
+                    <div class="code-bar">
+                        <div class="dots"><i></i><i></i><i></i></div><span class="filename">utente.proto</span>
+                    </div>
+                    <pre><code class="language-protobuf">syntax = "proto3";              // always declare the syntax; proto3 is current
+
+package user.v1;                // namespace + a versioning convention (v1, v2...)
+
+option go_package = "example.com/gen/userv1;userv1";  // where generated Go lands
+
+// A message is a typed record. Each FIELD has a type, a name, and a NUMBER.
+message User {
+  string id          = 1;       // the "= 1" is the FIELD NUMBER, not a value
+  string email       = 2;
+  string full_name   = 3;
+  Role   role        = 4;       // a nested enum (declared below)
+  repeated string tags = 5;     // "repeated" = a list/array of strings
+  int64  created_at  = 6;       // unix seconds; proto3 has no native date
+}
+
+// An enum is a fixed set of named values. The first MUST be 0 (the default).
+enum Role {
+  ROLE_UNSPECIFIED = 0;         // 0 is the implicit default, reserve it
+  ROLE_MEMBER      = 1;
+  ROLE_ADMIN       = 2;
+}
+
+message GetUserRequest  { string id = 1; }
+message GetUserResponse { User user = 1; }   // messages nest inside messages
+
+message CreateUserRequest {
+  string email     = 1;
+  string full_name = 2;
+  optional string phone = 3;    // "optional" tracks presence: set vs unset vs ""
+}
+
+// A SERVICE is a set of methods. Each takes one message and returns one message.
+service UserService {
+  rpc GetUser    (GetUserRequest)    returns (GetUserResponse);
+  rpc CreateUser (CreateUserRequest) returns (User);
+}</code></pre>
+                </div>
+
+                <h3>Le regole che mordono davvero</h3>
+                <ul>
+                    <li><strong>I numeri di campo sono la vera identità, non i nomi.</strong> Sul filo, <code>email</code>
+                        è
+                        trasmesso come campo <code>2</code>, mai come stringa &quot;email&quot; (ecco perché protobuf è
+                        compatto, sezione 05). Il nome è per <em>tuo</em> codice; il numero è il contratto.</li>
+                    <li><strong>Non modificare o riutilizzare mai un numero di campo.</strong> Questa è la regola cardinale dello schema
+                        evoluzione. Rinominare
+                        un campo è sicuro (i nomi non sono in rete); cambiandolo <em>numero</em> o <em>tipo</em>
+                        corrompe silenziosamente
+                        dati per qualsiasi peer che utilizza ancora la vecchia definizione. Per rimuovere un campo, contrassegnalo
+                        <code>reserved</code> quindi il
+                        il numero non può mai essere riutilizzato accidentalmente.</li>
+                    <li><strong>L'aggiunta di campi è compatibile con le versioni precedenti.</strong> Assegna un nuovo numero a un nuovo campo; vecchio
+                        clienti semplicemente
+                        non lo vedono, i nuovi server lo considerano non impostato quando un vecchio client lo omette. Ecco come funziona un'API gRPC
+                        si evolve
+                        senza rompere i consumatori distribuiti, la stessa disciplina di cambiamento additivo che conosci
+                        Controllo delle versioni REST.</li>
+                    <li><strong>proto3 ha valori predefiniti, non valori nulli.</strong> Un disassetto <code>string</code> è
+                        <code>""</code>, un disinserimento
+                        <code>int</code> è <code>0</code>, un disinserimento <code>bool</code> è <code>false</code>. Se tu
+                        deve distinguere
+                        &quot;assente&quot; da &quot;zero&quot;, usare <code>optional</code> (che aggiunge il monitoraggio della presenza), lo stesso
+                        trappola come quella di Go
+                        valori zero, risolti allo stesso modo (la sezione 13 dei manuali REST/gestori fa eco a questo).
+                    </li>
+                </ul>
+
+                <div class="tbl-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Costruisci</th>
+                                <th>Significa</th>
+                                <th>Note</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td class="mono-cell">scalare</td>
+                                <td><code>int32 int64 uint32 sint32 fixed64 float double bool string bytes</code></td>
+                                <td>Scegli <code>sint*</code> per numeri spesso negativi; <code>bytes</code> per crudo
+                                    binario.</td>
+                            </tr>
+                            <tr>
+                                <td class="mono-cell">ripetuto</td>
+                                <td>Un elenco ordinato del tipo di campo</td>
+                                <td>L'equivalente protobuf di un array/sezione.</td>
+                            </tr>
+                            <tr>
+                                <td class="mono-cell">enum</td>
+                                <td>Un insieme di valori fissi; la prima voce deve essere <code>0</code></td>
+                                <td>Integrità + autodocumentazione, come un'enumerazione Postgres.</td>
+                            </tr>
+                            <tr>
+                                <td class="mono-cell">uno di</td>
+                                <td>Al massimo è impostato uno dei diversi campi</td>
+                                <td>Un'unione contrassegnata, ad es. un risultato che è <em>neanche</em> un valore <em>o</em> un
+                                    errore.</td>
+                            </tr>
+                            <tr>
+                                <td class="mono-cell">mappa&lt;k,v&gt;</td>
+                                <td>Un array associativo</td>
+                                <td>Zucchero su un messaggio chiave/valore ripetuto.</td>
+                            </tr>
+                            <tr>
+                                <td class="mono-cell">facoltativo</td>
+                                <td>Aggiunge il rilevamento esplicito della presenza a uno scalare</td>
+                                <td>Distingue &quot;non impostato&quot; dal valore zero.</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="box key"><span class="tag">Il contratto è l'API</span>
+                    <p>In REST il contratto è in prosa in un documento Swagger e il codice può corrispondere o meno. Nel gRPC il
+                        <code>.proto</code> <em>è</em> verità eseguibile: entrambe le parti generano da essa, quindi un campo tu
+                        aggiunto o un tipo
+                        che hai modificato si riflette sia sui client che sui server nel momento in cui si rigenerano. Lo schema
+                        non posso in silenzio
+                        allontanarsi dall’implementazione.
+                    </p>
+                </div>
+            </section>
+
+            <!-- 5 -->
+            <section id="s5">
+                <div class="sec-head">
+                    <div class="sec-num">05</div>
+                    <h2>Come codifica Protobuf: il formato Wire</h2>
+                </div>
+                <p>Il motivo per cui gRPC è veloce e piccolo è tutto <em>come</em> protobuf trasforma un messaggio in byte. Tu
+                    non farlo
+                    scrivilo a mano, ma comprenderlo spiega ogni affermazione di prestazione e ogni trucco. Il nucleo
+                    trucco:
+                    ogni campo è scritto come minuscolo <strong>etichetta</strong> (che codifica il campo <em>numero</em> e un
+                    <em>tipo di filo</em>) seguito dal valore e gli interi vengono compressi utilizzando
+                    <strong>varianti</strong> quello
+                    utilizzare meno byte per numeri più piccoli. Nessun nome di campo, nessuna virgoletta, nessuna virgola, nessuno spazio bianco.
+                </p>
+
+                <div class="viz">
+                    <div class="viz-cap">JSON vs Protobuf, stessi dati</div>
+                    <div class="viz-title">Perché la forma binaria è drammaticamente più piccola</div>
+                    <svg viewBox="0 0 720 250" xmlns="http://www.w3.org/2000/svg" role="img"
+                        aria-label="Un confronto che mostra un oggetto JSON di circa 52 byte rispetto alla codifica protobuf equivalente di circa 20 byte">
+                        <text x="20" y="24" class="mono" font-size="12" font-weight="700" fill="#b8402e">JSON, testo, nomi ripetuti ogni volta</text>
+                        <rect x="20" y="34" width="680" height="58" rx="8" fill="#232019" />
+                        <text x="34" y="58" class="mono" font-size="12"
+                            fill="#7fd1c4">{&quot;id&quot;:&quot;u42&quot;,&quot;role&quot;:2,&quot;created_at&quot;:1717</text>
+                        <text x="34" y="78" class="mono" font-size="12" fill="#7fd1c4">attento: ogni chiave, citazione, parentesi graffa
+                            e la virgola sono byte sul cavo</text>
+                        <text x="640" y="58" class="mono" font-size="13" font-weight="700" fill="#d05a47"
+                            text-anchor="end">~52 B</text>
+
+                        <text x="20" y="124" class="mono" font-size="12" font-weight="700" fill="#3f6f4e">Protobuf, numeri di campo + varianti, nessun nome</text>
+                        <rect x="20" y="134" width="680" height="58" rx="8" fill="#232019" />
+                        <!-- byte cells -->
+                        <g class="mono" font-size="11" fill="#fff">
+                            <rect x="34" y="148" width="58" height="30" rx="4" fill="#3f6f4e" /><text x="63" y="168"
+                                text-anchor="middle">0A 03</text>
+                            <rect x="96" y="148" width="64" height="30" rx="4" fill="#3f6f4e" /><text x="128" y="168"
+                                text-anchor="middle">u 4 2</text>
+                            <rect x="164" y="148" width="44" height="30" rx="4" fill="#b07d2b" /><text x="186" y="168"
+                                text-anchor="middle">20 02</text>
+                            <rect x="212" y="148" width="92" height="30" rx="4" fill="#8f2f20" /><text x="258" y="168"
+                                text-anchor="middle">30 ...variante</text>
+                        </g>
+                        <text x="640" y="158" class="mono" font-size="13" font-weight="700" fill="#5a9a5f"
+                            text-anchor="end">~20 B</text>
+                        <text x="320" y="176" class="mono" font-size="9" fill="#dceeea">tag valore lente/tag
+                            valore</text>
+                        <text x="360" y="218" class="serif" font-size="13" font-style="italic" fill="#5b5347"
+                            text-anchor="middle">Stesse informazioni, ben meno della metà delle dimensioni e nessuna analisi del testo
+                            per decodificarlo.</text>
+                    </svg>
+                    <div class="viz-note">Moltiplica questo risparmio per milioni di messaggi al secondo e capirai perché
+                        ad alto traffico
+                        i sistemi interni raggiungono protobuf su JSON.</div>
+                </div>
+
+                <h3>Il tag: numero di campo + tipo di filo in un byte (di solito)</h3>
+                <p>Ogni campo sul cavo inizia con un tag calcolato come
+                    <code>(field_number &lt;&lt; 3) | wire_type</code>. Il
+                    i 3 bit bassi sono i <strong>tipo di filo</strong> (come leggere i byte che seguono: varint, 64 bit,
+                    delimitato dalla lunghezza,
+                    32 bit); il resto è il <strong>numero del campo</strong>. Quindi il decodificatore legge il tag e apprende &quot;this
+                    è il campo 2,
+                    ed è delimitato in lunghezza&quot;, e sa esattamente come consumare ciò che verrà dopo, anche se lo ha fatto
+                    mai visto
+                    quel campo prima (può saltare i campi sconosciuti, che è ciò che fa funzionare la compatibilità futura).</p>
+
+                <div class="viz">
+                    <div class="viz-cap">Decodifica di un campo</div>
+                    <div class="viz-title">Come un tag byte dice al lettore cosa fare dopo</div>
+                    <svg viewBox="0 0 720 200" xmlns="http://www.w3.org/2000/svg" role="img"
+                        aria-label="Un byte di tag suddiviso in una porzione di numero di campo e una porzione di tipo cavo a 3 bit, che determina il modo in cui vengono interpretati i byte successivi">
+                        <text x="20" y="28" class="mono" font-size="12" font-weight="700" fill="#b8402e">tag byte =
+                            (campo_numero &lt;&lt; 3) | tipo_filo</text>
+                        <rect x="20" y="42" width="300" height="46" rx="8" fill="#b8402e" />
+                        <text x="120" y="62" font-size="12" font-weight="700" fill="#fff" text-anchor="middle">campo
+                            numero</text>
+                        <text x="120" y="79" class="mono" font-size="10" fill="#f4d9cf" text-anchor="middle">superiore
+                            bit</text>
+                        <rect x="240" y="42" width="80" height="46" rx="8" fill="#b07d2b" />
+                        <text x="280" y="62" font-size="11.5" font-weight="700" fill="#fff" text-anchor="middle">filo
+                            tipo</text>
+                        <text x="280" y="79" class="mono" font-size="10" fill="#fff" text-anchor="middle">3 bit</text>
+                        <path d="M360 65 H470" stroke="#5b5347" stroke-width="1.6" marker-end="url(#war)" />
+                        <defs>
+                            <marker id="war" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto">
+                                <path d="M0 0 L7 3 L0 6 Z" fill="#5b5347" />
+                            </marker>
+                        </defs>
+                        <g class="mono" font-size="10.5" fill="#211e1a">
+                            <text x="486" y="40">0 = VARINT, int32/64, bool, enum</text>
+                            <text x="486" y="60">1 = I64, fisso64, doppio</text>
+                            <text x="486" y="80">2 = LEN, stringa, byte, messaggi</text>
+                            <text x="486" y="100">5 = I32, fisso32, mobile</text>
+                        </g>
+                        <text x="20" y="124" class="mono" font-size="11" font-weight="700" fill="#3f6f4e">variante: piccola
+                            i numeri costano meno byte</text>
+                        <g class="mono" font-size="10.5" fill="#5b5347">
+                            <text x="20" y="146">1 -&gt; 1 byte / 300 -&gt; 2 byte
+                                 /70000 -&gt; 3 byte</text>
+                            <text x="20" y="166">ogni byte utilizza 7 bit per i dati + 1 bit &quot;continua&quot;, quindi
+                                i valori aumentano la loro codifica solo se necessario</text>
+                        </g>
+                    </svg>
+                    <div class="viz-note">Perché il lettore può identificare e <em>salta</em> un campo non è così
+                        riconoscere, un nuovo
+                        il server può aggiungere campi senza interrompere i vecchi client, il formato wire è autodescrittivo
+                        abbastanza per scavalcare l'ignoto.</div>
+                </div>
+
+                <div class="box gotcha"><span class="tag">Il costo del binario: non è leggibile dall'uomo</span>
+                    <p>Non puoi <code>curl</code> un endpoint gRPC e osserva il JSON. Il debug richiede strumenti che
+                        capire il
+                        schema (<code>grpcurl</code>, riflessione, sez 20). Quella opacità è il prezzo del
+                        velocità e dimensioni;
+                        è il motivo principale per cui le API pubbliche/debuggabili spesso rimangono su REST.</p>
+                </div>
+            </section>
+
+            <!-- 6 -->
+            <section id="s6">
+                <div class="sec-head">
+                    <div class="sec-num">06</div>
+                    <h2>HTTP/2: il trasporto sottostante</h2>
+                </div>
+                <p>gRPC non inventa il proprio mezzo di trasporto, va avanti <strong>HTTP/2</strong>, e quasi tutti
+                    gRPC
+                    la superpotenza (concorrenza, tutte e quattro le forme di streaming, basso sovraccarico) è in realtà una funzionalità HTTP/2. Il
+                    cosa a
+                    capire è l'idea centrale di HTTP/2: una singola connessione TCP è divisa in molte connessioni indipendenti,
+                    intercalato
+                    <strong>flussi</strong>, ciascuno contenente una sequenza di binari <strong>cornici</strong>. Ecco cosa
+                    lasciane uno
+                    La connessione trasporta centinaia di RPC simultanei e consente il flusso di dati in entrambe le direzioni contemporaneamente.
+                </p>
+
+                <div class="viz">
+                    <div class="viz-cap">Multiplexing</div>
+                    <div class="viz-title">Una connessione, molti RPC simultanei interlacciati come frame</div>
+                    <svg viewBox="0 0 720 250" xmlns="http://www.w3.org/2000/svg" role="img"
+                        aria-label="HTTP/1.1 che richiede molte connessioni rispetto a HTTP/2 che interlaccia quattro flussi di frame su una connessione">
+                        <text x="20" y="22" class="mono" font-size="12" font-weight="700" fill="#b8402e">HTTP/1.1, una chiamata blocca la linea (o richiede molte connessioni)</text>
+                        <rect x="20" y="32" width="120" height="22" rx="4" fill="#d05a47" /><text x="80" y="48"
+                            font-size="10" fill="#fff" text-anchor="middle">chiama A</text>
+                        <rect x="148" y="32" width="120" height="22" rx="4" fill="#cfcfcf" /><text x="208" y="48"
+                            font-size="10" fill="#555" text-anchor="middle">la chiamata B attende</text>
+                        <rect x="276" y="32" width="120" height="22" rx="4" fill="#cfcfcf" /><text x="336" y="48"
+                            font-size="10" fill="#555" text-anchor="middle">la chiamata C attende</text>
+
+                        <text x="20" y="92" class="mono" font-size="12" font-weight="700" fill="#3f6f4e">HTTP/2, una connessione, 4 flussi interlacciati</text>
+                        <line x1="20" y1="104" x2="700" y2="104" stroke="#d8cfbe" />
+                        <g class="mono" font-size="9.5" fill="#5b5347">
+                            <text x="22" y="128">A</text><text x="22" y="154">B</text><text x="22" y="180">C</text><text
+                                x="22" y="206">D</text>
+                        </g>
+                        <rect x="44" y="116" width="38" height="18" rx="3" fill="#3f6f4e" />
+                        <rect x="150" y="116" width="38" height="18" rx="3" fill="#3f6f4e" />
+                        <rect x="44" y="142" width="34" height="18" rx="3" fill="#b8402e" />
+                        <rect x="210" y="142" width="34" height="18" rx="3" fill="#b8402e" />
+                        <rect x="380" y="142" width="34" height="18" rx="3" fill="#b8402e" />
+                        <rect x="92" y="168" width="38" height="18" rx="3" fill="#3f6f4e" />
+                        <rect x="250" y="168" width="38" height="18" rx="3" fill="#3f6f4e" />
+                        <rect x="120" y="194" width="38" height="18" rx="3" fill="#b07d2b" />
+                        <rect x="300" y="194" width="38" height="18" rx="3" fill="#b07d2b" />
+                        <text x="430" y="160" font-size="11" font-style="italic" fill="#3f6f4e">fotogrammi diversi
+                            le chiamate condividono il cavo, in qualsiasi ordine</text>
+                        <text x="360" y="236" class="serif" font-size="12.5" font-style="italic" fill="#5b5347"
+                            text-anchor="middle">Nessun blocco iniziale a livello HTTP: una chiamata lenta non si blocca mai
+                            gli altri sulla connessione.</text>
+                    </svg>
+                    <div class="viz-note">Un gRPC <em>chiamare</em> mappa su un HTTP/2 <em>flusso</em>. Molte chiamate -&gt;
+                        molti flussi
+                        -&gt; una connessione. Questo è il motivo per cui un client gRPC mantiene una connessione di lunga durata e la riutilizza.
+                    </div>
+                </div>
+
+                <h4>Come una chiamata gRPC viene mappata su HTTP/2</h4>
+                <p>Concretamente, un RPC è un HTTP/2 <code>POST</code> ad un percorso a forma di
+                    <code>/package.Service/Method</code>
+                    (e.g. <code>/user.v1.UserService/GetUser</code>). I metadati gRPC viaggiano come HTTP/2
+                    <strong>intestazioni</strong>; il
+                    viaggia il protobuf serializzato <strong>Cornici DATI</strong> come il corpo; e lo stato finale (i
+                    stato gRPC
+                    code, sec 14) arriva in HTTP/2 <strong>rimorchi</strong> dopo il corpo. Streaming semplice
+                    significa di più
+                    di un messaggio scorre in una o entrambe le direzioni su quel flusso prima che si chiuda.</p>
+
+                <div class="tbl-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>concetto di gRPC</th>
+                                <th>Meccanismo HTTP/2</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td>Una chiamata RPC</td>
+                                <td>Un flusso HTTP/2 (richiesta + risposta)</td>
+                            </tr>
+                            <tr>
+                                <td>Metodo chiamato</td>
+                                <td><code>:path</code> intestazione = <code>/pkg.Service/Method</code></td>
+                            </tr>
+                            <tr>
+                                <td>Metadati (token di autenticazione, ID di traccia)</td>
+                                <td>Richiesta e risposta HTTP/2 <strong>intestazioni</strong></td>
+                            </tr>
+                            <tr>
+                                <td>Il/i messaggio/i di richiesta/risposta</td>
+                                <td>protobuf con lunghezza prefissata in <strong>Cornici DATI</strong></td>
+                            </tr>
+                            <tr>
+                                <td>Stato finale + messaggio</td>
+                                <td><code>grpc-status</code> / <code>grpc-message</code> <strong>rimorchi</strong></td>
+                            </tr>
+                            <tr>
+                                <td>Streaming</td>
+                                <td>più frame DATA prima che il flusso si chiuda a metà</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="box note"><span class="tag">Perché questo è importante per te</span>
+                    <p>Poiché gRPC necessita di HTTP/2 <em>dall'inizio alla fine</em>, qualsiasi proxy/bilanciatore del carico nel percorso deve parlare
+                        HTTP/2 e farlo
+                        <em>L7</em> (in base alla richiesta), un ingenuo bilanciatore TCP L4 fisserà ogni chiamata a uno
+                        back-end,
+                        poiché condividono tutti una connessione (sez. 17). E poiché i browser non possono esporre HTTP/2 non elaborato
+                        inquadratura in JS,
+                        i browser non possono affatto parlare gRPC nativo (sez. 19). La scelta del trasporto modella il tutto
+                        storia di distribuzione.
+                    </p>
+                </div>
+            </section>
+
+            <div class="part-label">Parte III / I quattro tipi di chiamata</div>
+
+            <section id="s7">
+                <div class="sec-head">
+                    <div class="sec-num">07</div>
+                    <h2>RPC unario</h2>
+                </div>
+                <p>La forma più semplice e più comune: <strong>una richiesta, una risposta</strong>: esattamente come a
+                    normale
+                    chiamata di funzione. Il client invia un singolo messaggio, il server fa il suo lavoro e restituisce un singolo
+                    messaggio. ~90%
+                    degli RPC del mondo reale sono unari. Costruiremo il <code>GetUser</code> metodo da
+                    <code>user.proto</code> dentro
+                    sec 04, integralmente, in entrambe le lingue.</p>
+
+                <div class="viz">
+                    <div class="viz-cap">Unario</div>
+                    <div class="viz-title">Un messaggio a tratta</div>
+                    <svg viewBox="0 0 720 130" xmlns="http://www.w3.org/2000/svg" role="img"
+                        aria-label="Il client invia una richiesta, il server restituisce una risposta">
+                        <rect x="40" y="20" width="150" height="40" rx="8" fill="#b8402e" /><text x="115" y="45"
+                            font-size="13" font-weight="700" fill="#fff" text-anchor="middle">Cliente</text>
+                        <rect x="530" y="20" width="150" height="40" rx="8" fill="#3f6f4e" /><text x="605" y="45"
+                            font-size="13" font-weight="700" fill="#fff" text-anchor="middle">Server</text>
+                        <defs>
+                            <marker id="u1" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto">
+                                <path d="M0 0 L7 3 L0 6 Z" fill="#b8402e" />
+                            </marker>
+                            <marker id="u2" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto">
+                                <path d="M0 0 L7 3 L0 6 Z" fill="#3f6f4e" />
+                            </marker>
+                        </defs>
+                        <path d="M195 40 H525" stroke="#b8402e" stroke-width="2" marker-end="url(#u1)" /><text x="360"
+                            y="32" class="mono" font-size="11" fill="#8f2f20" text-anchor="middle">1 richiesta</text>
+                        <path d="M525 75 H195" stroke="#3f6f4e" stroke-width="2" stroke-dasharray="5 3"
+                            marker-end="url(#u2)" /><text x="360" y="98" class="mono" font-size="11" fill="#3f6f4e"
+                            text-anchor="middle">1 risposta</text>
+                    </svg>
+                </div>
+
+                <div class="codeblock" data-cb>
+                    <div class="code-bar">
+                        <div class="dots"><i></i><i></i><i></i></div>
+                        <div class="code-tabs"><button class="on" data-lang="go"><span class="lang-go">&amp;#9679;</span>
+                                Vai</button><button data-lang="py"><span class="lang-py">&amp;#9679;</span> Pitone</button>
+                        </div>
+                    </div>
+                    <div class="code-panel on" data-panel="go">
+                        <pre><code class="language-go">// ===== SERVER =====
+package main
+
+import (
+    "context"
+    "log"
+    "net"
+
+    "google.golang.org/grpc"
+    "google.golang.org/grpc/codes"
+    "google.golang.org/grpc/status"
+    userv1 "example.com/gen/userv1" // generated from user.proto
+)
+
+// Embed the generated UnimplementedUserServiceServer for forward-compat.
+type server struct {
+    userv1.UnimplementedUserServiceServer
+}
+
+// The method signature is generated FROM the proto: ctx, *Request -> *Response, error
+func (s *server) GetUser(ctx context.Context, req *userv1.GetUserRequest) (*userv1.GetUserResponse, error) {
+    if req.GetId() == "" {
+        return nil, status.Error(codes.InvalidArgument, "id is required") // typed error, sec 14
+    }
+    // ...real work: query the DB by req.GetId()...
+    u := &userv1.User{Id: req.GetId(), Email: "ada@example.com", FullName: "Ada", Role: userv1.Role_ROLE_ADMIN}
+    return &userv1.GetUserResponse{User: u}, nil
+}
+
+func main() {
+    lis, _ := net.Listen("tcp", ":50051")
+    s := grpc.NewServer()
+    userv1.RegisterUserServiceServer(s, &server{}) // wire the impl to the service
+    log.Println("gRPC on :50051")
+    s.Serve(lis)
+}
+
+// ===== CLIENT =====
+func callGetUser() {
+    // NewClient replaces the deprecated grpc.Dial; insecure creds for local dev only
+    conn, _ := grpc.NewClient("localhost:50051", grpc.WithTransportCredentials(insecure.NewCredentials()))
+    defer conn.Close()
+
+    client := userv1.NewUserServiceClient(conn) // the generated STUB
+    ctx, cancel := context.WithTimeout(context.Background(), time.Second) // always a deadline, sec 13
+    defer cancel()
+
+    resp, err := client.GetUser(ctx, &userv1.GetUserRequest{Id: "u42"}) // looks local, runs remote
+    if err != nil {
+        log.Fatalf("GetUser failed: %v", err) // err carries the gRPC status code
+    }
+    log.Printf("got user: %s", resp.GetUser().GetFullName())
+}</code></pre>
+                    </div>
+                    <div class="code-panel" data-panel="py">
+                        <pre><code class="language-python"># ===== SERVER =====
+from concurrent import futures
+import grpc
+import user_pb2 as pb          # generated: messages
+import user_pb2_grpc as pb_grpc  # generated: service base classes
+
+class UserService(pb_grpc.UserServiceServicer):
+    # Method signature generated FROM the proto: (self, request, context) -> response
+    def GetUser(self, request, context):
+        if not request.id:
+            context.abort(grpc.StatusCode.INVALID_ARGUMENT, "id is required")  # typed error, sec 14
+        # ...real work: query the DB by request.id...
+        user = pb.User(id=request.id, email="ada@example.com",
+                       full_name="Ada", role=pb.ROLE_ADMIN)
+        return pb.GetUserResponse(user=user)
+
+def serve():
+    server = grpc.server(futures.ThreadPoolExecutor(max_workers=10))
+    pb_grpc.add_UserServiceServicer_to_server(UserService(), server)  # wire impl to service
+    server.add_insecure_port("[::]:50051")  # insecure = local dev only
+    server.start()
+    print("gRPC on :50051")
+    server.wait_for_termination()
+
+# ===== CLIENT =====
+def call_get_user():
+    with grpc.insecure_channel("localhost:50051") as channel:
+        stub = pb_grpc.UserServiceStub(channel)        # the generated STUB
+        try:
+            # timeout= is the deadline, sec 13; looks local, runs remote
+            resp = stub.GetUser(pb.GetUserRequest(id="u42"), timeout=1.0)
+            print("got user:", resp.user.full_name)
+        except grpc.RpcError as e:
+            print("failed:", e.code(), e.details())     # carries the gRPC status code
+
+if __name__ == "__main__":
+    serve()</code></pre>
+                    </div>
+                </div>
+                <p class="code-cap">Notare la simmetria tra le lingue: un generato <em>troncone</em> sul cliente, a
+                    generato
+                    <em>servitore/server</em> classe base sul server e un metodo la cui firma esatta proviene dal file
+                    proto.
+                </p>
+            </section>
+
+            <section id="s8">
+                <div class="sec-head">
+                    <div class="sec-num">08</div>
+                    <h2>Trasmissione in streaming del server</h2>
+                </div>
+                <p><strong>Una richiesta, un flusso di risposte.</strong> Il cliente chiede una volta; il server ne restituisce molti
+                    messaggi
+                    nel tempo, quindi chiude il flusso. Perfetto per: restituire un set di risultati di grandi dimensioni in blocchi, un feed live
+                    di eventi,
+                    aggiornamenti sullo stato di avanzamento di un lavoro lungo o impaginazione senza ripetuti viaggi di andata e ritorno. Il proto segna il
+                    <em>risposta</em> come <code>stream</code>.
+                </p>
+
+                <div class="viz">
+                    <div class="viz-cap">Trasmissione in streaming del server</div>
+                    <div class="viz-title">Chiedi una volta, ricevi molti</div>
+                    <svg viewBox="0 0 720 150" xmlns="http://www.w3.org/2000/svg" role="img"
+                        aria-label="Il client invia una richiesta e il server trasmette diverse risposte">
+                        <rect x="40" y="55" width="150" height="40" rx="8" fill="#b8402e" /><text x="115" y="80"
+                            font-size="13" font-weight="700" fill="#fff" text-anchor="middle">Cliente</text>
+                        <rect x="530" y="55" width="150" height="40" rx="8" fill="#3f6f4e" /><text x="605" y="80"
+                            font-size="13" font-weight="700" fill="#fff" text-anchor="middle">Server</text>
+                        <defs>
+                            <marker id="ss1" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto">
+                                <path d="M0 0 L7 3 L0 6 Z" fill="#b8402e" />
+                            </marker>
+                            <marker id="ss2" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto">
+                                <path d="M0 0 L7 3 L0 6 Z" fill="#3f6f4e" />
+                            </marker>
+                        </defs>
+                        <path d="M195 60 H525" stroke="#b8402e" stroke-width="2" marker-end="url(#ss1)" /><text x="360"
+                            y="52" class="mono" font-size="11" fill="#8f2f20" text-anchor="middle">1 richiesta</text>
+                        <path d="M525 80 H195" stroke="#3f6f4e" stroke-width="2" stroke-dasharray="5 3"
+                            marker-end="url(#ss2)" />
+                        <path d="M525 100 H195" stroke="#3f6f4e" stroke-width="2" stroke-dasharray="5 3"
+                            marker-end="url(#ss2)" />
+                        <path d="M525 120 H195" stroke="#3f6f4e" stroke-width="2" stroke-dasharray="5 3"
+                            marker-end="url(#ss2)" />
+                        <text x="360" y="140" class="mono" font-size="11" fill="#3f6f4e" text-anchor="middle">molti
+                            risposte, quindi chiudere</text>
+                    </svg>
+                </div>
+
+                <div class="codeblock" data-cb>
+                    <div class="code-bar">
+                        <div class="dots"><i></i><i></i><i></i></div>
+                        <div class="code-tabs"><button class="on" data-lang="go"><span class="lang-go">&amp;#9679;</span>
+                                Vai</button><button data-lang="py"><span class="lang-py">&amp;#9679;</span> Pitone</button>
+                        </div>
+                    </div>
+                    <div class="code-panel on" data-panel="go">
+                        <pre><code class="language-go">// proto:  rpc ListUsers(ListUsersRequest) returns (stream User);
+
+// ===== SERVER: receive one req, call stream.Send(...) repeatedly =====
+func (s *server) ListUsers(req *userv1.ListUsersRequest, stream userv1.UserService_ListUsersServer) error {
+    for _, u := range queryUsers(req.GetFilter()) { // imagine this yields a big result set
+        if err := stream.Send(u); err != nil {       // push one message down the stream
+            return err                                // client gone / cancelled
+        }
+    }
+    return nil // returning nil closes the stream cleanly (sends OK trailer)
+}
+
+// ===== CLIENT: call once, then Recv() in a loop until io.EOF =====
+func listUsers(client userv1.UserServiceClient) {
+    ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+    defer cancel()
+    stream, _ := client.ListUsers(ctx, &userv1.ListUsersRequest{Filter: "active"})
+    for {
+        u, err := stream.Recv()
+        if err == io.EOF { break } // server closed the stream, we're done
+        if err != nil { log.Fatal(err) }
+        log.Printf("user: %s", u.GetFullName())
+    }
+}</code></pre>
+                    </div>
+                    <div class="code-panel" data-panel="py">
+                        <pre><code class="language-python"># proto:  rpc ListUsers(ListUsersRequest) returns (stream User);
+
+# ===== SERVER: a generator, every `yield` sends one message =====
+class UserService(pb_grpc.UserServiceServicer):
+    def ListUsers(self, request, context):
+        for u in query_users(request.filter):  # big result set
+            yield u                             # yielding pushes one message down the stream
+        # function returning ends the stream cleanly
+
+# ===== CLIENT: the call returns an ITERABLE of responses =====
+def list_users(stub):
+    responses = stub.ListUsers(pb.ListUsersRequest(filter="active"), timeout=10.0)
+    for u in responses:        # iterate until the server closes the stream
+        print("user:", u.full_name)</code></pre>
+                    </div>
+                </div>
+                <p class="code-cap">Go usa un esplicito <code>stream.Send</code>/<code>stream.Recv</code> coppia; Pitone
+                    esprime
+                    il lato server come a <em>generatore</em> (<code>yield</code>) e il lato client come pianura
+                    <em>iterabile</em>, idiomatico per ciascuna lingua, stesso comportamento del filo.</p>
+            </section>
+
+            <section id="s9">
+                <div class="sec-head">
+                    <div class="sec-num">09</div>
+                    <h2>Streaming del cliente</h2>
+                </div>
+                <p><strong>Un flusso di richieste, una risposta.</strong> Il client invia molti messaggi, quindi il server
+                    risposte
+                    una volta con un riepilogo/risultato. Ideale per caricamenti, acquisizione batch o aggregazione di una serie di letture
+                    in a
+                    risposta calcolata unica. Il proto segna il <em>richiesta</em> come <code>stream</code>.</p>
+
+                <div class="viz">
+                    <div class="viz-cap">Streaming del cliente</div>
+                    <div class="viz-title">Inviane molti, ricevine uno indietro</div>
+                    <svg viewBox="0 0 720 150" xmlns="http://www.w3.org/2000/svg" role="img"
+                        aria-label="Il client trasmette diverse richieste e il server restituisce una risposta">
+                        <rect x="40" y="55" width="150" height="40" rx="8" fill="#b8402e" /><text x="115" y="80"
+                            font-size="13" font-weight="700" fill="#fff" text-anchor="middle">Cliente</text>
+                        <rect x="530" y="55" width="150" height="40" rx="8" fill="#3f6f4e" /><text x="605" y="80"
+                            font-size="13" font-weight="700" fill="#fff" text-anchor="middle">Server</text>
+                        <defs>
+                            <marker id="cs1" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto">
+                                <path d="M0 0 L7 3 L0 6 Z" fill="#b8402e" />
+                            </marker>
+                            <marker id="cs2" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto">
+                                <path d="M0 0 L7 3 L0 6 Z" fill="#3f6f4e" />
+                            </marker>
+                        </defs>
+                        <path d="M195 50 H525" stroke="#b8402e" stroke-width="2" marker-end="url(#cs1)" />
+                        <path d="M195 70 H525" stroke="#b8402e" stroke-width="2" marker-end="url(#cs1)" />
+                        <path d="M195 90 H525" stroke="#b8402e" stroke-width="2" marker-end="url(#cs1)" />
+                        <text x="360" y="44" class="mono" font-size="11" fill="#8f2f20" text-anchor="middle">molti
+                            richieste, quindi chiudere</text>
+                        <path d="M525 115 H195" stroke="#3f6f4e" stroke-width="2" stroke-dasharray="5 3"
+                            marker-end="url(#cs2)" /><text x="360" y="135" class="mono" font-size="11" fill="#3f6f4e"
+                            text-anchor="middle">1 risposta</text>
+                    </svg>
+                </div>
+
+                <div class="codeblock" data-cb>
+                    <div class="code-bar">
+                        <div class="dots"><i></i><i></i><i></i></div>
+                        <div class="code-tabs"><button class="on" data-lang="go"><span class="lang-go">&amp;#9679;</span>
+                                Vai</button><button data-lang="py"><span class="lang-py">&amp;#9679;</span> Pitone</button>
+                        </div>
+                    </div>
+                    <div class="code-panel on" data-panel="go">
+                        <pre><code class="language-go">// proto:  rpc UploadEvents(stream Event) returns (UploadSummary);
+
+// ===== SERVER: Recv() in a loop, then SendAndClose() once at the end =====
+func (s *server) UploadEvents(stream userv1.UserService_UploadEventsServer) error {
+    count := 0
+    for {
+        ev, err := stream.Recv()
+        if err == io.EOF { // client finished sending, now reply once
+            return stream.SendAndClose(&userv1.UploadSummary{Received: int32(count)})
+        }
+        if err != nil { return err }
+        store(ev)
+        count++
+    }
+}
+
+// ===== CLIENT: Send() many, then CloseAndRecv() for the single reply =====
+func uploadEvents(client userv1.UserServiceClient, events []*userv1.Event) {
+    ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+    defer cancel()
+    stream, _ := client.UploadEvents(ctx)
+    for _, ev := range events {
+        stream.Send(ev) // push each one up
+    }
+    summary, err := stream.CloseAndRecv() // close our side, await the summary
+    if err != nil { log.Fatal(err) }
+    log.Printf("server received %d events", summary.GetReceived())
+}</code></pre>
+                    </div>
+                    <div class="code-panel" data-panel="py">
+                        <pre><code class="language-python"># proto:  rpc UploadEvents(stream Event) returns (UploadSummary);
+
+# ===== SERVER: request_iterator yields incoming messages; return once =====
+class UserService(pb_grpc.UserServiceServicer):
+    def UploadEvents(self, request_iterator, context):
+        count = 0
+        for ev in request_iterator:   # iterate the client's stream
+            store(ev)
+            count += 1
+        return pb.UploadSummary(received=count)  # single reply after client closes
+
+# ===== CLIENT: pass an iterable/generator of requests; get one response =====
+def upload_events(stub, events):
+    def gen():
+        for ev in events:
+            yield ev
+    summary = stub.UploadEvents(gen(), timeout=30.0)  # returns the single summary
+    print("server received", summary.received, "events")</code></pre>
+                    </div>
+                </div>
+                <p class="code-cap">Il punto è l’asimmetria: <code>SendAndClose</code>/<code>CloseAndRecv</code> dentro
+                    Vai, a
+                    <code>request_iterator</code> più un normale <code>return</code> in Python, il server
+                    consuma il tutto
+                    flusso di richiesta <em>prima</em> producendo la sua unica risposta.
+                </p>
+            </section>
+
+            <section id="s10">
+                <div class="sec-head">
+                    <div class="sec-num">10</div>
+                    <h2>Streaming bidirezionale</h2>
+                </div>
+                <p><strong>Un flusso di richieste e un flusso di risposte, simultaneamente e indipendentemente.</strong>
+                    Entrambi i lati
+                    leggere e scrivere sullo stesso flusso allo stesso tempo, in qualsiasi ordine, questo è ciò che HTTP/2
+                    full-duplex
+                    l'inquadratura (sez 06) ti compra. È la forma dietro la chat, la collaborazione in tempo reale e la telemetria dal vivo
+                    con controllo
+                    messaggi e sessioni interattive. Sia la richiesta che la risposta lo sono <code>stream</code> nel prototipo.
+                </p>
+
+                <div class="viz">
+                    <div class="viz-cap">Streaming bidirezionale</div>
+                    <div class="viz-title">Entrambe le parti inviano e ricevono contemporaneamente</div>
+                    <svg viewBox="0 0 720 160" xmlns="http://www.w3.org/2000/svg" role="img"
+                        aria-label="Sia il client che il server trasmettono messaggi reciprocamente contemporaneamente su un unico flusso">
+                        <rect x="40" y="60" width="150" height="40" rx="8" fill="#b8402e" /><text x="115" y="85"
+                            font-size="13" font-weight="700" fill="#fff" text-anchor="middle">Cliente</text>
+                        <rect x="530" y="60" width="150" height="40" rx="8" fill="#3f6f4e" /><text x="605" y="85"
+                            font-size="13" font-weight="700" fill="#fff" text-anchor="middle">Server</text>
+                        <defs>
+                            <marker id="bd1" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto">
+                                <path d="M0 0 L7 3 L0 6 Z" fill="#b8402e" />
+                            </marker>
+                            <marker id="bd2" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto">
+                                <path d="M0 0 L7 3 L0 6 Z" fill="#3f6f4e" />
+                            </marker>
+                        </defs>
+                        <path d="M195 50 H525" stroke="#b8402e" stroke-width="2" marker-end="url(#bd1)" />
+                        <path d="M195 72 H525" stroke="#b8402e" stroke-width="2" marker-end="url(#bd1)" />
+                        <path d="M525 92 H195" stroke="#3f6f4e" stroke-width="2" stroke-dasharray="5 3"
+                            marker-end="url(#bd2)" />
+                        <path d="M525 114 H195" stroke="#3f6f4e" stroke-width="2" stroke-dasharray="5 3"
+                            marker-end="url(#bd2)" />
+                        <text x="360" y="150" class="serif" font-size="12.5" font-style="italic" fill="#5b5347"
+                            text-anchor="middle">interlacciato e indipendente, nessuna delle due parti aspetta il suo
+                            girare</text>
+                    </svg>
+                </div>
+
+                <div class="codeblock" data-cb>
+                    <div class="code-bar">
+                        <div class="dots"><i></i><i></i><i></i></div>
+                        <div class="code-tabs"><button class="on" data-lang="go"><span class="lang-go">&amp;#9679;</span>
+                                Vai</button><button data-lang="py"><span class="lang-py">&amp;#9679;</span> Pitone</button>
+                        </div>
+                    </div>
+                    <div class="code-panel on" data-panel="go">
+                        <pre><code class="language-go">// proto:  rpc Chat(stream ChatMessage) returns (stream ChatMessage);
+
+// ===== SERVER: loop Recv() and Send() on the same stream =====
+func (s *server) Chat(stream userv1.UserService_ChatServer) error {
+    for {
+        msg, err := stream.Recv()
+        if err == io.EOF { return nil } // client closed its send side
+        if err != nil { return err }
+        // echo back (or broadcast to a room, etc.), can Send anytime, any number
+        reply := &userv1.ChatMessage{User: "server", Text: "ack: " + msg.GetText()}
+        if err := stream.Send(reply); err != nil { return err }
+    }
+}
+
+// ===== CLIENT: typically Send in one goroutine, Recv in another =====
+func chat(client userv1.UserServiceClient) {
+    stream, _ := client.Chat(context.Background())
+    go func() { // concurrent receiver
+        for {
+            in, err := stream.Recv()
+            if err != nil { return }
+            log.Printf("&lt;&lt; %s", in.GetText())
+        }
+    }()
+    for _, t := range []string{"hi", "how are you", "bye"} {
+        stream.Send(&userv1.ChatMessage{User: "ada", Text: t}) // send concurrently
+    }
+    stream.CloseSend() // signal we're done sending; receiver drains the rest
+}</code></pre>
+                    </div>
+                    <div class="code-panel" data-panel="py">
+                        <pre><code class="language-python"># proto:  rpc Chat(stream ChatMessage) returns (stream ChatMessage);
+
+# ===== SERVER: iterate incoming, yield outgoing, interleaved =====
+class UserService(pb_grpc.UserServiceServicer):
+    def Chat(self, request_iterator, context):
+        for msg in request_iterator:          # read the client's stream
+            yield pb.ChatMessage(user="server", text="ack: " + msg.text)  # write back
+
+# ===== CLIENT: pass a request generator; iterate the response stream =====
+def chat(stub):
+    def outgoing():
+        for t in ["hi", "how are you", "bye"]:
+            yield pb.ChatMessage(user="ada", text=t)
+    responses = stub.Chat(outgoing())   # both directions live at once
+    for reply in responses:
+        print("<<", reply.text)
+
+# (for true concurrency under load, prefer the async API: grpc.aio)</code></pre>
+                    </div>
+                </div>
+
+                <div class="box gotcha"><span class="tag">Lo streaming ha regole da rispettare</span>
+                    <p>I flussi sono di lunga durata, quindi consumano una connessione/goroutine per tutta la loro vita, sempre
+                        impostare
+                        scadenze o limiti di inattività e gestire la scomparsa del cliente a metà del flusso. Non c'è automatico
+                        contropressione
+                        manopola oltre il controllo del flusso HTTP/2, quindi un produttore veloce può sopraffare un consumatore lento se non lo fai
+                        ritmo. E
+                        viene ordinato un singolo flusso ma <em>no</em> una transazione, se si interrompe a metà, hai
+                        consegnato a
+                        prefisso, quindi progettare i messaggi in modo che siano ripristinabili o idempotenti.</p>
+                </div>
+
+                <div class="viz">
+                    <div class="viz-cap">Le quattro forme in uno sguardo</div>
+                    <div class="viz-title">Scegli in base al numero di messaggi che fluiscono in ciascuna direzione</div>
+                    <svg viewBox="0 0 720 200" xmlns="http://www.w3.org/2000/svg" role="img"
+                        aria-label="Griglia di riepilogo di streaming unario, server, client e bidirezionale">
+                        <g font-family="JetBrains Mono">
+                            <rect x="20" y="20" width="160" height="70" rx="10" fill="#f7e9e2" stroke="#b8402e" />
+                            <text x="100" y="44" font-size="12.5" font-weight="700" fill="#8f2f20"
+                                text-anchor="middle">Unario</text>
+                            <text x="100" y="64" font-size="10" fill="#5b5347" text-anchor="middle">1 -&gt; 1</text>
+                            <text x="100" y="80" font-size="9" fill="#5b5347" text-anchor="middle">chiamata normale</text>
+
+                            <rect x="195" y="20" width="160" height="70" rx="10" fill="#e0e9dd" stroke="#3f6f4e" />
+                            <text x="275" y="44" font-size="12.5" font-weight="700" fill="#3f6f4e"
+                                text-anchor="middle">Flusso del server</text>
+                            <text x="275" y="64" font-size="10" fill="#5b5347" text-anchor="middle">1 -&gt; molti</text>
+                            <text x="275" y="80" font-size="9" fill="#5b5347" text-anchor="middle">feed, grande
+                                risultati</text>
+
+                            <rect x="370" y="20" width="160" height="70" rx="10" fill="#f0e5c9" stroke="#b07d2b" />
+                            <text x="450" y="44" font-size="12.5" font-weight="700" fill="#b07d2b"
+                                text-anchor="middle">Flusso del cliente</text>
+                            <text x="450" y="64" font-size="10" fill="#5b5347" text-anchor="middle">molti -&gt; 1</text>
+                            <text x="450" y="80" font-size="9" fill="#5b5347" text-anchor="middle">caricamenti, batch</text>
+
+                            <rect x="545" y="20" width="160" height="70" rx="10" fill="#efe7f5" stroke="#5b5347" />
+                            <text x="625" y="44" font-size="12.5" font-weight="700" fill="#5b5347"
+                                text-anchor="middle">Bidirezionale</text>
+                            <text x="625" y="64" font-size="10" fill="#5b5347" text-anchor="middle">molti &lt;-&gt;
+                                molti</text>
+                            <text x="625" y="80" font-size="9" fill="#5b5347" text-anchor="middle">chattare, in tempo reale</text>
+                        </g>
+                        <text x="360" y="140" class="serif" font-size="13" font-style="italic" fill="#5b5347"
+                            text-anchor="middle">Tutti e quattro utilizzano lo stesso meccanismo di flusso HTTP/2; il prototipo è due <tspan
+                                font-style="normal" class="mono" font-size="11">flusso</tspan> le parole chiave decidono il
+                            forma.</text>
+                        <text x="360" y="172" class="mono" font-size="10.5" fill="#8f2f20" text-anchor="middle">rpc
+                            M(Req) restituisce (Res) | (flusso Req) | restituisce (stream Res) | entrambi</text>
+                    </svg>
+                </div>
+            </section>
+
+            <div class="part-label">Parte IV / Il macchinario</div>
+
+            <section id="s11">
+                <div class="sec-head">
+                    <div class="sec-num">11</div>
+                    <h2>Il file .proto -&gt; Flusso di lavoro del codice</h2>
+                </div>
+                <p>Non scrivi mai i bozzetti e gli scheletri a mano, un compilatore, <code>protoc</code> (o il buf
+                    catena di strumenti),
+                    legge il tuo <code>.proto</code> ed emette la fonte idiomatica per ciascuna lingua di destinazione tramite a
+                    specifico della lingua
+                    <strong>plugin</strong>. Questo è il passaggio che trasforma il contratto in codice richiamabile, ed è il
+                    motivo un Go
+                    client e un server Python possono interagire perfettamente: entrambi sono stati generati dallo stesso file.
+                </p>
+
+                <div class="viz">
+                    <div class="viz-cap">Generazione del codice</div>
+                    <div class="viz-title">Un contratto, molti client e server generati</div>
+                    <svg viewBox="0 0 720 240" xmlns="http://www.w3.org/2000/svg" role="img"
+                        aria-label="Un file proto inserito nel protoc con plug-in del linguaggio, producendo codice generato da Go e Python che importano sia il client che il server">
+                        <rect x="40" y="95" width="150" height="56" rx="10" fill="#b8402e" />
+                        <text x="115" y="120" font-size="13" font-weight="700" fill="#fff"
+                            text-anchor="middle">utente.proto</text>
+                        <text x="115" y="138" class="mono" font-size="9.5" fill="#f4d9cf" text-anchor="middle">il
+                            contratto</text>
+                        <defs>
+                            <marker id="ga" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto">
+                                <path d="M0 0 L7 3 L0 6 Z" fill="#5b5347" />
+                            </marker>
+                        </defs>
+                        <path d="M192 123 H262" stroke="#5b5347" stroke-width="1.8" marker-end="url(#ga)" />
+                        <rect x="264" y="92" width="150" height="62" rx="10" fill="#211e1a" />
+                        <text x="339" y="116" font-size="12.5" font-weight="700" fill="#fff"
+                            text-anchor="middle">protocollo</text>
+                        <text x="339" y="133" class="mono" font-size="9" fill="#e9e2d3" text-anchor="middle">+ lang
+                            plugin</text>
+                        <text x="339" y="146" class="mono" font-size="9" fill="#e9e2d3"
+                            text-anchor="middle">(protoc-gen-go, grpc_tools)</text>
+                        <path d="M416 110 C460 90 480 70 520 64" stroke="#3f6f4e" stroke-width="1.8" fill="none"
+                            marker-end="url(#ga)" />
+                        <path d="M416 138 C460 158 480 178 520 184" stroke="#3f6f4e" stroke-width="1.8" fill="none"
+                            marker-end="url(#ga)" />
+                        <rect x="522" y="36" width="178" height="56" rx="10" fill="#e0e9dd" stroke="#3f6f4e" />
+                        <text x="611" y="58" font-size="12" font-weight="700" fill="#3f6f4e" text-anchor="middle">Vai:
+                            *.pb.go</text>
+                        <text x="611" y="76" class="mono" font-size="9" fill="#5b5347" text-anchor="middle">messaggi +
+                            stub + base del server</text>
+                        <rect x="522" y="156" width="178" height="56" rx="10" fill="#e0e9dd" stroke="#3f6f4e" />
+                        <text x="611" y="178" font-size="12" font-weight="700" fill="#3f6f4e" text-anchor="middle">Pi:
+                            *_pb2*.py</text>
+                        <text x="611" y="196" class="mono" font-size="9" fill="#5b5347" text-anchor="middle">messaggi +
+                            stub + servitore</text>
+                        <text x="360" y="228" class="serif" font-size="12.5" font-style="italic" fill="#5b5347"
+                            text-anchor="middle">Rigenerati dopo ogni modifica al prototipo, i file generati lo sono
+                            costruire artefatti, impegnati o generati in CI.</text>
+                    </svg>
+                </div>
+
+                <div class="codeblock" data-cb>
+                    <div class="code-bar">
+                        <div class="dots"><i></i><i></i><i></i></div>
+                        <div class="code-tabs"><button class="on" data-lang="go"><span class="lang-go">&amp;#9679;</span>
+                                Vai</button><button data-lang="py"><span class="lang-py">&amp;#9679;</span> Pitone</button>
+                        </div>
+                    </div>
+                    <div class="code-panel on" data-panel="go">
+                        <pre><code class="language-go">// Install the two plugins once (they sit on your PATH):
+//   go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
+//   go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
+
+// Generate messages (--go_out) AND the service stubs/skeleton (--go-grpc_out):
+//   protoc \
+//     --go_out=. --go_opt=paths=source_relative \
+//     --go-grpc_out=. --go-grpc_opt=paths=source_relative \
+//     user.proto
+
+// Produces:
+//   user.pb.go, structs for each message (+ getters)
+//   user_grpc.pb.go, UserServiceClient (stub) + UserServiceServer (to implement)
+
+// Then in code you simply import the generated package:
+//   import userv1 "example.com/gen/userv1"</code></pre>
+                    </div>
+                    <div class="code-panel" data-panel="py">
+                        <pre><code class="language-python"># Install the tooling once:
+#   pip install grpcio grpcio-tools
+
+# Generate messages AND service stubs in one command:
+#   python -m grpc_tools.protoc \
+#       -I. \
+#       --python_out=. \
+#       --grpc_python_out=. \
+#       user.proto
+
+# Produces:
+#   user_pb2.py, message classes
+#   user_pb2_grpc.py, UserServiceStub (client) + UserServiceServicer (to implement)
+
+# Then import both in your code:
+#   import user_pb2 as pb
+#   import user_pb2_grpc as pb_grpc</code></pre>
+                    </div>
+                </div>
+
+                <div class="box note"><span class="tag">Usa buf nei progetti reali</span>
+                    <p>Crudo <code>protoc</code> le invocazioni diventano ingombranti e veloci. Il <strong>buf</strong> avvolgimenti della toolchain
+                        con a
+                        file di configurazione, gestione delle dipendenze, <em>rilevamento di modifiche interrotte</em> (fallisce CI se lo fai
+                        violare il
+                        regola &quot;mai riutilizzare un numero di campo&quot;) e un linter. Per qualsiasi cosa che vada oltre un giocattolo, preferiscilo
+                        gira il
+                        disciplina dell'evoluzione dello schema dal sec 04 in un cancello automatizzato.</p>
+                </div>
+            </section>
+
+            <section id="s12">
+                <div class="sec-head">
+                    <div class="sec-num">12</div>
+                    <h2>Canali, stub e chiamate end-to-end</h2>
+                </div>
+                <p>Due oggetti lato client contano e le persone li uniscono. A <strong>canale</strong> (Vai lo chiama a
+                    <code>ClientConn</code>) è la connessione riutilizzabile e di lunga durata a un server, gestisce il file
+                    sottostante
+                    Connessioni HTTP/2, riconnessione e stato di bilanciamento del carico. A <strong>troncone</strong> è economico,
+                    generato
+                    oggetto che crei <em>sopra</em> un canale per chiamare effettivamente i metodi. La regola: <strong>creare
+                        il canale
+                        una volta e condividerlo; creare stub liberamente.</strong> L'apertura di un canale per richiesta distrugge
+                    prestazione, tu
+                    buttare via il riutilizzo della connessione che era il punto centrale di HTTP/2.
+                </p>
+
+                <div class="viz">
+                    <div class="viz-cap">Una chiamata unaria, dall'inizio alla fine</div>
+                    <div class="viz-title">Ogni passaggio dalla chiamata del metodo alla risposta digitata</div>
+                    <svg viewBox="0 0 720 290" xmlns="http://www.w3.org/2000/svg" role="img"
+                        aria-label="Ciclo di vita in otto passaggi di una chiamata gRPC dalla chiamata stub alla serializzazione, al flusso HTTP2, agli intercettori del server, al gestore e viceversa">
+                        <defs>
+                            <marker id="la" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+                                <path d="M0 0 L6 3 L0 6 Z" fill="#8f2f20" />
+                            </marker>
+                        </defs>
+                        <g font-family="JetBrains Mono" font-size="10">
+                            <rect x="20" y="20" width="200" height="34" rx="7" fill="#b8402e" /><text x="120" y="42"
+                                fill="#fff" text-anchor="middle" font-weight="700">1 / chiami stub.GetUser(ctx,
+                                richiesto)</text>
+                            <rect x="20" y="62" width="200" height="34" rx="7" fill="#ece3d4" stroke="#b8402e" /><text
+                                x="120" y="84" fill="#8f2f20" text-anchor="middle">2 / lo stub serializza req -&gt;
+                                protobuff</text>
+                            <rect x="20" y="104" width="200" height="34" rx="7" fill="#ece3d4" stroke="#b8402e" /><text
+                                x="120" y="126" fill="#8f2f20" text-anchor="middle">3/intercettori cliente
+                                correre</text>
+                            <rect x="20" y="146" width="200" height="34" rx="7" fill="#232019" /><text x="120" y="168"
+                                fill="#7fd1c4" text-anchor="middle">4 / Flusso HTTP/2 -&gt; :percorso, DATI</text>
+                            <path d="M120 96 V104" stroke="#8f2f20" marker-end="url(#la)" />
+                            <path d="M120 138 V146" stroke="#8f2f20" marker-end="url(#la)" />
+                            <path d="M220 163 H300" stroke="#8f2f20" stroke-width="1.6" marker-end="url(#la)" />
+
+                            <rect x="500" y="146" width="200" height="34" rx="7" fill="#232019" /><text x="600" y="168"
+                                fill="#7fd1c4" text-anchor="middle">5/il server legge i frame</text>
+                            <rect x="500" y="104" width="200" height="34" rx="7" fill="#e0e9dd" stroke="#3f6f4e" /><text
+                                x="600" y="126" fill="#3f6f4e" text-anchor="middle">6 / deserializza +
+                                intercettori</text>
+                            <rect x="500" y="62" width="200" height="34" rx="7" fill="#3f6f4e" /><text x="600" y="84"
+                                fill="#fff" text-anchor="middle" font-weight="700">7 / IL TUO gestore corre</text>
+                            <rect x="500" y="20" width="200" height="34" rx="7" fill="#e0e9dd" stroke="#3f6f4e" /><text
+                                x="600" y="42" fill="#3f6f4e" text-anchor="middle">8 / serializza la risposta +
+                                stato</text>
+                            <path d="M600 146 V138" stroke="#3f6f4e" marker-end="url(#la)" />
+                            <path d="M600 104 V96" stroke="#3f6f4e" marker-end="url(#la)" />
+                            <path d="M600 62 V54" stroke="#3f6f4e" marker-end="url(#la)" />
+                        </g>
+                        <path d="M500 37 C420 37 300 100 220 79" stroke="#3f6f4e" stroke-width="1.6"
+                            stroke-dasharray="5 3" fill="none" marker-end="url(#la)" />
+                        <text x="360" y="225" class="serif" font-size="13" font-style="italic" fill="#5b5347"
+                            text-anchor="middle">La risposta ripercorre il percorso: serializzata sul server, inquadrata sul
+                            stesso flusso, deserializzato dallo stub,</text>
+                        <text x="360" y="247" class="serif" font-size="13" font-style="italic" fill="#5b5347"
+                            text-anchor="middle">e restituito all'utente come valore digitato o errore digitato
+                            recante un codice di stato.</text>
+                        <text x="360" y="278" class="mono" font-size="10" fill="#8f2f20" text-anchor="middle">canale =
+                            la connessione / stub riutilizzata = il chiamante per chiamata economico sopra di esso</text>
+                    </svg>
+                </div>
+
+                <div class="box key"><span class="tag">La regola della prestazione</span>
+                    <p>Un canale per server, condiviso nell'intera app, per tutta la sua durata. Gli stub sono
+                        usa e getta. Se il tuo
+                        la latenza è misteriosamente negativa, la prima cosa da verificare è se stai creando un canale (e
+                        quindi un fresco
+                        Handshake HTTP/2 + TLS) su ogni chiamata.</p>
+                </div>
+            </section>
+
+            <section id="s13">
+                <div class="sec-head">
+                    <div class="sec-num">13</div>
+                    <h2>Metadati, scadenze e cancellazione</h2>
+                </div>
+                <p>Questi sono gli strumenti che riconoscono che la rete è reale (l'avvertimento sec. 03, reso concreto).
+                    <strong>Metadati</strong>
+                    è il canale laterale del valore-chiave di gRPC, l'equivalente delle intestazioni HTTP, per things
+                    non sono quelli
+                    messaggio stesso: token di autenticazione, ID di traccia/richiesta, versioni API. <strong>Scadenze</strong> metti un
+                    assoluto
+                    tempo limitato per una chiamata e, soprattutto, <strong>propagarsi</strong> attraverso il luppolo.
+                    <strong>Cancellazione</strong>
+                    consente a un chiamante (o a una connessione interrotta) di interrompere il lavoro in volo in modo che i server non si affatichino sui risultati, nessuno
+                    vuole.</p>
+
+                <h4>Le scadenze battono i timeout: e si propagano</h4>
+                <p>Una scadenza gRPC è un file <em>assoluto</em> punto nel tempo, non una durata per-hop. Quando il servizio A chiama B
+                    con a
+                    Scadenza di 1 secondo e B chiama C, il budget rimanente viaggia, quindi C sa di avere, ad esempio,
+                    600 ms rimasti,
+                    nemmeno un secondo fresco. Ciò impedisce la classica cascata in cui ogni livello attende il proprio timeout completo
+                    e totale
+                    palloncini di latenza. <strong>Stabilisci sempre una scadenza per ogni chiamata.</strong> Una chiamata senza scadenza può
+                    appendere
+                    per sempre, bloccando le risorse.</p>
+
+                <div class="codeblock" data-cb>
+                    <div class="code-bar">
+                        <div class="dots"><i></i><i></i><i></i></div>
+                        <div class="code-tabs"><button class="on" data-lang="go"><span class="lang-go">&amp;#9679;</span>
+                                Vai</button><button data-lang="py"><span class="lang-py">&amp;#9679;</span> Pitone</button>
+                        </div>
+                    </div>
+                    <div class="code-panel on" data-panel="go">
+                        <pre><code class="language-go">// ===== CLIENT: attach a deadline + metadata =====
+ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second) // absolute deadline
+defer cancel() // cancel frees resources whether we time out or finish early
+
+ctx = metadata.AppendToOutgoingContext(ctx,
+    "authorization", "Bearer "+token,   // auth travels as metadata, sec 16
+    "x-request-id", reqID)              // trace id for correlation, like sec 15 of the layers manual
+
+resp, err := client.GetUser(ctx, &userv1.GetUserRequest{Id: "u42"})
+if status.Code(err) == codes.DeadlineExceeded {
+    log.Println("call timed out") // a network-shaped failure a local call never had
+}
+
+// ===== SERVER: read metadata, respect the inherited deadline =====
+func (s *server) GetUser(ctx context.Context, req *userv1.GetUserRequest) (*userv1.GetUserResponse, error) {
+    md, _ := metadata.FromIncomingContext(ctx)
+    auth := md.Get("authorization") // verify token here (or in an interceptor, sec 15)
+
+    // ctx already carries the client's remaining deadline + cancellation, // pass it straight to the DB driver so slow work is abandoned automatically.
+    if ctx.Err() != nil { return nil, status.FromContextError(ctx.Err()).Err() }
+    _ = auth
+    return s.lookup(ctx, req.GetId())
+}</code></pre>
+                    </div>
+                    <div class="code-panel" data-panel="py">
+                        <pre><code class="language-python"># ===== CLIENT: attach a deadline (timeout=) + metadata =====
+metadata = (
+    ("authorization", f"Bearer {token}"),  # auth as metadata, sec 16
+    ("x-request-id", req_id),               # trace id for correlation
+)
+try:
+    resp = stub.GetUser(pb.GetUserRequest(id="u42"),
+                        timeout=1.0,         # the deadline, in seconds
+                        metadata=metadata)
+except grpc.RpcError as e:
+    if e.code() == grpc.StatusCode.DEADLINE_EXCEEDED:
+        print("call timed out")             # a network-shaped failure
+
+# ===== SERVER: read metadata, check for cancellation =====
+class UserService(pb_grpc.UserServiceServicer):
+    def GetUser(self, request, context):
+        md = dict(context.invocation_metadata())
+        auth = md.get("authorization")       # verify token (or in an interceptor, sec 15)
+
+        if not context.is_active():          # client gone / deadline passed?
+            return pb.GetUserResponse()      # abandon the work
+        return self.lookup(request.id)</code></pre>
+                    </div>
+                </div>
+
+                <div class="box gotcha"><span class="tag">Tramandare il contesto, sempre</span>
+                    <p>In Go, infila il file in entrata <code>ctx</code> in <em>ogni</em> chiamata downstream (query DB,
+                        RPC in uscita).
+                        Questo è ciò che fa sì che le scadenze e la cancellazione funzionino davvero, se il cliente riattacca, il
+                        cancellazione
+                        si increspa fino in fondo e tutto libera. Un gestore che ignora <code>ctx</code> mantiene
+                        macinazione
+                        lavoro abbandonato.</p>
+                </div>
+            </section>
+
+            <section id="s14">
+                <div class="sec-head">
+                    <div class="sec-num">14</div>
+                    <h2>Codici di stato e gestione degli errori</h2>
+                </div>
+                <p>gRPC non usa codici di stato HTTP. Ha il proprio set fisso di <strong>codici di stato</strong>: un'enumerazione
+                    di ~16 valori, inviati nel file <code>grpc-status</code> trailer (sez. 06). Ogni chiamata termina con
+                    esattamente uno:
+                    <code>OK</code> in caso di successo o uno dei codici di errore con un messaggio opzionale. Restituendo il
+                    <em>giusto</em>
+                    il codice fa parte del contratto, perché i client (e le policy di riprova, sezione 17) lo attivano.
+                </p>
+
+                <div class="tbl-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Codice</th>
+                                <th>Significa</th>
+                                <th>L'analogo HTTP più vicino</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><span class="sc s2">Va bene</span></td>
+                                <td>Successo</td>
+                                <td>200</td>
+                            </tr>
+                            <tr>
+                                <td><span class="sc s4">ARGOMENTO_INVALID</span></td>
+                                <td>Il client ha inviato un input errato (indipendentemente dallo stato del sistema)</td>
+                                <td>400</td>
+                            </tr>
+                            <tr>
+                                <td><span class="sc s4">NON AUTENTICATO</span></td>
+                                <td>No/credenziali non valide</td>
+                                <td>401</td>
+                            </tr>
+                            <tr>
+                                <td><span class="sc s4">PERMISSION_DENIED</span></td>
+                                <td>Autenticato ma non consentito</td>
+                                <td>403</td>
+                            </tr>
+                            <tr>
+                                <td><span class="sc s4">NON_TROVATO</span></td>
+                                <td>L'entità richiesta non esiste</td>
+                                <td>404</td>
+                            </tr>
+                            <tr>
+                                <td><span class="sc s4">GIÀ_ESISTE</span></td>
+                                <td>Crea conflitti con un'entità esistente</td>
+                                <td>409</td>
+                            </tr>
+                            <tr>
+                                <td><span class="sc s4">FAILED_PRECONDITION</span></td>
+                                <td>Sistema non in uno stato per l'operazione</td>
+                                <td>400/409</td>
+                            </tr>
+                            <tr>
+                                <td><span class="sc s3">RISORSA_ESAURITO</span></td>
+                                <td>Limite di quota/tariffa raggiunto</td>
+                                <td>429</td>
+                            </tr>
+                            <tr>
+                                <td><span class="sc s3">SCADENZA_SCADATA</span></td>
+                                <td>La chiamata è stata superata la scadenza</td>
+                                <td>504</td>
+                            </tr>
+                            <tr>
+                                <td><span class="sc s1">NON DISPONIBILE</span></td>
+                                <td>Temporaneo, server inattivo/sovraccarico; <strong>è sicuro riprovare</strong></td>
+                                <td>503</td>
+                            </tr>
+                            <tr>
+                                <td><span class="sc s5">INTERNO</span></td>
+                                <td>Un vero bug/invariante rotto</td>
+                                <td>500</td>
+                            </tr>
+                            <tr>
+                                <td><span class="sc s5">NON IMPLEMENTATO</span></td>
+                                <td>Metodo non implementato su questo server</td>
+                                <td>501</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="codeblock" data-cb>
+                    <div class="code-bar">
+                        <div class="dots"><i></i><i></i><i></i></div>
+                        <div class="code-tabs"><button class="on" data-lang="go"><span class="lang-go">&amp;#9679;</span>
+                                Vai</button><button data-lang="py"><span class="lang-py">&amp;#9679;</span> Pitone</button>
+                        </div>
+                    </div>
+                    <div class="code-panel on" data-panel="go">
+                        <pre><code class="language-go">import (
+    "google.golang.org/grpc/codes"
+    "google.golang.org/grpc/status"
+)
+
+// SERVER: return a typed status, not a bare error string.
+func (s *server) GetUser(ctx context.Context, req *userv1.GetUserRequest) (*userv1.GetUserResponse, error) {
+    if req.GetId() == "" {
+        return nil, status.Error(codes.InvalidArgument, "id is required")
+    }
+    u, found := s.db.Find(req.GetId())
+    if !found {
+        return nil, status.Errorf(codes.NotFound, "no user with id %q", req.GetId())
+    }
+    return &userv1.GetUserResponse{User: u}, nil
+}
+
+// CLIENT: inspect the code to decide what to do.
+resp, err := client.GetUser(ctx, req)
+if err != nil {
+    st := status.Convert(err)        // pull the status out of the error
+    switch st.Code() {
+    case codes.NotFound:        // expected, show "not found" in UI
+    case codes.Unavailable:     // transient, retry with backoff, sec 17
+    default:                    log.Printf("unexpected: %v: %s", st.Code(), st.Message())
+    }
+}</code></pre>
+                    </div>
+                    <div class="code-panel" data-panel="py">
+                        <pre><code class="language-python">import grpc
+
+# SERVER: abort with a code + message (or set_code/set_details then return).
+class UserService(pb_grpc.UserServiceServicer):
+    def GetUser(self, request, context):
+        if not request.id:
+            context.abort(grpc.StatusCode.INVALID_ARGUMENT, "id is required")
+        user = self.db.find(request.id)
+        if user is None:
+            context.abort(grpc.StatusCode.NOT_FOUND, f"no user with id {request.id!r}")
+        return pb.GetUserResponse(user=user)
+
+# CLIENT: catch RpcError and switch on .code()
+try:
+    resp = stub.GetUser(req, timeout=1.0)
+except grpc.RpcError as e:
+    if e.code() == grpc.StatusCode.NOT_FOUND:
+        ...   # expected, show "not found"
+    elif e.code() == grpc.StatusCode.UNAVAILABLE:
+        ...   # transient, retry with backoff, sec 17
+    else:
+        print("unexpected:", e.code(), e.details())</code></pre>
+                    </div>
+                </div>
+
+                <div class="box note"><span class="tag">Errori ricchi e strutturati</span>
+                    <p>Quando un codice + messaggio non è sufficiente (ad esempio dettagli di convalida per campo, come l'errore REST
+                        busta), gRPC
+                        supporta <strong>dettagli dell'errore</strong>: messaggi protobuf digitati allegati allo stato
+                        (il
+                        <code>google.rpc</code> tipi: <code>BadRequest</code>, <code>QuotaFailure</code>,
+                        <code>RetryInfo</code>...).
+                        Il client li deserializza come dati strutturati, mai analizzando una stringa umana, lo stesso
+                        principio come il
+                        leggibile dalla macchina <code>code</code> campo nella busta di errore del manuale REST.
+                    </p>
+                </div>
+            </section>
+
+            <section id="s15">
+                <div class="sec-head">
+                    <div class="sec-num">15</div>
+                    <h2>Interceptor: il Middleware di gRPC</h2>
+                </div>
+                <p>Se leggi il capitolo gestori/servizi/middleware, questa è esattamente la stessa idea con un'idea diversa
+                    nome. An
+                    <strong>intercettore</strong> è una funzione che avvolge ogni RPC, in esecuzione prima e/o dopo il file
+                    handler, il luogo in cui centralizzare le preoccupazioni trasversali in modo da non ripeterle in ogni metodo:
+                    autenticazione,
+                    registrazione, metrica, tracciamento, recupero da panico, limitazione della velocità. Sono disponibili in due gusti:
+                    <strong>unario</strong>
+                    intercettori (wrap chiamate one-shot) e <strong>flusso</strong> intercettatori (wrap chiamate in streaming),
+                    su entrambi
+                    il lato client e il lato server.
+                </p>
+
+                <div class="viz">
+                    <div class="viz-cap">La catena di intercettatori</div>
+                    <div class="viz-title">La logica trasversale avvolge il gestore, proprio come il middleware HTTP</div>
+                    <svg viewBox="0 0 720 150" xmlns="http://www.w3.org/2000/svg" role="img"
+                        aria-label="Un RPC in entrata che passa attraverso gli intercettori di ripristino, registrazione e autenticazione prima di raggiungere il gestore e tornare indietro">
+                        <defs>
+                            <marker id="ia" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+                                <path d="M0 0 L6 3 L0 6 Z" fill="#8f2f20" />
+                            </marker>
+                        </defs>
+                        <text x="20" y="22" class="mono" font-size="11" fill="#b8402e">RPC in arrivo -&gt;</text>
+                        <rect x="20" y="34" width="120" height="50" rx="9" fill="#f7e9e2" stroke="#b8402e" /><text
+                            x="80" y="56" font-size="11" font-weight="700" fill="#8f2f20"
+                            text-anchor="middle">recuperare</text><text x="80" y="72" font-size="9" fill="#5b5347"
+                            text-anchor="middle">prendi il panico</text>
+                        <rect x="160" y="34" width="120" height="50" rx="9" fill="#f7e9e2" stroke="#b8402e" /><text
+                            x="220" y="56" font-size="11" font-weight="700" fill="#8f2f20"
+                            text-anchor="middle">registrazione</text><text x="220" y="72" font-size="9" fill="#5b5347"
+                            text-anchor="middle">+ metriche, traccia</text>
+                        <rect x="300" y="34" width="120" height="50" rx="9" fill="#f7e9e2" stroke="#b8402e" /><text
+                            x="360" y="56" font-size="11" font-weight="700" fill="#8f2f20"
+                            text-anchor="middle">aut</text><text x="360" y="72" font-size="9" fill="#5b5347"
+                            text-anchor="middle">verificare il token</text>
+                        <rect x="450" y="34" width="150" height="50" rx="9" fill="#3f6f4e" /><text x="525" y="56"
+                            font-size="12" font-weight="700" fill="#fff" text-anchor="middle">il tuo gestore</text><text
+                            x="525" y="72" font-size="9" fill="#dceeea" text-anchor="middle">logica applicativa</text>
+                        <path d="M140 59 H160" stroke="#8f2f20" marker-end="url(#ia)" />
+                        <path d="M280 59 H300" stroke="#8f2f20" marker-end="url(#ia)" />
+                        <path d="M420 59 H450" stroke="#8f2f20" marker-end="url(#ia)" />
+                        <text x="360" y="118" class="serif" font-size="12.5" font-style="italic" fill="#5b5347"
+                            text-anchor="middle">L'ordine conta (ripristina più esterno, autenticazione più vicina al gestore), the
+                            stessa disciplina di ordinamento del middleware HTTP.</text>
+                        <text x="360" y="138" class="mono" font-size="10" fill="#3f6f4e" text-anchor="middle">&lt;-
+                            la risposta si svolge attraverso ciascun intercettore (lo stato dei record di registrazione, il ripristino protegge il
+                            ritorno)</text>
+                    </svg>
+                </div>
+
+                <div class="codeblock" data-cb>
+                    <div class="code-bar">
+                        <div class="dots"><i></i><i></i><i></i></div>
+                        <div class="code-tabs"><button class="on" data-lang="go"><span class="lang-go">&amp;#9679;</span>
+                                Vai</button><button data-lang="py"><span class="lang-py">&amp;#9679;</span> Pitone</button>
+                        </div>
+                    </div>
+                    <div class="code-panel on" data-panel="go">
+                        <pre><code class="language-go">// A unary server interceptor: signature is fixed by the framework.
+func authInterceptor(ctx context.Context, req any, info *grpc.UnaryServerInfo,
+    handler grpc.UnaryHandler) (any, error) {
+
+    md, _ := metadata.FromIncomingContext(ctx)
+    tokens := md.Get("authorization")
+    if len(tokens) == 0 || !valid(tokens[0]) {
+        return nil, status.Error(codes.Unauthenticated, "missing or invalid token")
+    }
+    // attach the verified identity for the handler to read from ctx
+    ctx = context.WithValue(ctx, userKey{}, parse(tokens[0]))
+    return handler(ctx, req) // call the next link / the real handler
+}
+
+func loggingInterceptor(ctx context.Context, req any, info *grpc.UnaryServerInfo,
+    handler grpc.UnaryHandler) (any, error) {
+    start := time.Now()
+    resp, err := handler(ctx, req)
+    log.Printf("%s took %s -> %s", info.FullMethod, time.Since(start), status.Code(err))
+    return resp, err
+}
+
+// Register the chain when building the server (outermost listed first):
+s := grpc.NewServer(
+    grpc.ChainUnaryInterceptor(loggingInterceptor, authInterceptor),
+)</code></pre>
+                    </div>
+                    <div class="code-panel" data-panel="py">
+                        <pre><code class="language-python">import grpc
+
+class AuthInterceptor(grpc.ServerInterceptor):
+    def intercept_service(self, continuation, handler_call_details):
+        md = dict(handler_call_details.invocation_metadata)
+        token = md.get("authorization", "")
+        if not valid(token):
+            # short-circuit: abort before the handler ever runs
+            def deny(request, context):
+                context.abort(grpc.StatusCode.UNAUTHENTICATED, "missing or invalid token")
+            return grpc.unary_unary_rpc_method_handler(deny)
+        return continuation(handler_call_details)  # proceed to next / handler
+
+# Register interceptors when building the server (applied in order):
+server = grpc.server(
+    futures.ThreadPoolExecutor(max_workers=10),
+    interceptors=[AuthInterceptor()],
+)
+
+# Client-side interceptors also exist (e.g. to inject auth on every call):
+#   channel = grpc.intercept_channel(base_channel, MyClientInterceptor())</code></pre>
+                    </div>
+                </div>
+                <p class="code-cap">Questa è la home gRPC per tutto ciò che i livelli inseriscono manualmente nel middleware: auth,
+                    registrazione,
+                    tracciamento, limitazione della velocità, recupero dal panico, scritto una volta, applicato a ogni metodo.</p>
+            </section>
+
+            <div class="part-label">Parte V / Produzione e interoperabilità</div>
+
+            <section id="s16">
+                <div class="sec-head">
+                    <div class="sec-num">16</div>
+                    <h2>Autenticazione e sicurezza</h2>
+                </div>
+                <p>La sicurezza gRPC si divide in due domande ortogonali: <strong>sicurezza del canale</strong> (è il
+                    connessione
+                    crittografato ed è il peer chi affermano di essere? -&gt; TLS/mTLS) e <strong>chiamare
+                        credenziali</strong> (chi
+                    è il chiamante per <em>questo</em> richiesta? -&gt; un token nei metadati). Li combini: TLS protegge
+                    la pipa,
+                    un token per chiamata identifica l'utente. Il <code>insecure</code> credenziali utilizzate negli esempi precedenti
+                    sono per
+                    solo sviluppo locale, non spedirli mai.</p>
+
+                <div class="tbl-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Strato</th>
+                                <th>Meccanismo</th>
+                                <th>Risposte</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td>Trasporti</td>
+                                <td><strong>TLS</strong>: il server presenta un certificato</td>
+                                <td>crittografato? + è il <em>servitore</em> genuino?</td>
+                            </tr>
+                            <tr>
+                                <td>Trasporti</td>
+                                <td><strong>mTLS</strong>: entrambe le parti presentano certificati</td>
+                                <td>+ è il <em>cliente</em> servizio genuino? (identità da servizio a servizio)</td>
+                            </tr>
+                            <tr>
+                                <td>Per chiamata</td>
+                                <td><strong>token nei metadati</strong> (portatore JWT/OAuth)</td>
+                                <td>quale <em>utente</em> sta facendo questa chiamata? (authn/authz, verificato in un interceptor
+                                    sezione 15)</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="codeblock" data-cb>
+                    <div class="code-bar">
+                        <div class="dots"><i></i><i></i><i></i></div>
+                        <div class="code-tabs"><button class="on" data-lang="go"><span class="lang-go">&amp;#9679;</span>
+                                Vai</button><button data-lang="py"><span class="lang-py">&amp;#9679;</span> Pitone</button>
+                        </div>
+                    </div>
+                    <div class="code-panel on" data-panel="go">
+                        <pre><code class="language-go">import "google.golang.org/grpc/credentials"
+
+// ===== SERVER over TLS =====
+creds, _ := credentials.NewServerTLSFromFile("server.crt", "server.key")
+s := grpc.NewServer(grpc.Creds(creds)) // every connection is now encrypted
+
+// ===== CLIENT over TLS =====
+tlsCreds := credentials.NewTLS(&tls.Config{RootCAs: pool}) // trust this CA
+conn, _ := grpc.NewClient("api.example.com:443", grpc.WithTransportCredentials(tlsCreds))
+
+// ===== Per-call token (combine with TLS) =====
+// Implement credentials.PerRPCCredentials so a fresh token rides on every call:
+type tokenCreds struct{ token string }
+func (t tokenCreds) GetRequestMetadata(ctx context.Context, _ ...string) (map[string]string, error) {
+    return map[string]string{"authorization": "Bearer " + t.token}, nil
+}
+func (t tokenCreds) RequireTransportSecurity() bool { return true } // refuse to send token in cleartext
+
+conn, _ = grpc.NewClient("api.example.com:443",
+    grpc.WithTransportCredentials(tlsCreds),
+    grpc.WithPerRPCCredentials(tokenCreds{token}),
+)</code></pre>
+                    </div>
+                    <div class="code-panel" data-panel="py">
+                        <pre><code class="language-python"># ===== SERVER over TLS =====
+with open("server.key", "rb") as k, open("server.crt", "rb") as c:
+    creds = grpc.ssl_server_credentials([(k.read(), c.read())])
+server.add_secure_port("[::]:443", creds)   # encrypted port
+
+# ===== CLIENT over TLS =====
+with open("ca.crt", "rb") as f:
+    channel_creds = grpc.ssl_channel_credentials(root_certificates=f.read())
+
+# ===== Per-call token, composed with the channel credentials =====
+class TokenAuth(grpc.AuthMetadataPlugin):
+    def __init__(self, token): self.token = token
+    def __call__(self, context, callback):
+        callback((("authorization", f"Bearer {self.token}"),), None)  # adds metadata per call
+
+call_creds = grpc.metadata_call_credentials(TokenAuth(token))
+composite  = grpc.composite_channel_credentials(channel_creds, call_creds)
+channel    = grpc.secure_channel("api.example.com:443", composite)</code></pre>
+                    </div>
+                </div>
+
+                <div class="box gotcha"><span class="tag">Non inviare mai token tramite testo in chiaro</span>
+                    <p>I token al portatore sono come le password, chiunque ne possieda uno può impersonare il chiamante (echo
+                        il furto del JWT
+                        avviso dal manuale di autenticazione). Richiedi sempre la sicurezza del trasporto prima di allegare le credenziali.
+                        mTLS è il
+                        standard per l'identità da servizio a servizio all'interno di una mesh; l'autorizzazione a livello utente funziona ancora su a
+                        token per chiamata che
+                        verifica un intercettore.</p>
+                </div>
+            </section>
+
+            <section id="s17">
+                <div class="sec-head">
+                    <div class="sec-num">17</div>
+                    <h2>Resilienza e bilanciamento del carico</h2>
+                </div>
+                <p>Poiché ogni chiamata remota può fallire in modi legati alla rete, il gRPC di produzione si basa su una certa resilienza
+                    funzionalità, per lo più configurate, non codificate manualmente. Quello non ovvio lo è <strong>bilanciamento del carico</strong>:
+                    gRPC
+                    connessione multiplex di lunga durata (sez 06) <em>si rompe</em> bilanciatori di carico ingenui e
+                    capire il perché
+                    essenziale per implementarlo.</p>
+
+                <div class="viz">
+                    <div class="viz-cap">La trappola del bilanciamento del carico</div>
+                    <div class="viz-title">Un bilanciatore L4 fissa ogni chiamata a un backend</div>
+                    <svg viewBox="0 0 720 230" xmlns="http://www.w3.org/2000/svg" role="img"
+                        aria-label="Un bilanciatore TCP L4 invia una connessione a un singolo backend in modo che tutte le chiamate multiplex lo raggiungano, rispetto a L7 o al bilanciamento lato client che distribuisce le chiamate tra i backend">
+                        <defs>
+                            <marker id="ra1" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto">
+                                <path d="M0 0 L7 3 L0 6 Z" fill="#d05a47" />
+                            </marker>
+                            <marker id="ra2" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto">
+                                <path d="M0 0 L7 3 L0 6 Z" fill="#3f6f4e" />
+                            </marker>
+                        </defs>
+                        <text x="20" y="20" class="mono" font-size="11" font-weight="700" fill="#d05a47">L4 (TCP)
+                            bilanciatore, SBAGLIATO per gRPC</text>
+                        <rect x="20" y="34" width="90" height="40" rx="8" fill="#b8402e" /><text x="65" y="58"
+                            font-size="11" fill="#fff" text-anchor="middle">cliente</text>
+                        <rect x="140" y="34" width="80" height="40" rx="8" fill="#211e1a" /><text x="180" y="54"
+                            font-size="10" fill="#fff" text-anchor="middle">L4 LB</text><text x="180" y="68"
+                            font-size="8" fill="#e9e2d3" text-anchor="middle">per conn</text>
+                        <path d="M110 54 H140" stroke="#d05a47" stroke-width="1.6" marker-end="url(#ra1)" />
+                        <path d="M220 54 H290" stroke="#d05a47" stroke-width="2.4" marker-end="url(#ra1)" />
+                        <rect x="292" y="32" width="80" height="26" rx="6" fill="#f7d9d0" stroke="#b8402e" /><text
+                            x="332" y="49" font-size="9.5" fill="#8f2f20" text-anchor="middle">backend 1 (caldo)</text>
+                        <rect x="292" y="64" width="80" height="22" rx="6" fill="#eee" stroke="#d8cfbe" /><text x="332"
+                            y="79" font-size="9" fill="#999" text-anchor="middle">backend 2 inattivo</text>
+                        <text x="392" y="58" font-size="10" font-style="italic" fill="#b8402e">tutte le chiamate multiplexate
+                            atterrare su una scatola</text>
+
+                        <text x="20" y="128" class="mono" font-size="11" font-weight="700" fill="#3f6f4e">L7 /
+                            bilanciamento lato client, GIUSTO</text>
+                        <rect x="20" y="142" width="90" height="40" rx="8" fill="#b8402e" /><text x="65" y="166"
+                            font-size="11" fill="#fff" text-anchor="middle">cliente</text>
+                        <rect x="140" y="142" width="80" height="40" rx="8" fill="#3f6f4e" /><text x="180" y="162"
+                            font-size="10" fill="#fff" text-anchor="middle">L7/maglia</text><text x="180" y="176"
+                            font-size="8" fill="#dceeea" text-anchor="middle">per RPC</text>
+                        <path d="M110 162 H140" stroke="#3f6f4e" stroke-width="1.6" marker-end="url(#ra2)" />
+                        <path d="M220 150 C250 140 270 132 300 130" stroke="#3f6f4e" stroke-width="1.6" fill="none"
+                            marker-end="url(#ra2)" />
+                        <path d="M220 162 H300" stroke="#3f6f4e" stroke-width="1.6" marker-end="url(#ra2)" />
+                        <path d="M220 174 C250 184 270 192 300 194" stroke="#3f6f4e" stroke-width="1.6" fill="none"
+                            marker-end="url(#ra2)" />
+                        <rect x="302" y="118" width="80" height="24" rx="6" fill="#e0e9dd" stroke="#3f6f4e" /><text
+                            x="342" y="134" font-size="9" fill="#3f6f4e" text-anchor="middle">backend 1</text>
+                        <rect x="302" y="150" width="80" height="24" rx="6" fill="#e0e9dd" stroke="#3f6f4e" /><text
+                            x="342" y="166" font-size="9" fill="#3f6f4e" text-anchor="middle">backend 2</text>
+                        <rect x="302" y="182" width="80" height="24" rx="6" fill="#e0e9dd" stroke="#3f6f4e" /><text
+                            x="342" y="198" font-size="9" fill="#3f6f4e" text-anchor="middle">backend 3</text>
+                        <text x="400" y="166" font-size="10" font-style="italic" fill="#3f6f4e">diffusione dei singoli RPC
+                            attraverso i backend</text>
+                    </svg>
+                    <div class="viz-note">Correzioni: un proxy L7 che bilancia per-<em>richiesta</em> (Inviato/Linkerd), o
+                        lato client
+                        bilanciamento in cui il client risolve da solo tutti i backend e gli RPC round robin. Un semplice TCP
+                        volontà del bilanciatore
+                        incanalare il traffico di un'intera connessione verso un pod.</div>
+                </div>
+
+                <h4>Nuovi tentativi, keepalive, salute</h4>
+                <p>supporta gRPC <strong>tentativi dichiarativi</strong> tramite a <em>configurazione del servizio</em> (una policy JSON
+                    allegato a
+                    il canale): quali codici di stato possono essere riprovati (tipicamente <code>UNAVAILABLE</code>), quanti
+                    tentativi e
+                    backoff esponenziale, nessun ciclo di tentativi nel codice. <strong>Keepalive</strong> rilevamento dei ping
+                    connessioni morte
+                    e mantenere in vita quelli inattivi tramite NAT/proxy. Una norma <strong>controllo sanitario</strong> servizio
+                    carichiamo
+                    i bilanciatori e le sonde Kubernetes chiedono &quot;sei pronto?&quot; Insieme, questi costituiscono la linea di base della resilienza.</p>
+
+                <div class="codeblock single">
+                    <div class="code-bar">
+                        <div class="dots"><i></i><i></i><i></i></div><span class="filename">service-config.json/criterio dichiarativo per i nuovi tentativi (indipendente dalla lingua)</span>
+                    </div>
+                    <pre><code class="language-protobuf">{
+  "methodConfig": [{
+    "name": [{ "service": "user.v1.UserService" }],
+    "retryPolicy": {
+      "maxAttempts": 4,
+      "initialBackoff": "0.1s",
+      "maxBackoff": "2s",
+      "backoffMultiplier": 2,
+      "retryableStatusCodes": [ "UNAVAILABLE" ]
+    }
+  }]
+}
+// Attach to the channel (Go: grpc.WithDefaultServiceConfig(json);
+// Python: grpc.insecure_channel(target, options=[("grpc.service_config", json)]))
+// Only retry IDEMPOTENT methods automatically, retrying a non-idempotent
+// "charge card" can double-charge (same lesson as POST idempotency keys in REST).</code></pre>
+                </div>
+
+                <div class="box gotcha"><span class="tag">I nuovi tentativi necessitano di idempotenza</span>
+                    <p>I nuovi tentativi automatici sono sicuri solo per i metodi idempotenti. Nuovo tentativo di &quot;crea pagamento&quot; dopo un timeout
+                        può caricare
+                        due volte, il pericolo esatto che il manuale REST ha risolto con le chiavi di idempotenza. Segna quali metodi
+                        sono sicuri e
+                        per il resto, utilizza una chiave di idempotenza o accetta che non vengano ritentati automaticamente.</p>
+                </div>
+            </section>
+
+            <section id="s18">
+                <div class="sec-head">
+                    <div class="sec-num">18</div>
+                    <h2>gRPC vs REST: scelta</h2>
+                </div>
+                <p>Non una rivalità, strumenti diversi. La regola della decisione onesta: <strong>gRPC per interni,
+                        rendimento elevato,
+                        traffico da servizio a servizio digitato; REST/JSON per servizi pubblici, rivolti al browser, eseguibili da utenti umani,
+                        facile da usare con la cache
+                        API.</strong> La maggior parte dei sistemi reali esegue entrambi: gRPC tra servizi backend, un REST (o GraphQL)
+                    bordo per il
+                    mondo esterno.</p>
+
+                <div class="tbl-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Dimensione</th>
+                                <th>gRPC</th>
+                                <th>RESTO/JSON</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td>Carico utile</td>
+                                <td>Protobuf binario, compatto, veloce</td>
+                                <td>Testo JSON, voluminoso, leggibile dall'uomo</td>
+                            </tr>
+                            <tr>
+                                <td>Contratto</td>
+                                <td>Imposto da <code>.proto</code>; codegen</td>
+                                <td>Convenzione + documenti (OpenAPI opzionale)</td>
+                            </tr>
+                            <tr>
+                                <td>Trasporti</td>
+                                <td>Solo HTTP/2 (multiplexato)</td>
+                                <td>Qualsiasi HTTP, incl. 1.1</td>
+                            </tr>
+                            <tr>
+                                <td>Streaming</td>
+                                <td>Di prima classe, bidirezionale</td>
+                                <td>Bolt-on (SSE, polling, WebSocket)</td>
+                            </tr>
+                            <tr>
+                                <td>Supporto del browser</td>
+                                <td><span class="no">Nessun nativo</span>, necessita di gRPC-Web (sez 19)</td>
+                                <td><span class="yes">Universale</span></td>
+                            </tr>
+                            <tr>
+                                <td>Debuggabile dall'uomo</td>
+                                <td>Richiede strumenti (grpcurl)</td>
+                                <td><span class="yes">curl, browser, devtools</span></td>
+                            </tr>
+                            <tr>
+                                <td>Cache HTTP</td>
+                                <td>Non proprio</td>
+                                <td><span class="yes">Maturo (ETag, controllo cache)</span></td>
+                            </tr>
+                            <tr>
+                                <td>La migliore vestibilità</td>
+                                <td>Microservizi, interni, a bassa latenza, poliglotti</td>
+                                <td>API pubbliche, front door web/mobile, terze parti</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="box note"><span class="tag">L'architettura pragmatica</span>
+                    <p>Una forma molto comune: i clienti colpiscono a <strong>Gateway REST/JSON</strong> su HTTP/1.1; dietro di esso,
+                        quella porta
+                        e parlano tutti i servizi interni <strong>gRPC</strong> l'uno all'altro. Ottieni il
+                        accessibilità al pubblico di REST
+                        all'edge e la velocità/digitazione di gRPC nel core e strumenti come grpc-gateway
+                        (sec 19) può anche
+                        generare il bordo REST dallo stesso protocollo.</p>
+                </div>
+            </section>
+
+            <section id="s19">
+                <div class="sec-head">
+                    <div class="sec-num">19</div>
+                    <h2>gRPC-Interoperabilità Web e browser</h2>
+                </div>
+                <p>Un vincolo difficile e una sorpresa frequente: <strong>i browser non possono parlare gRPC nativo.</strong> Il
+                    la ragione è
+                    dal sec. 06, gRPC necessita di un controllo capillare su frame e trailer HTTP/2 e browser
+                    <code>fetch</code>/XHR don't expose that. So talking to gRPC from a web frontend requires a
+                    translation layer.
+                </p>
+
+                <div class="viz">
+                    <div class="viz-cap">Collegamento al browser</div>
+                    <div class="viz-title">Un proxy traduce tra gRPC nativo e ottimizzato per browser</div>
+                    <svg viewBox="0 0 720 170" xmlns="http://www.w3.org/2000/svg" role="img"
+                        aria-label="Il browser comunica gRPC-Web con un proxy come Envoy che si traduce in gRPC nativo per i servizi backend">
+                        <defs>
+                            <marker id="wa" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto">
+                                <path d="M0 0 L7 3 L0 6 Z" fill="#8f2f20" />
+                            </marker>
+                        </defs>
+                        <rect x="20" y="55" width="150" height="56" rx="10" fill="#b8402e" /><text x="95" y="80"
+                            font-size="13" font-weight="700" fill="#fff" text-anchor="middle">Navigatore</text><text x="95"
+                            y="98" class="mono" font-size="9" fill="#f4d9cf" text-anchor="middle">client Web gRPC</text>
+                        <rect x="285" y="50" width="150" height="66" rx="10" fill="#211e1a" /><text x="360" y="78"
+                            font-size="12.5" font-weight="700" fill="#fff" text-anchor="middle">Procura</text><text
+                            x="360" y="96" class="mono" font-size="9" fill="#e9e2d3" text-anchor="middle">inviato /
+                            porta</text>
+                        <rect x="550" y="55" width="150" height="56" rx="10" fill="#3f6f4e" /><text x="625" y="80"
+                            font-size="13" font-weight="700" fill="#fff" text-anchor="middle">servizio gRPC</text><text
+                            x="625" y="98" class="mono" font-size="9" fill="#dceeea" text-anchor="middle">nativo
+                            gRPC</text>
+                        <path d="M172 83 H283" stroke="#8f2f20" stroke-width="1.8" marker-end="url(#wa)" /><text x="227"
+                            y="74" class="mono" font-size="9.5" fill="#8f2f20" text-anchor="middle">gRPC-Web</text><text
+                            x="227" y="103" font-size="9" font-style="italic" fill="#5b5347"
+                            text-anchor="middle">Compatibile con HTTP/1.1</text>
+                        <path d="M437 83 H548" stroke="#8f2f20" stroke-width="1.8" marker-end="url(#wa)" /><text x="492"
+                            y="74" class="mono" font-size="9.5" fill="#8f2f20" text-anchor="middle">nativo
+                            gRPC</text><text x="492" y="103" font-size="9" font-style="italic" fill="#5b5347"
+                            text-anchor="middle">HTTP/2 + trailer</text>
+                    </svg>
+                </div>
+
+                <p>Le tue opzioni, più o meno in ordine di quanto vuoi gRPC sul frontend:</p>
+                <ul>
+                    <li><strong>gRPC-Web</strong>: un protocollo variante più un client JS/TS generato; una procura
+                        (L'inviato ha un
+                        filtro integrato) lo traduce in gRPC reale. Lo streaming è limitato (lo streaming dal server funziona; completo
+                        bidirezionale generalmente no).</li>
+                    <li><strong>Connettiti</strong> (connectrpc), una moderna famiglia di protocolli che parla gRPC,
+                        gRPC-Web, <em>e</em>
+                        il proprio HTTP/JSON, spesso senza un proxy separato, dagli stessi gestori. Sempre più il
+                        percorso più amichevole.</li>
+                    <li><strong>gateway/transcodifica grpc</strong>: genera a <em>RESTO+JSON</em> facciata da
+                        tuo
+                        <code>.proto</code> (tramite annotazioni HTTP). Il browser utilizza il semplice REST; il gateway transcodifica
+                        a gRPC.
+                        Questo è il modello &quot;REST edge from one proto&quot; a cui si fa riferimento nella sezione 18.
+                    </li>
+                </ul>
+
+                <div class="box gotcha"><span class="tag">Pianifica il limite prima di impegnarti</span>
+                    <p>Se un browser deve chiamare direttamente il tuo servizio, decidi tu la strategia del bridge in anticipo
+                        non posso semplicemente indicare
+                        <code>fetch</code> su una porta gRPC. Per i servizi solo interni questo non ha importanza; per qualsiasi cosa
+                        rivolto al web è
+                        una decisione progettuale di prima classe.
+                    </p>
+                </div>
+            </section>
+
+            <section id="s20">
+                <div class="sec-head">
+                    <div class="sec-num">20</div>
+                    <h2>Osservabilità e debug</h2>
+                </div>
+                <p>I payload binari significano che non è possibile osservare il traffico come JSON (sez. 05), quindi gRPC invia un ecosistema a
+                    vedere dentro.
+                    Conoscere questi aspetti trasforma un servizio gRPC da una scatola nera in qualcosa che puoi colpire, tracciare e sondare.
+                </p>
+
+                <div class="tbl-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Strumento/funzionalità</th>
+                                <th>Cosa ti dà</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><code>grpcurl</code></td>
+                                <td>Il <code>curl</code> di gRPC, chiamare metodi dalla CLI con JSON in/out,
+                                    elencare servizi e metodi.</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Riflessione del server</strong></td>
+                                <td>Consente ai client/strumenti di scoprire i servizi e gli schemi dei messaggi di un server in fase di esecuzione, quindi <code>grpcurl</code> funziona senza il <code>.proto</code> a portata di mano.</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Controllo sanitario</strong></td>
+                                <td>Una norma <code>grpc.health.v1.Health</code> servizio per sonde di prontezza/attività
+                                    (K8, bilanciatori del carico).</td>
+                            </tr>
+                            <tr>
+                                <td><strong>canalez</strong></td>
+                                <td>Introspezione integrata di canali live, connessioni e statistiche per RPC per
+                                    debug della connettività.</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Intercettori</strong> (sez. 15)</td>
+                                <td>L'hook per metriche (Prometheus), log strutturati e tracciamento distribuito
+                                    (OpenTelemetry) su ogni chiamata.</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Propagazione delle tracce</strong></td>
+                                <td>Passare un ID di traccia/richiesta attraverso i metadati (sez. 13) in modo che una richiesta sia seguibile
+                                    in ogni servizio che tocca.</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="codeblock single">
+                    <div class="code-bar">
+                        <div class="dots"><i></i><i></i><i></i></div><span class="filename">grpcurl/debug
+                            dal guscio</span>
+                    </div>
+                    <pre><code class="language-protobuf"># List every service the server exposes (needs reflection enabled):
+grpcurl localhost:50051 list
+
+# List the methods of one service:
+grpcurl localhost:50051 list user.v1.UserService
+
+# Call a unary method with a JSON request, grpcurl turns it into protobuf for you:
+grpcurl -d '{"id": "u42"}' localhost:50051 user.v1.UserService/GetUser
+
+# Against a TLS server, drop -plaintext; for local insecure servers, add it:
+grpcurl -plaintext -d '{"id":"u42"}' localhost:50051 user.v1.UserService/GetUser</code></pre>
+                </div>
+
+                <div class="box key"><span class="tag">Abilita riflessione in non-prod</span>
+                    <p>Attiva la riflessione del server in dev/staging così <code>grpcurl</code> e strumenti GUI (come Postman's
+                        modalità gRPC o
+                        grpcui) può esplorare la tua API senza che tu spedisca <code>.proto</code> file in giro. Molte squadre
+                        disabilitarlo in
+                        produzione per evitare di pubblicizzare lo schema, una piccola decisione sulla superficie di attacco.</p>
+                </div>
+            </section>
+
+            <section id="s21">
+                <div class="sec-head">
+                    <div class="sec-num">21</div>
+                    <h2>Cheat-sheet di debug</h2>
+                </div>
+                <p>L'intero manuale compresso in ciò che raggiungi sotto pressione.</p>
+                <div class="tbl-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Concetto</th>
+                                <th>Una riga</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td>gRPC</td>
+                                <td>Chiamate a metodi remoti digitati, contratto Protobuf, serializzazione binaria, HTTP/2
+                                    trasporto.</td>
+                            </tr>
+                            <tr>
+                                <td>Protocollo (IDL)</td>
+                                <td>Il <code>.proto</code> è il contratto; entrambe le parti generano codice da esso.</td>
+                            </tr>
+                            <tr>
+                                <td>Numeri di campo</td>
+                                <td>La vera identità del filo, non cambiarla né riutilizzarla mai; aggiungere campi è sicuro.
+                                </td>
+                            </tr>
+                            <tr>
+                                <td>Formato filo</td>
+                                <td>etichetta = <code>(field&#171;3)|wiretype</code>, confezionato in varianti; piccolo + veloce, no
+                                    leggibile dall'uomo.</td>
+                            </tr>
+                            <tr>
+                                <td>HTTP/2</td>
+                                <td>Una connessione, molti flussi interlacciati; un RPC = un flusso.</td>
+                            </tr>
+                            <tr>
+                                <td>Unario</td>
+                                <td>1-&gt;1, la chiamata normale (~90% degli RPC).</td>
+                            </tr>
+                            <tr>
+                                <td>Flusso del server</td>
+                                <td>1-&gt;molti, feed, grandi set di risultati.</td>
+                            </tr>
+                            <tr>
+                                <td>Flusso del cliente</td>
+                                <td>molti-&gt;1, caricamenti, aggregazione batch.</td>
+                            </tr>
+                            <tr>
+                                <td>Flusso Bidi</td>
+                                <td>molti&lt;-&gt;molti, chat, tempo reale, full-duplex.</td>
+                            </tr>
+                            <tr>
+                                <td>Canale vs stub</td>
+                                <td>Canale = connessione riutilizzata (uno, condiviso); stub = chiamante per chiamata economico.</td>
+                            </tr>
+                            <tr>
+                                <td>Metadati</td>
+                                <td>Canale laterale valore-chiave = intestazioni HTTP; trasporta token e ID di traccia.</td>
+                            </tr>
+                            <tr>
+                                <td>Scadenza</td>
+                                <td>Limite temporale assoluto, propagazione tra i salti, impostarne uno attivo <em>ogni</em> chiamare.
+                                </td>
+                            </tr>
+                            <tr>
+                                <td>Codici di stato</td>
+                                <td>L'enumerazione di gRPC (OK, NOT_FOUND, UNAVAILABLE...), in un trailer, non HTTP
+                                    codici.</td>
+                            </tr>
+                            <tr>
+                                <td>Intercettori</td>
+                                <td>middleware gRPC, autenticazione, registrazione, traccia, ripristino; unario e flusso.</td>
+                            </tr>
+                            <tr>
+                                <td>Sicurezza</td>
+                                <td>TLS/mTLS per la pipe + token-in-metadata per l'utente; mai <code>insecure</code>
+                                    nella prod.</td>
+                            </tr>
+                            <tr>
+                                <td>Bilanciamento del carico</td>
+                                <td>Utilizza L7/lato client, un bilanciatore TCP L4 collega tutto a un backend.</td>
+                            </tr>
+                            <tr>
+                                <td>Nuovi tentativi</td>
+                                <td>Dichiarativo tramite configurazione del servizio; solo metodi idempotenti con riprova automatica.</td>
+                            </tr>
+                            <tr>
+                                <td>Navigatore</td>
+                                <td>Nessun gRPC nativo, utilizza gRPC-Web, Connect o un gateway REST.</td>
+                            </tr>
+                            <tr>
+                                <td>Debug</td>
+                                <td><code>grpcurl</code> + riflessione; channelz per le connessioni; servizio sanitario per
+                                    sonde.</td>
+                            </tr>
+                            <tr>
+                                <td>contro RIPOSO</td>
+                                <td>gRPC = interno/digitato/veloce; REST = pubblico/debugable/memorizzabile nella cache. Esegui entrambi.</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="foot">
+                    <p><strong>Tutto l'argomento in un fiato:</strong> gRPC consente a un client di chiamare il metodo di un server come se
+                        lo era
+                        locale. Definisci l'API una volta ogni tanto <code>.proto</code> (sez. 04), <code>protoc</code>
+                        genera un typed
+                        stub e scheletro del server (sec 11), gli argomenti sono serializzati come protobuf compatto (sec 05) e
+                        riportato
+                        flussi HTTP/2 multiplex (sec 06) in una delle quattro forme, unario, server, client o
+                        streaming bidirezionale (sez. 07-10). Un canale di lunga durata ospita stub per chiamata economici
+                        (sez. 12);
+                        i metadati trasportano il contesto di autenticazione e traccia, le scadenze vincolate e propagano la chiamata, la cancellazione
+                        recupera il lavoro
+                        (sez. 13); ogni chiamata termina con un codice di stato gRPC (sec 14); gli intercettori si centralizzano
+                        logica trasversale
+                        (sez. 15); TLS/mTLS più token per chiamata lo proteggono (sez. 16); tentativi dichiarativi e
+                        L7/lato client
+                        il bilanciamento lo rende resiliente (sez 17). Raggiungi gRPC all'interno del tuo sistema e REST al pubblico
+                        bordo
+                        (sec 18-19), e appoggiarsi a grpcurl, riflesso e intercettori per vedere all'interno (sec 20).
+                    </p>
+                    <p
+                        style="margin-top:14px;font-family:'JetBrains Mono', ui-monospace, monospace;font-size:12px;letter-spacing:.05em;">
+                        Basato su documenti grpc.io e protobuf.dev / MDN per background HTTP/2 / Go 1.22+
+                        (google.golang.org/grpc) / Esempi di Python 3.11+ (grpcio).</p>
+                </div>
+            </section>
+
+        
+      <footer class="bfp-footer">Backend da First Principles / Capitolo 13 / gRPC. Il codice è destinato a Go 1.22+ e Python 3.11+.</footer>
+</main>
+</div>
+<button class="toc-toggle" onclick="document.querySelector('.toc').classList.toggle('open')"> Contenuto</button>
+
+    
+
+    <script>
+        hljs.highlightAll();
+        document.querySelectorAll('[data-cb]').forEach(block => {
+            const btns = block.querySelectorAll('.code-tabs button');
+            const panels = block.querySelectorAll('.code-panel');
+            btns.forEach(btn => btn.addEventListener('click', () => {
+                const lang = btn.dataset.lang;
+                btns.forEach(b => b.classList.toggle('on', b === btn));
+                panels.forEach(p => p.classList.toggle('on', p.dataset.panel === lang));
+            }));
+        });
+</script>
+<!-- CHAPTER NAVIGATION -->
+<nav class="chapter-nav" id="chapterNav">
+  <a href="../../12. Error Handling and Building Fault Tolerant Systems/html_notes/notes.html" class="nav-chapter-link"><span class="nav-arrow"><svg class="ico-arrow" width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="13.5" y1="8" x2="3.5" y2="8"/><polyline points="7.5,4 3.5,8 7.5,12"/></svg></span><span class="nav-label"><span class="nav-small">Capitolo 12</span>Gestione degli errori e tolleranza agli errori</span></a>
+  <a href="../../index.html" class="nav-indicator"><span class="nav-dot"></span> Capitolo 13 <span class="nav-sep">/</span> 24</a>
+  <a href="../../14.Production-grade Configuration Management/html_notes/notes.html" class="nav-chapter-link nav-next"><span class="nav-label"><span class="nav-small">Capitolo 14</span>Gestione della configurazione</span><span class="nav-arrow"><svg class="ico-arrow" width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="2.5" y1="8" x2="12.5" y2="8"/><polyline points="8.5,4 12.5,8 8.5,12"/></svg></span></a>
+</nav>
+  <script src="../../assets/copy-button.js"></script>
+  <script src="../../assets/enhancements.js"></script>
+<script src="../../assets/shell.js"></script>
+</body>
+
+</html>

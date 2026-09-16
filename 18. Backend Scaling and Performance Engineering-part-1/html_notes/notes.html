@@ -1,0 +1,1976 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="referrer" content="no-referrer">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Scalabilità e prestazioni (Parte 1) / Capitolo 18 / Backend dai primi principi</title>
+  <meta name="description" content="Capitolo 18 di Backend dai primi principi: scalabilità e prestazioni (parte 1). Note sui principi primi, diagrammi ed esempi eseguibili in Go e Python.">
+  <meta name="theme-color" content="#f3ede2">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2032%2032'%3E%3Crect%20width='32'%20height='32'%20rx='7'%20fill='%23b8402e'/%3E%3Ctext%20x='16'%20y='23'%20font-family='Georgia,serif'%20font-size='19'%20font-weight='700'%20fill='%23f3ede2'%20text-anchor='middle'%3EB%3C/text%3E%3C/svg%3E">
+<style>
+  :root{
+  --bg: #f3ede2;
+  --bg-sidebar: #ece3d4;
+  --bg-code: #e6dcca;
+  --bg-card: #ece3d4;
+  --text: #211e1a;
+  --text-muted: #5b5347;
+  --text-light: #8d8475;
+  --accent: #b8402e;
+  --accent-dark: #8f2f20;
+  --border: #d8cfbe;
+  --border-light: #c7bca6;
+  --highlight: #f0e5c9;
+  --code-green: #a9c98a;
+  --code-blue: #7fb0c9;
+  --code-orange: #e0896a;
+  --code-purple: #c58fb0;
+  --code-red: #e0896a;
+  --diagram-bg: #ece3d4;
+  --diagram-stroke: #5b5347;
+  --diagram-fill: #e6dcca;
+  --diagram-accent: #b8402e;
+  --diagram-blue: #37607f;
+  --diagram-green: #3f6f4e;
+}
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  html {
+    scroll-behavior: smooth;
+    font-size: 17px;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family:"Spline Sans", system-ui, sans-serif;
+    line-height: 1.7;
+    -webkit-font-smoothing: antialiased;
+  font-size: 17px}
+
+  .chapter-label {
+    font-family:"Spline Sans", system-ui, sans-serif;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.2em;
+    color: var(--accent);
+    margin-bottom: 0.5rem;
+    font-weight: 600;
+  }
+
+  .chapter-title {
+    font-family:"Fraunces", Georgia, serif;
+    font-size: 2.8rem;
+    font-weight: 900;
+    line-height: 1.12;
+    margin-bottom: 1.5rem;
+    color: var(--text);
+  }
+
+  .chapter-intro {
+    font-size: 1.05rem;
+    color: var(--text-muted);
+    line-height: 1.8;
+    margin-bottom: 2.5rem;
+  }
+
+  hr.section-rule {
+    border: none;
+    height: 1px;
+    background: var(--border);
+    margin: 3rem 0;
+  }
+
+  /* -- Section Headings -- */
+  .section-heading {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 1.5rem;
+    margin-top: 0.5rem;
+  }
+
+  .section-num {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width:2rem;
+    height: 2rem;
+    background: var(--accent);
+    color: #fff;
+    font-family:"Spline Sans", system-ui, sans-serif;
+    font-size: 0.72rem;
+    font-weight: 700;
+    border-radius: 4px;
+    flex-shrink: 0;
+  }
+
+  .section-heading h2 {
+    font-family:"Fraunces", Georgia, serif;
+    font-size: 1.65rem;
+    font-weight: 700;
+    line-height: 1.25;
+  }
+
+  h3 {
+    font-family:"Fraunces", Georgia, serif;
+    font-size: 1.25rem;
+    font-weight: 700;
+    margin: 2.2rem 0 0.8rem;
+    line-height: 1.3;
+  }
+
+  h4 {
+    font-family:"Spline Sans", system-ui, sans-serif;
+    font-size: 1.05rem;
+    font-weight: 700;
+    margin: 1.8rem 0 0.6rem;
+    color: var(--text);
+  }
+
+  p {
+    margin-bottom: 1rem;
+  }
+
+  strong {
+    font-weight: 600;
+  }
+
+  em {
+    font-style: italic;
+  }
+
+  a {
+    color: var(--accent);
+    text-decoration: underline;
+    text-decoration-color: var(--border);
+    text-underline-offset: 2px;
+    transition: text-decoration-color 0.2s;
+  }
+
+  a:hover {
+    text-decoration-color: var(--accent);
+  }
+
+  /* -- Code -- */
+  code {
+    font-family:"JetBrains Mono", ui-monospace, monospace;
+    font-size: 0.82rem;
+    background: var(--bg-code);
+    padding: 0.15em 0.4em;
+    border-radius: 3px;
+    color: var(--accent-dark);
+  }
+
+  pre {
+    background: #232019;
+    color: #e9e2d3;
+    padding: 1.4rem 1.6rem;
+    border-radius: 6px;
+    overflow-x: auto;
+    margin: 1.2rem 0 1.6rem;
+    line-height: 1.6;
+    font-size: 0.82rem;
+    position: relative;
+    border: 1px solid #35302a;
+  }
+
+  pre code {
+    background: none;
+    padding: 0;
+    color: inherit;
+    font-size: inherit;
+  }
+
+  .code-label {
+    position: absolute;
+    top: 0;
+    right: 0;
+    background: var(--accent);
+    color: #fff;
+    font-family:"Spline Sans", system-ui, sans-serif;
+    font-size: 0.6rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    padding: 0.25rem 0.7rem;
+    border-radius: 0 6px 0 4px;
+  }
+
+  .syn-kw { color: #d8b66a; }
+  .syn-fn { color: #7fb0c9; }
+  .syn-str { color: #a9c98a; }
+  .syn-cm { color: #7d7468; font-style: italic; }
+  .syn-num { color: #d8b66a; }
+  .syn-type { color: #c58fb0; }
+  .syn-op { color: #d8cfbe; }
+  .syn-builtin { color: #d8b66a; }
+
+  /* -- Callouts -- */
+  .callout {
+    border-left: 3px solid var(--accent);
+    background: var(--bg-card);
+    padding: 1.1rem 1.4rem;
+    margin: 1.5rem 0;
+    border-radius: 0 5px 5px 0;
+    font-size: 0.95rem;
+  }
+
+  .callout-title {
+    font-family:"Spline Sans", system-ui, sans-serif;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.15em;
+    color: var(--accent);
+    font-weight: 700;
+    margin-bottom: 0.4rem;
+  }
+
+  .callout.info {
+    border-left-color: var(--diagram-blue);
+  }
+  .callout.info .callout-title {
+    color: var(--diagram-blue);
+  }
+
+  .callout.warn {
+    border-left-color: var(--code-orange);
+  }
+  .callout.warn .callout-title {
+    color: var(--code-orange);
+  }
+
+  /* -- Diagrams -- */
+  .diagram-container {
+    background: var(--diagram-bg);
+    border: 1px solid var(--border-light);
+    border-radius: 6px;
+    padding: 1.5rem;
+    margin: 1.5rem 0 2rem;
+    overflow-x: auto;
+  }
+
+  .diagram-caption {
+    font-family:"Spline Sans", system-ui, sans-serif;
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--text-light);
+    text-align: center;
+    margin-top: 0.8rem;
+  }
+
+  .diagram-container svg {
+    display: block;
+    margin: 0 auto;
+  }
+
+  /* -- Tables -- */
+  table {
+    width:100%;
+    border-collapse: collapse;
+    margin: 1.2rem 0 1.6rem;
+    font-size: 0.9rem;
+  }
+
+  th {
+    font-family:"Spline Sans", system-ui, sans-serif;
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    font-weight: 600;
+    text-align: left;
+    padding: 0.7rem 1rem;
+    border-bottom: 2px solid var(--border);
+    color: var(--text-muted);
+  }
+
+  td {
+    padding: 0.6rem 1rem;
+    border-bottom: 1px solid var(--border-light);
+    vertical-align: top;
+  }
+
+  tr:last-child td { border-bottom: none; }
+
+  /* -- Comparison cards -- */
+  .compare-grid {
+    display: grid;
+    grid-template-columns:1fr 1fr;
+    gap: 1rem;
+    margin: 1.2rem 0 1.6rem;
+  }
+
+  .compare-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border-light);
+    border-radius: 6px;
+    padding: 1.2rem 1.3rem;
+  }
+
+  .compare-card h5 {
+    font-family:"Spline Sans", system-ui, sans-serif;
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    font-weight: 700;
+    margin-bottom: 0.6rem;
+    color: var(--accent);
+  }
+
+  .compare-card ul {
+    list-style: none;
+    font-size: 0.9rem;
+  }
+
+  .compare-card li {
+    padding: 0.2rem 0;
+    padding-left:1rem;
+    position: relative;
+  }
+
+  .compare-card li::before {
+    content: '>';
+    position: absolute;
+    left:0;
+    color: var(--accent);
+    font-weight: 700;
+  }
+
+  /* -- Reference links -- */
+  .ref-box {
+    background: var(--bg-card);
+    border: 1px solid var(--border-light);
+    border-radius: 5px;
+    padding: 0.8rem 1.2rem;
+    margin: 1.2rem 0;
+    font-size: 0.85rem;
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+  }
+
+  .ref-box .ref-icon {
+    font-size: 1rem;
+    flex-shrink: 0;
+  }
+
+  /* -- Keyword underline -- */
+  .keyword {
+    text-decoration: underline;
+    text-decoration-color: var(--accent);
+    text-decoration-thickness: 2px;
+    text-underline-offset: 3px;
+    font-weight: 600;
+  }
+
+  /* -- Formula -- */
+  .formula {
+    background: var(--bg-card);
+    border: 1px solid var(--border-light);
+    border-radius: 5px;
+    padding: 1rem 1.4rem;
+    margin: 1.2rem 0;
+    text-align: center;
+    font-family:"JetBrains Mono", ui-monospace, monospace;
+    font-size: 0.95rem;
+    color: var(--accent-dark);
+    letter-spacing: 0.03em;
+  }
+
+  /* -- Back to top -- */
+  .back-to-top {
+    display: block;
+    text-align: center;
+    padding: 2rem 0;
+    font-family:"Spline Sans", system-ui, sans-serif;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.15em;
+    color: var(--text-light);
+    text-decoration: none;
+    margin-top: 3rem;
+    border-top: 1px solid var(--border);
+  }
+
+  .back-to-top:hover {
+    color: var(--accent);
+  }
+
+  /* -- Responsive -- */
+  @media (max-width:900px) {
+    .chapter-title { font-size: 2rem; }
+    .compare-grid { grid-template-columns:1fr; }}</style>
+<style>
+.chapter-nav{position:fixed;bottom:0;left:0;right:0;z-index:9998;display:flex;align-items:center;justify-content:space-between;padding:14px clamp(16px,4vw,48px);background:rgba(243,237,226,.88);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border-top:1.5px solid #c7bca6;box-shadow:0 -8px 32px -16px rgba(40,30,20,.18);font-family:"JetBrains Mono", ui-monospace, monospace;}
+.nav-chapter-link{display:flex;align-items:center;gap:12px;text-decoration:none;color:#5b5347;padding:10px 18px;border-radius:10px;transition:all .2s ease;max-width:38%;}
+.nav-chapter-link:hover{background:rgba(184,64,46,.08);color:#b8402e;transform:translateY(-1px);}
+.nav-chapter-link.nav-next{text-align:right;flex-direction:row;}
+.nav-arrow{font-size:22px;color:#b8402e;font-weight:700;flex:none;}
+.nav-label{display:flex;flex-direction:column;gap:2px;font-size:13.5px;line-height:1.3;}
+.nav-small{font-size:10px;letter-spacing:.22em;text-transform:uppercase;color:#8d8475;font-weight:600;}
+.nav-indicator{font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:#b8402e;font-weight:700;text-decoration:none;padding:8px 16px;border:1.5px solid #c7bca6;border-radius:40px;background:rgba(255,255,255,.5);transition:all .2s;white-space:nowrap;}
+.nav-indicator:hover{background:#b8402e;color:#fff;border-color:#b8402e;}
+.nav-dot{display:inline-block;width:7px;height:7px;background:#b8402e;border-radius:50%;margin-right:4px;vertical-align:middle;}
+.nav-sep{color:#c7bca6;margin:0 2px;}
+.nav-disabled{visibility:hidden;pointer-events:none;}
+@media(max-width:700px){.nav-label{font-size:11.5px;}.nav-chapter-link{padding:8px 10px;max-width:38%;}.chapter-nav{padding:10px 12px;}.nav-small{font-size:9px;letter-spacing:.16em;}}
+@media(max-width:520px){.nav-label{display:none;}.nav-chapter-link{max-width:none;padding:8px 12px;}.nav-arrow{font-size:20px;}.nav-indicator{font-size:11px;padding:7px 13px;letter-spacing:.12em;}}
+body{padding-bottom:80px;}
+</style>
+  <link rel="stylesheet" href="../../assets/copy-button.css">
+  <link rel="stylesheet" href="../../assets/enhancements.css">
+  <link rel="stylesheet" href="../../assets/shell.css">
+  <link rel="stylesheet" href="../../assets/theme.css">
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;0,9..144,900;1,9..144,400;1,9..144,600&family=Spline+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="../../assets/theme.js"></script>
+</head>
+<body>
+<button class="bfp-toc-toggle" id="bfpTocToggle" aria-controls="bfpToc" aria-expanded="false"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><line x1="2" y1="4" x2="14" y2="4"/><line x1="2" y1="8" x2="14" y2="8"/><line x1="2" y1="12" x2="14" y2="12"/></svg>Contenuto</button>
+<div class="bfp-toc-scrim" id="bfpTocScrim"></div>
+<div class="bfp-shell">
+    <aside class="bfp-toc" id="bfpToc">
+      <div class="bfp-brand"><span class="bfp-brand-name">Ridimensionamento</span><span class="bfp-brand-slash">/</span><span class="bfp-brand-lens">l'obiettivo del back-end</span></div>
+      <div class="bfp-brand-sub">Capitolo 18 / Manuale da campo</div>
+      <div class="bfp-toc-rule"></div>
+      <nav class="bfp-toc-nav">
+        <div class="bfp-toc-part">Fondazioni</div>
+        <a class="bfp-toc-link" href="#s1"><span class="bfp-toc-num">01</span><span class="bfp-toc-text">Cos'è la prestazione?</span></a>
+        <a class="bfp-toc-link" href="#s2"><span class="bfp-toc-num">02</span><span class="bfp-toc-text">Approfondimento sulla latenza</span></a>
+        <a class="bfp-toc-link" href="#s3"><span class="bfp-toc-num">03</span><span class="bfp-toc-text">Percentili: P50, P90, P99</span></a>
+        <a class="bfp-toc-link" href="#s4"><span class="bfp-toc-num">04</span><span class="bfp-toc-text">Produttività</span></a>
+        <a class="bfp-toc-link" href="#s5"><span class="bfp-toc-num">05</span><span class="bfp-toc-text">Utilizzo e code</span></a>
+        <div class="bfp-toc-part">Diagnosi</div>
+        <a class="bfp-toc-link" href="#s6"><span class="bfp-toc-num">06</span><span class="bfp-toc-text">Trovare i colli di bottiglia</span></a>
+        <a class="bfp-toc-link" href="#s7"><span class="bfp-toc-num">07</span><span class="bfp-toc-text">Profili e grafici di fiamma</span></a>
+        <a class="bfp-toc-link" href="#s8"><span class="bfp-toc-num">08</span><span class="bfp-toc-text">Tracciamento distribuito</span></a>
+        <div class="bfp-toc-part">Prestazioni del database</div>
+        <a class="bfp-toc-link" href="#s9"><span class="bfp-toc-num">09</span><span class="bfp-toc-text">Problema di query N+1</span></a>
+        <a class="bfp-toc-link" href="#s10"><span class="bfp-toc-num">10</span><span class="bfp-toc-text">Indici e piani di query</span></a>
+        <a class="bfp-toc-link" href="#s11"><span class="bfp-toc-num">11</span><span class="bfp-toc-text">Raggruppamento delle connessioni</span></a>
+        <div class="bfp-toc-part">Memorizzazione nella cache</div>
+        <a class="bfp-toc-link" href="#s12"><span class="bfp-toc-num">12</span><span class="bfp-toc-text">Fondamenti di memorizzazione nella cache</span></a>
+        <a class="bfp-toc-link" href="#s13"><span class="bfp-toc-num">13</span><span class="bfp-toc-text">Invalidazione della cache</span></a>
+        <a class="bfp-toc-link" href="#s14"><span class="bfp-toc-num">14</span><span class="bfp-toc-text">Modelli di memorizzazione nella cache</span></a>
+        <a class="bfp-toc-link" href="#s15"><span class="bfp-toc-num">15</span><span class="bfp-toc-text">Tasso di riscontri nella cache</span></a>
+        <div class="bfp-toc-part">Ridimensionamento</div>
+        <a class="bfp-toc-link" href="#s16"><span class="bfp-toc-num">16</span><span class="bfp-toc-text">Scala verticale</span></a>
+        <a class="bfp-toc-link" href="#s17"><span class="bfp-toc-num">17</span><span class="bfp-toc-text">Ridimensionamento orizzontale</span></a>
+        <a class="bfp-toc-link" href="#s18"><span class="bfp-toc-num">18</span><span class="bfp-toc-text">Bilanciamento del carico</span></a>
+      </nav>
+    </aside>
+    <main class="bfp-content">
+
+<div class="chapter-label">Un riferimento dettagliato al backend</div>
+<h1 class="chapter-title">Padroneggiare la scalabilità<br>e prestazioni</h1>
+<p class="chapter-intro">
+  L’ingegneria delle prestazioni è la disciplina della comprensione <em>come</em> i sistemi si comportano sotto carico, <em>dove</em> i colli di bottiglia si nascondono e <em>come</em> pensare lucidamente quando tutto sembra andare a rotoli. Questo capitolo sviluppa l'intuizione livello per livello, dalla definizione grezza di &quot;veloce&quot; alla misurazione della latenza, all'ottimizzazione del database, alla strategia di memorizzazione nella cache e alle due modalità fondamentali di scalabilità. Tutto si basa sull'ingegneria pratica del backend.
+</p>
+
+<hr class="section-rule">
+
+
+<!-- SECTION 01 -->
+
+<div id="s1" class="section-heading">
+  <span class="section-num">01</span>
+  <h2>Cosa intendiamo per &quot;veloce&quot;?</h2>
+</div>
+
+<p>
+  Quando un utente fa clic su un pulsante sulla tua app Web, si attiva una cascata di eventi: il browser impacchetta una richiesta HTTP, tale richiesta attraversa Internet fino al tuo server, il server la elabora (possibilmente colpendo un database, chiamando un'API esterna o inviando un'e-mail) e infine il server assembla una risposta, in genere JSON, che ritorna attraverso Internet. Il browser quindi analizza la risposta e visualizza il risultato sullo schermo.
+</p>
+
+<p>
+  Il tempo totale trascorso tra il clic e il rendering finale dipende dall'utente <em>percepisce</em> come velocità. Quando qualcuno dice &quot;la tua app è lenta&quot;, sta descrivendo questa durata end-to-end, anche se non ha mai sentito la parola <span class="keyword">latenza</span>.
+</p>
+
+<div class="diagram-container">
+  <svg viewBox="0 0 700 200" xmlns="http://www.w3.org/2000/svg" style="max-width:700px;width:100%">
+    <!-- User -->
+    <rect x="20" y="65" width="90" height="65" rx="5" fill="#e9e2d3" stroke="#5b5347" stroke-width="1.5"/>
+    <text x="65" y="95" text-anchor="middle" font-family="'Source Serif 4',serif" font-size="12" font-weight="600" fill="#232019">Utente</text>
+    <text x="65" y="112" text-anchor="middle" font-family="'Source Serif 4',serif" font-size="10" fill="#5b5347">Navigatore</text>
+
+    <!-- Arrow 1 -->
+    <line x1="110" y1="82" x2="210" y2="82" stroke="#b8402e" stroke-width="1.5" marker-end="url(#arrowR)"/>
+    <text x="160" y="74" text-anchor="middle" font-family="'JetBrains Mono',monospace" font-size="9" fill="#5b5347">Richiesta HTTP</text>
+
+    <!-- Server -->
+    <rect x="210" y="55" width="110" height="85" rx="5" fill="#e9e2d3" stroke="#5b5347" stroke-width="1.5"/>
+    <text x="265" y="85" text-anchor="middle" font-family="'Source Serif 4',serif" font-size="12" font-weight="600" fill="#232019">Server</text>
+    <text x="265" y="102" text-anchor="middle" font-family="'Source Serif 4',serif" font-size="10" fill="#5b5347">Processo</text>
+    <text x="265" y="118" text-anchor="middle" font-family="'Source Serif 4',serif" font-size="10" fill="#5b5347">Logica</text>
+
+    <!-- Arrow to DB -->
+    <line x1="320" y1="80" x2="400" y2="80" stroke="#37607f" stroke-width="1.3" marker-end="url(#arrowB)"/>
+    <text x="360" y="72" text-anchor="middle" font-family="'JetBrains Mono',monospace" font-size="9" fill="#5b5347">Domanda</text>
+
+    <!-- DB -->
+    <rect x="400" y="55" width="100" height="50" rx="5" fill="#e9e2d3" stroke="#37607f" stroke-width="1.5"/>
+    <text x="450" y="82" text-anchor="middle" font-family="'Source Serif 4',serif" font-size="12" font-weight="600" fill="#232019">Banca dati</text>
+
+    <!-- External API -->
+    <rect x="400" y="120" width="100" height="45" rx="5" fill="#e9e2d3" stroke="#3f6f4e" stroke-width="1.5"/>
+    <text x="450" y="147" text-anchor="middle" font-family="'Source Serif 4',serif" font-size="11" font-weight="600" fill="#232019">API esterna</text>
+    <line x1="305" y1="140" x2="400" y2="142" stroke="#3f6f4e" stroke-width="1.3" marker-end="url(#arrowG)"/>
+
+    <!-- Return Arrow -->
+    <line x1="210" y1="115" x2="110" y2="115" stroke="#b8402e" stroke-width="1.5" marker-end="url(#arrowR)"/>
+    <text x="160" y="132" text-anchor="middle" font-family="'JetBrains Mono',monospace" font-size="9" fill="#5b5347">Risposta JSON</text>
+
+    <!-- Latency Bracket -->
+    <line x1="30" y1="160" x2="30" y2="175" stroke="#b8402e" stroke-width="1"/>
+    <line x1="30" y1="175" x2="490" y2="175" stroke="#b8402e" stroke-width="1" stroke-dasharray="4,3"/>
+    <line x1="490" y1="160" x2="490" y2="175" stroke="#b8402e" stroke-width="1"/>
+    <text x="260" y="192" text-anchor="middle" font-family="'Libre Franklin',sans-serif" font-size="10" font-weight="600" fill="#b8402e" letter-spacing="0.1em">LATENZA TOTALE</text>
+
+    <defs>
+      <marker id="arrowR" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6" fill="#b8402e"/></marker>
+      <marker id="arrowB" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6" fill="#37607f"/></marker>
+      <marker id="arrowG" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6" fill="#3f6f4e"/></marker>
+    </defs>
+  </svg>
+  <div class="diagram-caption">Fig 1 / Ciclo di vita della richiesta: ogni millisecondo si somma</div>
+</div>
+
+<p>
+  La prestazione non è una qualità vaga e soggettiva. Può e deve essere espresso in numeri. I tre parametri fondamentali sono <strong>latenza</strong> (quanto tempo impiega una richiesta), <strong>rendimento</strong> (quante richieste per unità di tempo) e <strong>utilizzo</strong> (quale percentuale di capacità è in uso). Insieme, formano il vocabolario dell'ingegneria delle prestazioni.
+</p>
+
+
+<hr class="section-rule">
+
+
+<!-- SECTION 02 -->
+
+<div id="s2" class="section-heading">
+  <span class="section-num">02</span>
+  <h2>Approfondimento sulla latenza</h2>
+</div>
+
+<p>
+  <span class="keyword">Latenza</span> è il tempo trascorso dal momento in cui viene inviata una richiesta al momento in cui viene ricevuta una risposta. È la metrica di prestazione più visibile all'utente, il numero dei tuoi clienti <em>sentire</em> tra le loro dita.
+</p>
+
+<h3>La latenza non è un singolo numero</h3>
+
+<p>
+  Un errore comune è considerare la latenza come un valore fisso come &quot;la nostra API risponde in 200 ms&quot;. In realtà, la latenza varia da richiesta a richiesta a causa di molti fattori reali:
+</p>
+
+<p>
+  <strong>Riscontri positivi e mancati nella cache</strong>: una richiesta servita da una CDN o da una cache in memoria come Redis può restituire in 5 ms, mentre la stessa richiesta che arriva al database a freddo richiede 200 ms. <strong>Carico del server</strong>: quando il tuo server è inattivo, raccoglie immediatamente ogni richiesta; quando elabora 50 richieste simultanee, il nuovo arrivato attende in coda. <strong>Condizioni della rete</strong>: la perdita di pacchetti, i cambiamenti di percorso e la distanza geografica introducono variabilità. <strong>Richiedi complessità</strong>: recuperare un profilo utente è più veloce che generare un rapporto analitico mensile.
+</p>
+
+<div class="callout warn">
+  <div class="callout-title">Perché le medie mentono</div>
+  <p>Immagina 1.000 richieste: 990 vengono completate in 50 ms e 10 richiedono 5.000 ms. La media è di ~100 ms, il che sembra salutare. Ma quelle 10 richieste anomale rappresentano utenti reali che fissano uno spinner di caricamento per 5 secondi. A 1 milione di richieste al giorno, cioè <strong>10.000 esperienze utente terribili</strong> al giorno, completamente invisibile alla media.</p>
+</div>
+
+<p>
+  Poiché le medie assorbono la variazione, sono quasi inutili per l'analisi delle prestazioni. Ciò di cui abbiamo bisogno invece è un modo per parlare del <em>distribuzione</em> delle latenze, il che ci porta ai percentili.
+</p>
+
+<hr class="section-rule">
+
+
+<!-- SECTION 03 -->
+
+<div id="s3" class="section-heading">
+  <span class="section-num">03</span>
+  <h2>Percentili: P50, P90, P99</h2>
+</div>
+
+<p>
+  A <span class="keyword">percentile</span> ti dice la soglia di latenza sotto la quale cade una certa percentuale di richieste. I tre percentili che incontrerai costantemente sono:
+</p>
+
+<table>
+  <thead>
+    <tr><th>percentile</th><th>Significato</th><th>Esempio</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>P50</strong> (mediana)</td>
+      <td>Il 50% delle richieste sono più veloci di questo valore</td>
+      <td>P50 = 80ms -&gt; metà dei tuoi utenti vedono &lt;=80ms</td>
+    </tr>
+    <tr>
+      <td><strong>P90</strong></td>
+      <td>90% più veloce; <strong>10% degli utenti</strong> sperimenta questo o peggio</td>
+      <td>P90 = 400 ms -&gt; 1 utente su 10 attende più di 400 ms</td>
+    </tr>
+    <tr>
+      <td><strong>P99</strong></td>
+      <td>99% più veloce; <strong>1% degli utenti</strong> sperimenta questo o peggio</td>
+      <td>P99 = 2s -&gt; 1 utente su 100 attende 2 secondi+</td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="diagram-container">
+  <svg viewBox="0 0 660 260" xmlns="http://www.w3.org/2000/svg" style="max-width:660px;width:100%">
+    <!-- Axes -->
+    <line x1="60" y1="210" x2="620" y2="210" stroke="#5b5347" stroke-width="1.5"/>
+    <line x1="60" y1="210" x2="60" y2="30" stroke="#5b5347" stroke-width="1.5"/>
+    <text x="340" y="250" text-anchor="middle" font-family="'Libre Franklin',sans-serif" font-size="11" fill="#5b5347" letter-spacing="0.05em">Latenza -&gt;</text>
+    <text x="22" y="120" text-anchor="middle" font-family="'Libre Franklin',sans-serif" font-size="11" fill="#5b5347" transform="rotate(-90,22,120)">Richieste</text>
+
+    <!-- Distribution curve -->
+    <path d="M80,208 C120,205 140,170 180,80 C200,40 230,38 260,80 C290,130 320,170 360,190 C400,200 450,206 520,208 C560,209 600,209 620,210"
+          fill="none" stroke="#b8402e" stroke-width="2.5"/>
+    <path d="M80,208 C120,205 140,170 180,80 C200,40 230,38 260,80 C290,130 320,170 360,190 C400,200 450,206 520,208 C560,209 600,209 620,210 L620,210 L80,210 Z"
+          fill="#b8402e" fill-opacity="0.08"/>
+
+    <!-- P50 line -->
+    <line x1="220" y1="210" x2="220" y2="50" stroke="#37607f" stroke-width="1.2" stroke-dasharray="5,3"/>
+    <text x="220" y="28" text-anchor="middle" font-family="'Libre Franklin',sans-serif" font-size="10" font-weight="700" fill="#37607f">P50</text>
+
+    <!-- P90 line -->
+    <line x1="370" y1="210" x2="370" y2="50" stroke="#3f6f4e" stroke-width="1.2" stroke-dasharray="5,3"/>
+    <text x="370" y="28" text-anchor="middle" font-family="'Libre Franklin',sans-serif" font-size="10" font-weight="700" fill="#3f6f4e">P90</text>
+
+    <!-- P99 line -->
+    <line x1="520" y1="210" x2="520" y2="50" stroke="#b8402e" stroke-width="1.2" stroke-dasharray="5,3"/>
+    <text x="520" y="28" text-anchor="middle" font-family="'Libre Franklin',sans-serif" font-size="10" font-weight="700" fill="#b8402e">P99</text>
+
+    <!-- Annotations -->
+    <text x="220" y="228" text-anchor="middle" font-family="'JetBrains Mono',monospace" font-size="9" fill="#37607f">80ms</text>
+    <text x="370" y="228" text-anchor="middle" font-family="'JetBrains Mono',monospace" font-size="9" fill="#3f6f4e">400ms</text>
+    <text x="520" y="228" text-anchor="middle" font-family="'JetBrains Mono',monospace" font-size="9" fill="#b8402e">2000ms</text>
+  </svg>
+  <div class="diagram-caption">Fig 2 / Distribuzione della latenza con marcatori percentili</div>
+</div>
+
+<h3>Perché P99 e P95 contano di più</h3>
+
+<p>
+  Gli ingegneri backend si concentrano sulle latenze di coda (P95/P99) per due motivi. Innanzitutto, le richieste che finiscono in coda sono in genere le più numerose <em>complesso</em>, implicano la logica applicativa più complessa, il maggior numero di join o di chiamate da servizio a servizio. In secondo luogo, queste richieste spesso rappresentano il tuo meglio <em>prezioso</em> utenti: qualcuno che effettua un acquisto, genera un report o completa un flusso di pagamento, esattamente i flussi di lavoro in cui un blocco di 5 secondi fa perdere entrate e fiducia.
+</p>
+
+<h3>Misurare i percentili in Go</h3>
+
+<p>
+  La libreria standard Go non fornisce un calcolatore di percentili, ma puoi calcolarli da sezioni ordinate o utilizzare una libreria. Ecco una semplice implementazione da zero:
+</p>
+
+<pre><code><span class="code-label">Go</span>
+<span class="syn-kw">package</span> main
+
+<span class="syn-kw">import</span> (
+    <span class="syn-str">"fmt"</span>
+    <span class="syn-str">"math"</span>
+    <span class="syn-str">"sort"</span>
+    <span class="syn-str">"time"</span>
+)
+
+<span class="syn-cm">// Percentile returns the p-th percentile from a slice of durations.</span>
+<span class="syn-cm">// p must be between 0 and 100.</span>
+<span class="syn-kw">func</span> <span class="syn-fn">Percentile</span>(latencies []<span class="syn-type">time.Duration</span>, p <span class="syn-type">float64</span>) <span class="syn-type">time.Duration</span> {
+    <span class="syn-kw">if</span> len(latencies) == <span class="syn-num">0</span> {
+        <span class="syn-kw">return</span> <span class="syn-num">0</span>
+    }
+    sorted := <span class="syn-builtin">make</span>([]<span class="syn-type">time.Duration</span>, len(latencies))
+    <span class="syn-builtin">copy</span>(sorted, latencies)
+    sort.<span class="syn-fn">Slice</span>(sorted, <span class="syn-kw">func</span>(i, j <span class="syn-type">int</span>) <span class="syn-type">bool</span> {
+        <span class="syn-kw">return</span> sorted[i] < sorted[j]
+    })
+
+    rank := (p / <span class="syn-num">100.0</span>) * <span class="syn-type">float64</span>(len(sorted)<span class="syn-num">-1</span>)
+    idx  := <span class="syn-type">int</span>(math.<span class="syn-fn">Ceil</span>(rank))
+    <span class="syn-kw">return</span> sorted[idx]
+}
+
+<span class="syn-kw">func</span> <span class="syn-fn">main</span>() {
+    <span class="syn-cm">// Simulated latency samples</span>
+    samples := []<span class="syn-type">time.Duration</span>{
+        <span class="syn-num">12</span> * time.Millisecond, <span class="syn-num">15</span> * time.Millisecond,
+        <span class="syn-num">22</span> * time.Millisecond, <span class="syn-num">48</span> * time.Millisecond,
+        <span class="syn-num">95</span> * time.Millisecond, <span class="syn-num">110</span> * time.Millisecond,
+        <span class="syn-num">340</span> * time.Millisecond, <span class="syn-num">890</span> * time.Millisecond,
+        <span class="syn-num">1200</span> * time.Millisecond, <span class="syn-num">4800</span> * time.Millisecond,
+    }
+
+    fmt.<span class="syn-fn">Printf</span>(<span class="syn-str">"P50:  %v\n"</span>, <span class="syn-fn">Percentile</span>(samples, <span class="syn-num">50</span>))
+    fmt.<span class="syn-fn">Printf</span>(<span class="syn-str">"P90:  %v\n"</span>, <span class="syn-fn">Percentile</span>(samples, <span class="syn-num">90</span>))
+    fmt.<span class="syn-fn">Printf</span>(<span class="syn-str">"P99:  %v\n"</span>, <span class="syn-fn">Percentile</span>(samples, <span class="syn-num">99</span>))
+}</code></pre>
+
+<h3>Misurare i percentili in Python</h3>
+
+<pre><code><span class="code-label">Python</span>
+<span class="syn-kw">import</span> numpy <span class="syn-kw">as</span> np
+
+<span class="syn-cm"># Simulated latency samples (in milliseconds)</span>
+samples = [<span class="syn-num">12</span>, <span class="syn-num">15</span>, <span class="syn-num">22</span>, <span class="syn-num">48</span>, <span class="syn-num">95</span>, <span class="syn-num">110</span>, <span class="syn-num">340</span>, <span class="syn-num">890</span>, <span class="syn-num">1200</span>, <span class="syn-num">4800</span>]
+
+<span class="syn-builtin">print</span>(<span class="syn-str">f"P50:  </span>{np.<span class="syn-fn">percentile</span>(samples, <span class="syn-num">50</span>):.0f}<span class="syn-str">ms"</span>)
+<span class="syn-builtin">print</span>(<span class="syn-str">f"P90:  </span>{np.<span class="syn-fn">percentile</span>(samples, <span class="syn-num">90</span>):.0f}<span class="syn-str">ms"</span>)
+<span class="syn-builtin">print</span>(<span class="syn-str">f"P99:  </span>{np.<span class="syn-fn">percentile</span>(samples, <span class="syn-num">99</span>):.0f}<span class="syn-str">ms"</span>)
+<span class="syn-builtin">print</span>(<span class="syn-str">f"P99.9:</span>{np.<span class="syn-fn">percentile</span>(samples, <span class="syn-num">99.9</span>):.0f}<span class="syn-str">ms"</span>)</code></pre>
+
+<div class="ref-box">
+  <span><strong>Riferimento:</strong> <a href="https://prometheus.io/docs/practices/histograms/" target="_blank">Prometeo, istogrammi e riepiloghi</a>, lo standard industriale per la raccolta dei dati percentili nella produzione.</span>
+</div>
+
+<hr class="section-rule">
+
+
+<!-- SECTION 04 -->
+
+<div id="s4" class="section-heading">
+  <span class="section-num">04</span>
+  <h2>Produttività</h2>
+</div>
+
+<p>
+  Mentre la latenza descrive la durata di una singola richiesta, <span class="keyword">rendimento</span> misura quante richieste il tuo sistema può gestire in un dato intervallo di tempo, tipicamente espresso come <strong>richieste al secondo (RPS)</strong> o <strong>richieste al minuto (RPM)</strong>.
+</p>
+
+<p>
+  I due parametri sono profondamente intrecciati ma non in modo semplice e lineare. Il tuo sistema potrebbe mostrare un'eccellente latenza a 10 RPS, diciamo 50 ms per richiesta. Ma a 5.000 RPS, la latenza potrebbe raggiungere i 2 secondi. Comprendere il throughput e la latenza consente di rispondere a domande operative critiche: possiamo sopravvivere al picco di traffico del Black Friday? Quanti utenti simultanei possiamo supportare prima di aver bisogno di più risorse? Cosa succede se domani venissimo presenti in un podcast popolare?
+</p>
+
+<div class="formula">
+  Throughput = Richieste gestite/Periodo di tempo
+</div>
+
+<h3>La latenza: curva di throughput</h3>
+
+<p>
+  All'aumentare del throughput, la latenza aumenta lentamente all'inizio ma poi <em>drammaticamente</em>, segue una curva, non una linea. Con un throughput basso, il server è per lo più inattivo e ogni richiesta viene servita immediatamente. Man mano che il throughput aumenta verso la capacità, le richieste iniziano ad accodarsi e a contendersi CPU, memoria e I/O. Vicino alla saturazione, la latenza esplode in modo esponenziale.
+</p>
+
+<div class="diagram-container">
+  <svg viewBox="0 0 560 280" xmlns="http://www.w3.org/2000/svg" style="max-width:560px;width:100%">
+    <!-- Axes -->
+    <line x1="60" y1="230" x2="520" y2="230" stroke="#5b5347" stroke-width="1.5"/>
+    <line x1="60" y1="230" x2="60" y2="30" stroke="#5b5347" stroke-width="1.5"/>
+    <text x="290" y="268" text-anchor="middle" font-family="'Libre Franklin',sans-serif" font-size="11" fill="#5b5347">Produttività (RPS) -&gt;</text>
+    <text x="22" y="130" text-anchor="middle" font-family="'Libre Franklin',sans-serif" font-size="11" fill="#5b5347" transform="rotate(-90,22,130)">Latenza -&gt;</text>
+
+    <!-- Linear expectation (dashed) -->
+    <line x1="60" y1="220" x2="500" y2="60" stroke="#37607f" stroke-width="1.2" stroke-dasharray="6,4"/>
+    <text x="430" y="55" font-family="'Libre Franklin',sans-serif" font-size="9" fill="#37607f">Previsto (lineare)</text>
+
+    <!-- Actual curve (exponential) -->
+    <path d="M60,220 C120,218 200,215 280,210 C340,205 380,195 420,160 C450,125 470,80 490,40"
+          fill="none" stroke="#b8402e" stroke-width="2.5"/>
+    <text x="500" y="38" font-family="'Libre Franklin',sans-serif" font-size="9" font-weight="700" fill="#b8402e">Reale</text>
+
+    <!-- Safe zone annotation -->
+    <rect x="65" y="195" width="260" height="30" fill="#3f6f4e" fill-opacity="0.1" rx="3"/>
+    <text x="195" y="215" text-anchor="middle" font-family="'Libre Franklin',sans-serif" font-size="9" fill="#3f6f4e">Zona operativa sicura (60-80%)</text>
+
+    <!-- Danger zone -->
+    <rect x="380" y="35" width="120" height="190" fill="#b8402e" fill-opacity="0.06" rx="3"/>
+    <text x="440" y="230" text-anchor="middle" font-family="'Libre Franklin',sans-serif" font-size="9" fill="#b8402e">Zona pericolosa</text>
+  </svg>
+  <div class="diagram-caption">Fig 3/La latenza cresce esponenzialmente man mano che il throughput si avvicina alla capacità</div>
+</div>
+
+<p>
+  Questa relazione è regolata da <strong>teoria delle code</strong>: in particolare il modello di coda M/M/1 della ricerca operativa. Come utilizzo <em>Rho</em> si avvicina a 1,0, il tempo medio di attesa tende all'infinito:
+</p>
+
+<div class="formula">
+  W = S / (1 - rho) dove S = tempo di servizio, rho = utilizzo
+</div>
+
+<div class="ref-box">
+  <span><strong>Riferimento:</strong> <a href="https://developer.mozilla.org/en-US/docs/Web/Performance" target="_blank">MDN, Prestazioni Web</a>, la guida completa di Mozilla alla misurazione delle prestazioni front-to-back.</span>
+</div>
+
+
+<hr class="section-rule">
+
+
+<!-- SECTION 05 -->
+
+<div id="s5" class="section-heading">
+  <span class="section-num">05</span>
+  <h2>Utilizzo e code</h2>
+</div>
+
+<p>
+  <span class="keyword">Utilizzo</span> è la percentuale della capacità totale del sistema attivamente utilizzata. Allo 0% il sistema è inattivo; al 100% ogni risorsa è satura e non è possibile elaborare nulla di nuovo.
+</p>
+
+<h3>L'analogia della gelateria</h3>
+
+<p>
+  Immagina una gelateria con un lavoratore. In una tranquilla domenica sera, entri, ordini e vieni servito immediatamente, basso utilizzo e bassa latenza. Martedì all'ora di pranzo c'è una lunga coda. L'operaio prepara ogni cono al <em>esattamente la stessa velocità</em>, ma il tuo tempo di attesa è salito alle stelle perché devi aspettare tutti quelli davanti a te. Il rendimento del lavoratore non è cambiato. La tua latenza percepita ha.
+</p>
+
+<p>
+  I sistemi backend si comportano in modo identico: quando l'utilizzo della CPU e della memoria è basso, le richieste vengono servite istantaneamente. Man mano che arrivano più richieste, ognuno attende il completamento delle richieste che lo precedono, formando una coda. Maggiore è l'utilizzo, più lunga è la coda e maggiore è l'attesa per ciascuna richiesta.
+</p>
+
+<h3>L'analogia con l'autostrada</h3>
+
+<p>
+  Pensa a un'autostrada con diversi livelli di capacità. A <strong>50%</strong>, il traffico scorre liscio e le auto mantengono la velocità. A <strong>80%</strong>, i cambi di corsia richiedono maggiore cautela e la velocità comincia a diminuire. A <strong>90%</strong>, il sistema diventa caotico, a volte fluido, a volte inceppato. Ogni tocco del freno crea un effetto a catena. A <strong>100%</strong>, stallo totale: nessuno si muove.
+</p>
+
+<h3>Il rapporto esponenziale</h3>
+
+<p>
+  La relazione tra utilizzo e latenza è <em>no</em> lineare. Intuitivamente ci aspettiamo che un raddoppio dell'utilizzo porti a una doppia latenza, ma la realtà è molto peggiore. La latenza rimane relativamente piatta fino a circa il 70% di utilizzo, poi curva bruscamente verso l'alto e vicino al 100% diventa quasi verticale, avvicinandosi all'infinito.
+</p>
+
+<div class="callout">
+  <div class="callout-title">Chiave da asporto</div>
+  <p>Puoi <strong>mai</strong> esegui i tuoi sistemi al 100% di utilizzo e aspettati che funzionino. I sistemi di produzione in genere mirano <strong>Utilizzo del 60-80%.</strong>, riservando il 20-40% come margine per gli aumenti di traffico. Il traffico è <em>scoppiato</em> per natura, arriva a ondate, non a una velocità costante, e il tuo buffer è ciò che assorbe quei picchi.</p>
+</div>
+
+
+<hr class="section-rule">
+
+
+<!-- SECTION 06 -->
+
+<div id="s6" class="section-heading">
+  <span class="section-num">06</span>
+  <h2>Trovare i colli di bottiglia</h2>
+</div>
+
+<p>
+  Quando il tuo sistema è lento, <em>qualcosa di specifico</em> sta causando la lentezza. Quel qualcosa si chiama <span class="keyword">collo di bottiglia</span>. La disciplina più critica nell'ingegneria delle prestazioni è identificare il vero collo di bottiglia prima di applicare una soluzione, non tirare ad indovinare.
+</p>
+
+<h3>La trappola di saltare alle soluzioni</h3>
+
+<p>
+  Quando gli ingegneri incontrano un'API lenta, l'istinto è quello di ricorrere a rimedi standard da manuale: aggiungere la memorizzazione nella cache Redis, aggiornare Postgres, lanciare più server. A volte sei fortunato. Ma più spesso si trascorrono giorni o settimane per implementare una soluzione a un problema che in realtà non esiste, mentre il vero collo di bottiglia rimane intatto.
+</p>
+
+<h3>Un esempio del mondo reale</h3>
+
+<p>
+  Consideriamo a <code>GET /products/:id</code> endpoint che sembra lento. La reazione istintiva: il database deve essere il problema. Trascorri una settimana a creare un livello di memorizzazione nella cache Redis. Tu distribuisci. L'API è ancora lenta.
+</p>
+
+<p>
+  Ora aggiungi misurazioni temporali in tutto il codice e scopri: la query del database richiede 10 ms, la nuova ricerca Redis richiede 5 ms, ma a <em>chiamata di registrazione sincrona</em> a un servizio Elasticsearch remoto impiega 500 ms, bloccando la richiesta mentre attende una risposta dalla rete. Il database non è mai stato un problema.
+</p>
+
+<div class="callout warn">
+  <div class="callout-title">La regola d'oro</div>
+  <p><strong>Non indovinare mai. Misura sempre.</strong> I colli di bottiglia nascosti comuni includono: registrazione sincrona su servizi remoti, serializzazione JSON/XML di payload di grandi dimensioni, chiamate API esterne in loop, payload di risposta di grandi dimensioni che causano una trasmissione di rete lenta e middleware che viene eseguito su ogni richiesta.</p>
+</div>
+
+<h3>Middleware di temporizzazione in Go</h3>
+
+<p>
+  Ecco un pratico middleware che registra i tempi per richiesta, così puoi iniziare a identificare gli endpoint lenti:
+</p>
+
+<pre><code><span class="code-label">Go</span>
+<span class="syn-kw">package</span> middleware
+
+<span class="syn-kw">import</span> (
+    <span class="syn-str">"log"</span>
+    <span class="syn-str">"net/http"</span>
+    <span class="syn-str">"time"</span>
+)
+
+<span class="syn-cm">// TimingMiddleware logs the duration of every HTTP request.</span>
+<span class="syn-kw">func</span> <span class="syn-fn">TimingMiddleware</span>(next <span class="syn-type">http.Handler</span>) <span class="syn-type">http.Handler</span> {
+    <span class="syn-kw">return</span> http.<span class="syn-fn">HandlerFunc</span>(<span class="syn-kw">func</span>(w <span class="syn-type">http.ResponseWriter</span>, r *<span class="syn-type">http.Request</span>) {
+        start := time.<span class="syn-fn">Now</span>()
+
+        <span class="syn-cm">// Wrap the ResponseWriter to capture the status code</span>
+        rw := &statusWriter{ResponseWriter: w, status: <span class="syn-num">200</span>}
+        next.<span class="syn-fn">ServeHTTP</span>(rw, r)
+
+        duration := time.<span class="syn-fn">Since</span>(start)
+        log.<span class="syn-fn">Printf</span>(
+            <span class="syn-str">"method=%s path=%s status=%d duration=%v"</span>,
+            r.Method, r.URL.Path, rw.status, duration,
+        )
+    })
+}
+
+<span class="syn-kw">type</span> statusWriter <span class="syn-kw">struct</span> {
+    <span class="syn-type">http.ResponseWriter</span>
+    status <span class="syn-type">int</span>
+}
+
+<span class="syn-kw">func</span> (w *statusWriter) <span class="syn-fn">WriteHeader</span>(code <span class="syn-type">int</span>) {
+    w.status = code
+    w.ResponseWriter.<span class="syn-fn">WriteHeader</span>(code)
+}</code></pre>
+
+<h3>Decoratore temporale in Python (FastAPI)</h3>
+
+<pre><code><span class="code-label">Python</span>
+<span class="syn-kw">import</span> time
+<span class="syn-kw">import</span> logging
+<span class="syn-kw">from</span> fastapi <span class="syn-kw">import</span> Request
+<span class="syn-kw">from</span> starlette.middleware.base <span class="syn-kw">import</span> BaseHTTPMiddleware
+
+logger = logging.<span class="syn-fn">getLogger</span>(<span class="syn-str">"perf"</span>)
+
+<span class="syn-kw">class</span> <span class="syn-type">TimingMiddleware</span>(BaseHTTPMiddleware):
+    <span class="syn-kw">async def</span> <span class="syn-fn">dispatch</span>(self, request: Request, call_next):
+        start = time.<span class="syn-fn">perf_counter</span>()
+        response = <span class="syn-kw">await</span> <span class="syn-fn">call_next</span>(request)
+        duration_ms = (time.<span class="syn-fn">perf_counter</span>() - start) * <span class="syn-num">1000</span>
+
+        logger.<span class="syn-fn">info</span>(
+            <span class="syn-str">f"method=</span>{request.method} <span class="syn-str">path=</span>{request.url.path} "
+            <span class="syn-str">f"status=</span>{response.status_code} <span class="syn-str">duration=</span>{duration_ms:.1f}<span class="syn-str">ms"</span>
+        )
+        <span class="syn-kw">return</span> response</code></pre>
+
+
+<hr class="section-rule">
+
+
+<!-- SECTION 07 -->
+
+<div id="s7" class="section-heading">
+  <span class="section-num">07</span>
+  <h2>Profili e grafici di fiamma</h2>
+</div>
+
+<p>
+  <span class="keyword">Profilazione</span> è la pratica di misurare esattamente dove trascorre il tempo la tua applicazione. Un profiler si collega all'applicazione in esecuzione, campiona lo stack di chiamate a intervalli regolari e registra quali funzioni sono in esecuzione, per quanto tempo vengono eseguite e quanta CPU o memoria consumano.
+</p>
+
+<h3>Come funziona un profiler</h3>
+
+<p>
+  Profiler CPU (come quelli integrati di Go <code>pprof</code> o di Python <code>cProfile</code>) interrompono periodicamente il programma e acquisiscono un'istantanea dello stack di chiamate corrente. Dopo migliaia di campioni, emerge un quadro statistico che mostra quali funzioni dominano il tempo di esecuzione.
+</p>
+
+<h3>Grafici di fiamma</h3>
+
+<p>
+  L'output grezzo del profiler può elencare migliaia di funzioni, ciascuna delle quali rappresenta una frazione del tempo totale. <span class="keyword">Grafici di fiamma</span> rendi visivi questi dati: ogni funzione è una barra orizzontale, le barre più larghe indicano più tempo impiegato e le funzioni chiamate da altre funzioni sono impilate verticalmente. Uno sguardo al grafico delle fiamme ti dice dove sono gli hotspot della tua applicazione.
+</p>
+
+<div class="diagram-container">
+  <svg viewBox="0 0 600 180" xmlns="http://www.w3.org/2000/svg" style="max-width:600px;width:100%">
+    <!-- Level 0 - root -->
+    <rect x="10" y="140" width="580" height="28" rx="3" fill="#b8402e" fill-opacity="0.2" stroke="#b8402e" stroke-width="1"/>
+    <text x="300" y="158" text-anchor="middle" font-family="'JetBrains Mono',monospace" font-size="10" fill="#5b5347">main.handleRequest(), 100%</text>
+
+    <!-- Level 1 -->
+    <rect x="10" y="108" width="90" height="28" rx="3" fill="#37607f" fill-opacity="0.25" stroke="#37607f" stroke-width="1"/>
+    <text x="55" y="126" text-anchor="middle" font-family="'JetBrains Mono',monospace" font-size="8" fill="#7fb0c9">analizzareJSON</text>
+    <text x="55" y="136" text-anchor="middle" font-family="'JetBrains Mono',monospace" font-size="7" fill="#5b5347">8%</text>
+
+    <rect x="100" y="108" width="60" height="28" rx="3" fill="#3f6f4e" fill-opacity="0.25" stroke="#3f6f4e" stroke-width="1"/>
+    <text x="130" y="126" text-anchor="middle" font-family="'JetBrains Mono',monospace" font-size="8" fill="#a9c98a">aut</text>
+    <text x="130" y="136" text-anchor="middle" font-family="'JetBrains Mono',monospace" font-size="7" fill="#5b5347">5%</text>
+
+    <rect x="160" y="108" width="140" height="28" rx="3" fill="#b8402e" fill-opacity="0.2" stroke="#b8402e" stroke-width="1"/>
+    <text x="230" y="126" text-anchor="middle" font-family="'JetBrains Mono',monospace" font-size="8" fill="#8f2f20">db.QueryProducts</text>
+    <text x="230" y="136" text-anchor="middle" font-family="'JetBrains Mono',monospace" font-size="7" fill="#5b5347">12%</text>
+
+    <rect x="300" y="108" width="260" height="28" rx="3" fill="#b8402e" fill-opacity="0.4" stroke="#b8402e" stroke-width="1.5"/>
+    <text x="430" y="126" text-anchor="middle" font-family="'JetBrains Mono',monospace" font-size="8" font-weight="600" fill="#8f2f20">logging.SendRemote </text>
+    <text x="430" y="136" text-anchor="middle" font-family="'JetBrains Mono',monospace" font-size="7" fill="#b8402e" font-weight="600">70% &lt;- COLLO DI BOTTIGLIA</text>
+
+    <!-- Level 2 inside logging -->
+    <rect x="300" y="76" width="180" height="28" rx="3" fill="#e0896a" fill-opacity="0.2" stroke="#e0896a" stroke-width="1"/>
+    <text x="390" y="94" text-anchor="middle" font-family="'JetBrains Mono',monospace" font-size="8" fill="#e0896a">net.http.Post</text>
+    <text x="390" y="104" text-anchor="middle" font-family="'JetBrains Mono',monospace" font-size="7" fill="#5b5347">55%</text>
+
+    <rect x="480" y="76" width="80" height="28" rx="3" fill="#c58fb0" fill-opacity="0.2" stroke="#c58fb0" stroke-width="1"/>
+    <text x="520" y="94" text-anchor="middle" font-family="'JetBrains Mono',monospace" font-size="8" fill="#c58fb0">serializzare</text>
+    <text x="520" y="104" text-anchor="middle" font-family="'JetBrains Mono',monospace" font-size="7" fill="#5b5347">15%</text>
+
+    <!-- Level 3 -->
+    <rect x="300" y="44" width="120" height="28" rx="3" fill="#e0896a" fill-opacity="0.15" stroke="#e0896a" stroke-width="1"/>
+    <text x="360" y="62" text-anchor="middle" font-family="'JetBrains Mono',monospace" font-size="8" fill="#e0896a">tcp.Dial</text>
+    <text x="360" y="72" text-anchor="middle" font-family="'JetBrains Mono',monospace" font-size="7" fill="#5b5347">40%</text>
+  </svg>
+  <div class="diagram-caption">Fig 4 / Grafico fiamma: barre più larghe = più tempo; prevale la chiamata di registrazione</div>
+</div>
+
+<h3>Profilazione della CPU in Go con pprof</h3>
+
+<pre><code><span class="code-label">Go</span>
+<span class="syn-kw">import</span> (
+    <span class="syn-str">"net/http"</span>
+    _ <span class="syn-str">"net/http/pprof"</span>  <span class="syn-cm">// side-effect import: registers /debug/pprof/</span>
+)
+
+<span class="syn-kw">func</span> <span class="syn-fn">main</span>() {
+    <span class="syn-cm">// Your normal app setup...</span>
+    <span class="syn-cm">// pprof endpoints are now accessible at /debug/pprof/</span>
+    <span class="syn-cm">// Collect a 30-second CPU profile:</span>
+    <span class="syn-cm">//   go tool pprof http://localhost:6060/debug/pprof/profile?seconds=30</span>
+    <span class="syn-cm">//   (pprof) web   &lt;- opens flame graph in browser</span>
+    http.<span class="syn-fn">ListenAndServe</span>(<span class="syn-str">":6060"</span>, <span class="syn-kw">nil</span>)
+}</code></pre>
+
+<h3>Profilazione della CPU in Python</h3>
+
+<pre><code><span class="code-label">Python</span>
+<span class="syn-kw">import</span> cProfile
+<span class="syn-kw">import</span> pstats
+
+<span class="syn-cm"># Profile a function and print the top 20 slowest calls</span>
+<span class="syn-kw">with</span> cProfile.<span class="syn-fn">Profile</span>() <span class="syn-kw">as</span> pr:
+    <span class="syn-fn">handle_request</span>()  <span class="syn-cm"># your function under test</span>
+
+stats = pstats.<span class="syn-fn">Stats</span>(pr)
+stats.<span class="syn-fn">sort_stats</span>(<span class="syn-str">"cumulative"</span>)
+stats.<span class="syn-fn">print_stats</span>(<span class="syn-num">20</span>)
+
+<span class="syn-cm"># For flame graphs, use py-spy (external tool):</span>
+<span class="syn-cm">#   pip install py-spy</span>
+<span class="syn-cm">#   py-spy record -o profile.svg -- python app.py</span></code></pre>
+
+<h3>Colli di bottiglia legati alla CPU e colli di bottiglia legati all'I/O</h3>
+
+<p>
+  I profiler eccellono nel trovare <strong>Vincolato alla CPU</strong> colli di bottiglia, funzioni che consumano cicli di calcolo eccessivi (elaborazione di immagini, inferenza di apprendimento automatico, matematica pesante). Tuttavia, la maggior parte delle applicazioni backend lo sono <strong>Vincolato a I/O</strong>: il tempo viene impiegato in attesa di risposte del database, chiamate API esterne, letture di file o riconoscimenti della coda di messaggi. I profiler della CPU sono meno efficaci qui perché la CPU non funziona, lo è <em>aspettando</em>. Per il lavoro legato all'I/O, è necessaria la traccia distribuita.
+</p>
+
+
+<hr class="section-rule">
+
+
+<!-- SECTION 08 -->
+
+<div id="s8" class="section-heading">
+  <span class="section-num">08</span>
+  <h2>Tracciamento distribuito</h2>
+</div>
+
+<p>
+  <span class="keyword">Tracciamento distribuito</span> segue una singola richiesta mentre scorre attraverso l'intero sistema, attraverso servizi, database, cache e API esterne, registrando timestamp ad ogni confine. L'output è un <em>traccia</em>: un albero di &quot;campate&quot;, ciascuna rappresentante un'operazione temporizzata.
+</p>
+
+<p>
+  Dove mostra un profiler <em>cosa ha fatto la CPU</em>, mostra una traccia <em>dove l'orologio ticchettava</em>. Ad esempio, una traccia di <code>GET /products/5</code> potrebbe rivelare: 2 ms nella logica API, 800 ms nella query del database e 50 ms nella serializzazione. Ora sai esattamente dove concentrarti.
+</p>
+
+<div class="diagram-container">
+  <svg viewBox="0 0 620 210" xmlns="http://www.w3.org/2000/svg" style="max-width:620px;width:100%">
+    <!-- Timeline header -->
+    <text x="130" y="20" font-family="'JetBrains Mono',monospace" font-size="9" fill="#5b5347">0ms</text>
+    <text x="230" y="20" font-family="'JetBrains Mono',monospace" font-size="9" fill="#5b5347">200ms</text>
+    <text x="350" y="20" font-family="'JetBrains Mono',monospace" font-size="9" fill="#5b5347">400ms</text>
+    <text x="470" y="20" font-family="'JetBrains Mono',monospace" font-size="9" fill="#5b5347">600ms</text>
+    <text x="570" y="20" font-family="'JetBrains Mono',monospace" font-size="9" fill="#5b5347">800ms</text>
+
+    <!-- Grid lines -->
+    <line x1="130" y1="28" x2="130" y2="190" stroke="#d8cfbe" stroke-width="0.5" stroke-dasharray="3,3"/>
+    <line x1="250" y1="28" x2="250" y2="190" stroke="#d8cfbe" stroke-width="0.5" stroke-dasharray="3,3"/>
+    <line x1="370" y1="28" x2="370" y2="190" stroke="#d8cfbe" stroke-width="0.5" stroke-dasharray="3,3"/>
+    <line x1="490" y1="28" x2="490" y2="190" stroke="#d8cfbe" stroke-width="0.5" stroke-dasharray="3,3"/>
+
+    <!-- Span: Total request -->
+    <text x="10" y="52" font-family="'JetBrains Mono',monospace" font-size="9" fill="#5b5347">Richiesta</text>
+    <rect x="130" y="38" width="480" height="22" rx="3" fill="#b8402e" fill-opacity="0.15" stroke="#b8402e" stroke-width="1"/>
+    <text x="370" y="53" text-anchor="middle" font-family="'JetBrains Mono',monospace" font-size="8" fill="#8f2f20">852ms totali</text>
+
+    <!-- Span: Auth -->
+    <text x="10" y="87" font-family="'JetBrains Mono',monospace" font-size="9" fill="#5b5347">Aut</text>
+    <rect x="130" y="73" width="24" height="22" rx="3" fill="#3f6f4e" fill-opacity="0.3" stroke="#3f6f4e" stroke-width="1"/>
+    <text x="162" y="88" font-family="'JetBrains Mono',monospace" font-size="8" fill="#a9c98a">5ms</text>
+
+    <!-- Span: DB Query -->
+    <text x="10" y="122" font-family="'JetBrains Mono',monospace" font-size="9" fill="#5b5347">Interrogazione DB</text>
+    <rect x="154" y="108" width="406" height="22" rx="3" fill="#b8402e" fill-opacity="0.35" stroke="#b8402e" stroke-width="1.5"/>
+    <text x="357" y="123" text-anchor="middle" font-family="'JetBrains Mono',monospace" font-size="8" font-weight="600" fill="#8f2f20">800ms &lt;- COLLO DI BOTTIGLIA</text>
+
+    <!-- Span: Serialize -->
+    <text x="10" y="157" font-family="'JetBrains Mono',monospace" font-size="9" fill="#5b5347">Serializzare</text>
+    <rect x="560" y="143" width="50" height="22" rx="3" fill="#37607f" fill-opacity="0.25" stroke="#37607f" stroke-width="1"/>
+    <text x="585" y="158" text-anchor="middle" font-family="'JetBrains Mono',monospace" font-size="8" fill="#7fb0c9">42ms</text>
+
+    <!-- Span: Response -->
+    <text x="10" y="190" font-family="'JetBrains Mono',monospace" font-size="9" fill="#5b5347">Risposta</text>
+    <rect x="560" y="178" width="20" height="16" rx="3" fill="#3f6f4e" fill-opacity="0.25" stroke="#3f6f4e" stroke-width="1"/>
+    <text x="585" y="190" font-family="'JetBrains Mono',monospace" font-size="8" fill="#a9c98a">5ms</text>
+  </svg>
+  <div class="diagram-caption">Fig 5 / Traccia distribuita: la query del DB domina la sequenza temporale di questa richiesta</div>
+</div>
+
+<p>
+  Gli strumenti di tracciamento più diffusi includono <strong>Jaeger</strong>, <strong>Zipkin</strong>, e <strong>OpenTelemetria</strong> (lo standard emergente che unifica tracciatura, metrica e registrazione). OpenTelemetry fornisce SDK per Go, Python, Java e la maggior parte dei linguaggi principali.
+</p>
+
+<div class="ref-box">
+  <span><strong>Riferimento:</strong> <a href="https://opentelemetry.io/docs/" target="_blank">Documentazione di OpenTelemetry</a>, lo standard indipendente dal fornitore per la traccia, le metriche e i log distribuiti.</span>
+</div>
+
+
+<hr class="section-rule">
+
+
+<!-- SECTION 09 -->
+
+<div id="s9" class="section-heading">
+  <span class="section-num">09</span>
+  <h2>Il problema delle query N+1</h2>
+</div>
+
+<p>
+  Il <span class="keyword">N+1 problema di query</span> è uno degli anti-pattern prestazionali più noti nell'ingegneria backend. Si verifica quando si effettua 1 query per recuperare un elenco di N elementi, quindi N query aggiuntive per recuperare un dato correlato per ciascun elemento, per un totale di N+1 andata e ritorno del database.
+</p>
+
+<h3>Come succede</h3>
+
+<p>
+  Immagina un'applicazione per blog. Per visualizzare la home page, sono necessari 20 post del blog con il nome dell'autore di ciascun post. L'approccio ingenuo: eseguire una query per tutti i 20 post, quindi scorrere e creare una query separata per l'autore di ciascun post. Sono 21 query sul database. Per 1.000 post, sono 1.001 query. Anche con 5 ms per query, 1.001 query richiedono più di 5 secondi.
+</p>
+
+<div class="diagram-container">
+  <svg viewBox="0 0 580 200" xmlns="http://www.w3.org/2000/svg" style="max-width:580px;width:100%">
+    <!-- Bad: N+1 -->
+    <text x="20" y="22" font-family="'Libre Franklin',sans-serif" font-size="10" font-weight="700" fill="#b8402e" letter-spacing="0.08em">MODELLO N+1 (ERRATO)</text>
+    <rect x="20" y="32" width="240" height="24" rx="3" fill="#b8402e" fill-opacity="0.1" stroke="#b8402e" stroke-width="1"/>
+    <text x="140" y="48" text-anchor="middle" font-family="'JetBrains Mono',monospace" font-size="9" fill="#8f2f20">SELECT * DA post (1 query)</text>
+
+    <rect x="20" y="62" width="240" height="16" rx="2" fill="#b8402e" fill-opacity="0.08" stroke="#b8402e" stroke-width="0.8"/>
+    <text x="140" y="74" text-anchor="middle" font-family="'JetBrains Mono',monospace" font-size="8" fill="#8f2f20">SELECT autore DOVE id=1</text>
+    <rect x="20" y="80" width="240" height="16" rx="2" fill="#b8402e" fill-opacity="0.08" stroke="#b8402e" stroke-width="0.8"/>
+    <text x="140" y="92" text-anchor="middle" font-family="'JetBrains Mono',monospace" font-size="8" fill="#8f2f20">SELECT autore DOVE id=2</text>
+    <rect x="20" y="98" width="240" height="16" rx="2" fill="#b8402e" fill-opacity="0.08" stroke="#b8402e" stroke-width="0.8"/>
+    <text x="140" y="110" text-anchor="middle" font-family="'JetBrains Mono',monospace" font-size="8" fill="#8f2f20">... (x 20 in più)</text>
+
+    <text x="140" y="138" text-anchor="middle" font-family="'JetBrains Mono',monospace" font-size="10" font-weight="600" fill="#b8402e">21 query = 105 ms</text>
+
+    <!-- Good: Bulk -->
+    <text x="320" y="22" font-family="'Libre Franklin',sans-serif" font-size="10" font-weight="700" fill="#3f6f4e" letter-spacing="0.08em">RECUPERO IN BLOCCO (BUONO)</text>
+    <rect x="320" y="32" width="240" height="24" rx="3" fill="#3f6f4e" fill-opacity="0.1" stroke="#3f6f4e" stroke-width="1"/>
+    <text x="440" y="48" text-anchor="middle" font-family="'JetBrains Mono',monospace" font-size="9" fill="#a9c98a">SELECT * DA post (1 query)</text>
+
+    <rect x="320" y="62" width="240" height="24" rx="3" fill="#3f6f4e" fill-opacity="0.1" stroke="#3f6f4e" stroke-width="1"/>
+    <text x="440" y="78" text-anchor="middle" font-family="'JetBrains Mono',monospace" font-size="9" fill="#a9c98a">SELECT * DA utenti DOVE id IN (...)</text>
+
+    <text x="440" y="110" text-anchor="middle" font-family="'JetBrains Mono',monospace" font-size="10" font-weight="600" fill="#3f6f4e">2 query = 10 ms</text>
+
+    <!-- Speedup -->
+    <text x="300" y="185" text-anchor="middle" font-family="'Libre Franklin',sans-serif" font-size="11" font-weight="700" fill="#5b5347">10 volte più veloce eliminando il loop</text>
+  </svg>
+  <div class="diagram-caption">Fig. 6/Query N+1 rispetto al recupero in blocco: stessi dati, prestazioni molto diverse</div>
+</div>
+
+<h3>La soluzione: recupero batch</h3>
+
+<p>
+  Invece di eseguire query in un ciclo, raccogli tutti gli ID di cui hai bisogno e recuperali in un'unica query utilizzando <code>WHERE id IN (...)</code>. Il risultato: sempre 2 query indipendentemente dal numero di elementi, una per l'elenco, una per i dati correlati.
+</p>
+
+<h4>Vai: risolvere N+1 con una query batch</h4>
+
+<pre><code><span class="code-label">Go</span>
+<span class="syn-kw">func</span> <span class="syn-fn">GetPostsWithAuthors</span>(ctx <span class="syn-type">context.Context</span>, db *<span class="syn-type">sql.DB</span>) ([]<span class="syn-type">PostWithAuthor</span>, <span class="syn-type">error</span>) {
+    <span class="syn-cm">// Query 1: fetch all posts</span>
+    posts, err := <span class="syn-fn">queryPosts</span>(ctx, db)
+    <span class="syn-kw">if</span> err != <span class="syn-kw">nil</span> {
+        <span class="syn-kw">return</span> <span class="syn-kw">nil</span>, err
+    }
+
+    <span class="syn-cm">// Collect unique author IDs</span>
+    authorIDSet := <span class="syn-builtin">make</span>(<span class="syn-kw">map</span>[<span class="syn-type">int64</span>]<span class="syn-kw">struct</span>{})
+    <span class="syn-kw">for</span> _, p := <span class="syn-kw">range</span> posts {
+        authorIDSet[p.AuthorID] = <span class="syn-kw">struct</span>{}{}
+    }
+    authorIDs := <span class="syn-builtin">make</span>([]<span class="syn-type">int64</span>, <span class="syn-num">0</span>, <span class="syn-builtin">len</span>(authorIDSet))
+    <span class="syn-kw">for</span> id := <span class="syn-kw">range</span> authorIDSet {
+        authorIDs = <span class="syn-builtin">append</span>(authorIDs, id)
+    }
+
+    <span class="syn-cm">// Query 2: fetch ALL authors in one batch</span>
+    authors, err := <span class="syn-fn">queryAuthorsByIDs</span>(ctx, db, authorIDs)
+    <span class="syn-kw">if</span> err != <span class="syn-kw">nil</span> {
+        <span class="syn-kw">return</span> <span class="syn-kw">nil</span>, err
+    }
+
+    <span class="syn-cm">// Build lookup map and merge</span>
+    authorMap := <span class="syn-builtin">make</span>(<span class="syn-kw">map</span>[<span class="syn-type">int64</span>]<span class="syn-type">Author</span>)
+    <span class="syn-kw">for</span> _, a := <span class="syn-kw">range</span> authors {
+        authorMap[a.ID] = a
+    }
+
+    result := <span class="syn-builtin">make</span>([]<span class="syn-type">PostWithAuthor</span>, len(posts))
+    <span class="syn-kw">for</span> i, p := <span class="syn-kw">range</span> posts {
+        result[i] = <span class="syn-type">PostWithAuthor</span>{Post: p, Author: authorMap[p.AuthorID]}
+    }
+    <span class="syn-kw">return</span> result, <span class="syn-kw">nil</span>
+}</code></pre>
+
+<h4>Python (Django): select_parent e prefetch_parent</h4>
+
+<pre><code><span class="code-label">Python</span>
+<span class="syn-cm"># BAD, N+1 queries (Django ORM)</span>
+posts = Post.objects.<span class="syn-fn">all</span>()
+<span class="syn-kw">for</span> post <span class="syn-kw">in</span> posts:
+    <span class="syn-builtin">print</span>(post.author.name)  <span class="syn-cm"># Each access fires a separate query!</span>
+
+<span class="syn-cm"># GOOD, 1 query with JOIN (ForeignKey)</span>
+posts = Post.objects.<span class="syn-fn">select_related</span>(<span class="syn-str">"author"</span>).<span class="syn-fn">all</span>()
+
+<span class="syn-cm"># GOOD, 2 queries (ManyToMany or reverse FK)</span>
+posts = Post.objects.<span class="syn-fn">prefetch_related</span>(<span class="syn-str">"tags"</span>).<span class="syn-fn">all</span>()
+</code></pre>
+
+<p>
+  Ogni ORM moderno fornisce primitive di recupero di massa: Django ha <code>select_related</code> / <code>prefetch_related</code>, Ruby on Rails ha <code>includes</code>, Offerta Prisma e Drizzle <code>leftJoin</code> e caricamento delle relazioni. Se stai scrivendo SQL grezzo, la risposta è <code>JOIN</code>. Il modello da evitare è qualsiasi ciclo che attiva una query per iterazione.
+</p>
+
+<div class="callout info">
+  <div class="callout-title">Suggerimento professionale</div>
+  <p>La maggior parte degli ORM moderni hanno una modalità &quot;SQL generato dalla stampa&quot;. Abilitalo durante lo sviluppo per catturare modelli N+1 prima che raggiungano la produzione. In Django: <code>settings.LOGGING</code> con il <code>django.db.backends</code> registratore. Nel GORM di Go: <code>db.Debug()</code>.</p>
+</div>
+
+
+<hr class="section-rule">
+
+
+<!-- SECTION 10 -->
+
+<div id="s10" class="section-heading">
+  <span class="section-num">10</span>
+  <h2>Indici e piani di query</h2>
+</div>
+
+<p>
+  La fonte più comune di problemi di prestazioni del database è <em>assenza</em> di indici appropriati. An <span class="keyword">indice</span> è una struttura dati, tipicamente un B-tree, che mantiene una copia ordinata dei valori in una o più colonne, insieme ai puntatori alle righe complete. Trasforma una scansione sequenziale lenta (esaminando ogni riga) in una ricerca veloce.
+</p>
+
+<h3>L'analogia della biblioteca</h3>
+
+<p>
+  Immagina una biblioteca con un milione di libri ma senza catalogo. Per trovare tutti i libri di John Green è necessario camminare su ogni scaffale, esaminare ogni libro e scansionare l'intera tabella. Ora aggiungi un catalogo ordinato per nome dell'autore con posizioni sugli scaffali. Cerchi &quot;Green, John&quot;, trovi tre riferimenti agli scaffali, vai direttamente a quegli scaffali e ritorni in pochi minuti invece che in giorni. Quel catalogo è l'indice.
+</p>
+
+<h3>Scansione sequenziale e scansione dell'indice</h3>
+
+<p>
+  Senza un indice, il tuo database esegue a <span class="keyword">scansione sequenziale</span> (chiamata anche scansione completa della tabella), legge ogni riga per controllare il file <code>WHERE</code> clausola. Per un milione di righe, l'operazione può richiedere diversi secondi. Con un indice B-tree, il database esegue una ricerca logaritmica, trovando le righe corrispondenti in pochi millisecondi, indipendentemente dalle dimensioni della tabella.
+</p>
+
+<div class="formula">
+  Scansione sequenziale: O(n) -&gt; Scansione indice: O(log n)
+</div>
+
+<h3>Creazione di indici</h3>
+
+<pre><code><span class="code-label">SQL</span>
+<span class="syn-cm">-- Basic single-column index</span>
+<span class="syn-kw">CREATE INDEX</span> idx_posts_author_id <span class="syn-kw">ON</span> posts (author_id);
+
+<span class="syn-cm">-- Composite index: order matters!</span>
+<span class="syn-cm">-- This helps queries filtering by user_id, or user_id + created_at</span>
+<span class="syn-cm">-- It does NOT help queries filtering ONLY by created_at</span>
+<span class="syn-kw">CREATE INDEX</span> idx_orders_user_created <span class="syn-kw">ON</span> orders (user_id, created_at);
+
+<span class="syn-cm">-- Covering index: all needed data lives IN the index</span>
+<span class="syn-cm">-- The query never touches the main table at all</span>
+<span class="syn-kw">CREATE INDEX</span> idx_departments_name <span class="syn-kw">ON</span> departments (name) <span class="syn-kw">INCLUDE</span> (id);</code></pre>
+
+<h3>Indici compositi e di copertura</h3>
+
+<div class="compare-grid">
+  <div class="compare-card">
+    <h5>Indice composito</h5>
+    <ul>
+      <li>Indici <strong>più colonne</strong> insieme</li>
+      <li>Ottimizza le query che filtrano su tali colonne</li>
+      <li>Colonna <strong>l'ordine conta</strong>: regola del prefisso più a sinistra</li>
+      <li>Indice attivo <code>(A, B)</code> aiuta <code>WHERE A=...</code> e <code>WHERE A=... AND B=...</code> ma no <code>WHERE B=...</code> solo</li>
+    </ul>
+  </div>
+  <div class="compare-card">
+    <h5>Indice di copertura</h5>
+    <ul>
+      <li>Include tutte le colonne necessarie per una query</li>
+      <li>Il database serve i dati <strong>interamente dall'indice</strong></li>
+      <li>Elimina la &quot;ricerca heap&quot; (tornando alla tabella)</li>
+      <li>Usi <code>INCLUDE</code> clausola in Postgres per aggiungere colonne non chiave</li>
+    </ul>
+  </div>
+</div>
+
+<h3>Il costo degli indici</h3>
+
+<p>
+  Gli indici non sono gratuiti. Ogni indice consuma spazio su disco (e idealmente si adatta alla memoria). In modo più critico, ogni <code>INSERT</code>, <code>UPDATE</code>, o <code>DELETE</code> è necessario aggiornare tutti gli indici associati. Se indicizzi ciecamente ogni colonna, le tue operazioni di scrittura rallentano notevolmente. La linea guida: colonne dell'indice che appaiono in <code>WHERE</code>, <code>JOIN</code>, e <code>ORDER BY</code> clausole delle tue domande più frequenti e lascia stare il resto.
+</p>
+
+<h3>SPIEGARE ANALIZZARE: leggere il piano di interrogazione</h3>
+
+<p>
+  Per scoprire se le tue query utilizzano indici, Postgres fornisce il file <code>EXPLAIN ANALYZE</code> comando. Esegue la query e mostra l'esatto piano di esecuzione, quali tabelle sono state scansionate, quali indici sono stati utilizzati e quanto tempo ha richiesto ogni passaggio.
+</p>
+
+<pre><code><span class="code-label">SQL</span>
+<span class="syn-kw">EXPLAIN ANALYZE</span>
+<span class="syn-kw">SELECT</span> p.*, u.name <span class="syn-kw">AS</span> author_name
+<span class="syn-kw">FROM</span> posts p
+<span class="syn-kw">JOIN</span> users u <span class="syn-kw">ON</span> u.id = p.author_id
+<span class="syn-kw">WHERE</span> p.published = <span class="syn-kw">true</span>
+<span class="syn-kw">ORDER BY</span> p.created_at <span class="syn-kw">DESC</span>
+<span class="syn-kw">LIMIT</span> <span class="syn-num">20</span>;
+
+<span class="syn-cm">-- Look for "Seq Scan" in the output, that means no index is being used.</span>
+<span class="syn-cm">-- After adding an index, re-run and confirm it shows "Index Scan".</span></code></pre>
+
+<div class="ref-box">
+  <span><strong>Riferimento:</strong> <a href="https://www.postgresql.org/docs/current/using-explain.html" target="_blank">PostgreSQL, utilizzando EXPLAIN</a>, documentazione ufficiale sulla lettura dei piani di esecuzione delle query.</span>
+</div>
+
+
+<hr class="section-rule">
+
+
+<!-- SECTION 11 -->
+
+<div id="s11" class="section-heading">
+  <span class="section-num">11</span>
+  <h2>Raggruppamento delle connessioni</h2>
+</div>
+
+<p>
+  Stabilire una connessione al database è costoso. Ogni nuova connessione prevede un handshake a tre vie TCP, autenticazione, negoziazione della crittografia, impostazione dello stato della sessione e allocazione della memoria sul server del database (in genere diversi MB per connessione). Se la tua applicazione apre una nuova connessione per ogni query e la chiude immediatamente, pagherai questo costo su ogni singola richiesta.
+</p>
+
+<h3>I due problemi</h3>
+
+<p>
+  <strong>Problema 1: sovraccarico di latenza.</strong> Ogni configurazione di connessione aggiunge decine di millisecondi di sovraccarico, tempo sprecato prima dell'esecuzione di qualsiasi query effettiva. <strong>Problema 2: esaurimento della connessione.</strong> I database hanno limiti rigidi sulle connessioni simultanee (Postgres ha un valore predefinito di ~100, spesso configurato su 300-500). Durante i picchi di traffico, il tuo backend può esaurire il limite di connessione e mandare in crash il database.
+</p>
+
+<h3>Raggruppamento delle connessioni</h3>
+
+<p>
+  A <span class="keyword">pool di connessione</span> mantiene un insieme di connessioni prestabilite e riutilizzabili. Invece di creare una nuova connessione per ogni query, l'applicazione prende in prestito una connessione dal pool, la utilizza e la restituisce. La connessione rimane aperta per essere riutilizzata dalla richiesta successiva. Ciò elimina sia il sovraccarico di latenza che il rischio di esaurimento della connessione.
+</p>
+
+<div class="diagram-container">
+  <svg viewBox="0 0 620 220" xmlns="http://www.w3.org/2000/svg" style="max-width:620px;width:100%">
+    <!-- Server instances -->
+    <rect x="20" y="30" width="80" height="50" rx="4" fill="#e9e2d3" stroke="#5b5347" stroke-width="1.2"/>
+    <text x="60" y="58" text-anchor="middle" font-family="'JetBrains Mono',monospace" font-size="9" fill="#5b5347">Server1</text>
+    <rect x="20" y="90" width="80" height="50" rx="4" fill="#e9e2d3" stroke="#5b5347" stroke-width="1.2"/>
+    <text x="60" y="118" text-anchor="middle" font-family="'JetBrains Mono',monospace" font-size="9" fill="#5b5347">Server2</text>
+    <rect x="20" y="150" width="80" height="50" rx="4" fill="#e9e2d3" stroke="#5b5347" stroke-width="1.2"/>
+    <text x="60" y="178" text-anchor="middle" font-family="'JetBrains Mono',monospace" font-size="9" fill="#5b5347">Server3</text>
+
+    <!-- Arrows to pool -->
+    <line x1="100" y1="55" x2="230" y2="110" stroke="#5b5347" stroke-width="1" marker-end="url(#arrowD)"/>
+    <line x1="100" y1="115" x2="230" y2="115" stroke="#5b5347" stroke-width="1" marker-end="url(#arrowD)"/>
+    <line x1="100" y1="175" x2="230" y2="120" stroke="#5b5347" stroke-width="1" marker-end="url(#arrowD)"/>
+
+    <!-- External Pool -->
+    <rect x="230" y="70" width="150" height="90" rx="6" fill="#3f6f4e" fill-opacity="0.1" stroke="#3f6f4e" stroke-width="1.5"/>
+    <text x="305" y="92" text-anchor="middle" font-family="'Libre Franklin',sans-serif" font-size="9" font-weight="700" fill="#a9c98a" letter-spacing="0.08em">PISCINA ESTERNA</text>
+    <text x="305" y="107" text-anchor="middle" font-family="'JetBrains Mono',monospace" font-size="9" fill="#5b5347">(ad esempio PgBouncer)</text>
+
+    <!-- Connection slots -->
+    <rect x="245" y="118" width="18" height="18" rx="3" fill="#3f6f4e" fill-opacity="0.3" stroke="#3f6f4e" stroke-width="0.8"/>
+    <rect x="268" y="118" width="18" height="18" rx="3" fill="#3f6f4e" fill-opacity="0.3" stroke="#3f6f4e" stroke-width="0.8"/>
+    <rect x="291" y="118" width="18" height="18" rx="3" fill="#3f6f4e" fill-opacity="0.3" stroke="#3f6f4e" stroke-width="0.8"/>
+    <rect x="314" y="118" width="18" height="18" rx="3" fill="#3f6f4e" fill-opacity="0.3" stroke="#3f6f4e" stroke-width="0.8"/>
+    <rect x="337" y="118" width="18" height="18" rx="3" fill="#3f6f4e" fill-opacity="0.3" stroke="#3f6f4e" stroke-width="0.8"/>
+    <text x="305" y="150" text-anchor="middle" font-family="'JetBrains Mono',monospace" font-size="8" fill="#5b5347">massimo: 250 conn</text>
+
+    <!-- Arrow to DB -->
+    <line x1="380" y1="115" x2="470" y2="115" stroke="#37607f" stroke-width="1.5" marker-end="url(#arrowB2)"/>
+
+    <!-- Database -->
+    <rect x="470" y="80" width="120" height="70" rx="6" fill="#e9e2d3" stroke="#37607f" stroke-width="1.5"/>
+    <text x="530" y="112" text-anchor="middle" font-family="'Source Serif 4',serif" font-size="12" font-weight="600" fill="#232019">PostgreSQL</text>
+    <text x="530" y="132" text-anchor="middle" font-family="'JetBrains Mono',monospace" font-size="9" fill="#5b5347">massimo: 300</text>
+
+    <defs>
+      <marker id="arrowD" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6" fill="#5b5347"/></marker>
+      <marker id="arrowB2" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6" fill="#37607f"/></marker>
+    </defs>
+  </svg>
+  <div class="diagram-caption">Fig 7/Il pool di connessioni esterne (PgBouncer) si trova tra i server e il database</div>
+</div>
+
+<h3>Pooling interno vs. esterno</h3>
+
+<div class="compare-grid">
+  <div class="compare-card">
+    <h5>Piscina Interna</h5>
+    <ul>
+      <li>La piscina vive <strong>dentro</strong> ciascuna istanza del server</li>
+      <li>Ogni istanza mantiene le proprie connessioni</li>
+      <li>Configurazione semplice; la maggior parte dei driver DB ne include uno</li>
+      <li><strong>Rischio:</strong> 3 istanze x 150 connessioni = 450, che può superare il limite DB di 300</li>
+    </ul>
+  </div>
+  <div class="compare-card">
+    <h5>Piscina esterna</h5>
+    <ul>
+      <li>Processo autonomo (PgBouncer, PgCat)</li>
+      <li><strong>Tutto</strong> le istanze del server condividono un pool</li>
+      <li>Le connessioni totali al DB sono controllate centralmente</li>
+      <li>Preferito per <strong>scalato orizzontalmente</strong> sistemi di produzione</li>
+    </ul>
+  </div>
+</div>
+
+<h4>Pool di connessioni in Go</h4>
+
+<pre><code><span class="code-label">Go</span>
+<span class="syn-kw">import</span> <span class="syn-str">"database/sql"</span>
+
+db, err := sql.<span class="syn-fn">Open</span>(<span class="syn-str">"postgres"</span>, connStr)
+<span class="syn-kw">if</span> err != <span class="syn-kw">nil</span> {
+    log.<span class="syn-fn">Fatal</span>(err)
+}
+
+<span class="syn-cm">// Configure the built-in connection pool</span>
+db.<span class="syn-fn">SetMaxOpenConns</span>(<span class="syn-num">25</span>)                  <span class="syn-cm">// max open connections to the DB</span>
+db.<span class="syn-fn">SetMaxIdleConns</span>(<span class="syn-num">10</span>)                  <span class="syn-cm">// max idle connections kept ready</span>
+db.<span class="syn-fn">SetConnMaxLifetime</span>(<span class="syn-num">5</span> * time.Minute)  <span class="syn-cm">// recycle connections after 5 min</span>
+db.<span class="syn-fn">SetConnMaxIdleTime</span>(<span class="syn-num">1</span> * time.Minute)  <span class="syn-cm">// close idle connections after 1 min</span></code></pre>
+
+<h4>Pool di connessioni in Python (SQLAlchemy)</h4>
+
+<pre><code><span class="code-label">Python</span>
+<span class="syn-kw">from</span> sqlalchemy <span class="syn-kw">import</span> create_engine
+
+engine = <span class="syn-fn">create_engine</span>(
+    <span class="syn-str">"postgresql://user:pass@host/db"</span>,
+    pool_size=<span class="syn-num">20</span>,          <span class="syn-cm"># number of persistent connections</span>
+    max_overflow=<span class="syn-num">10</span>,       <span class="syn-cm"># extra connections allowed during spikes</span>
+    pool_timeout=<span class="syn-num">30</span>,       <span class="syn-cm"># seconds to wait for a free connection</span>
+    pool_recycle=<span class="syn-num">1800</span>,     <span class="syn-cm"># recycle connections every 30 minutes</span>
+    pool_pre_ping=<span class="syn-kw">True</span>,    <span class="syn-cm"># test connection health before use</span>
+)</code></pre>
+
+<div class="ref-box">
+  <span><strong>Riferimento:</strong> <a href="https://www.pgbouncer.org/" target="_blank">PgBouncer</a>, pooler di connessioni leggero per PostgreSQL, lo standard de facto per le distribuzioni di produzione di Postgres.</span>
+</div>
+
+
+<hr class="section-rule">
+
+
+<!-- SECTION 12 -->
+
+<div id="s12" class="section-heading">
+  <span class="section-num">12</span>
+  <h2>Fondamenti di memorizzazione nella cache</h2>
+</div>
+
+<p>
+  <span class="keyword">Memorizzazione nella cache</span> è la pratica di archiviare il risultato di un'operazione costosa in un livello di archiviazione più veloce in modo che le richieste successive per gli stessi dati possano essere soddisfatte senza ripetere il lavoro costoso. L'idea è meravigliosamente semplice: calcola una volta, servine molti.
+</p>
+
+<p>
+  In pratica, inserisci una cache (tipicamente Redis, Memcached o Valkey) davanti al tuo database. Quando arriva una richiesta, controlli prima la cache. Su un <strong>colpo alla cache</strong>, restituisci immediatamente i dati memorizzati nella cache, spesso in meno di 5 ms. Su un <strong>mancanza di cache</strong>, si esegue una query sul database, si memorizza il risultato nella cache e quindi lo si restituisce. Una singola mossa può ridurre la latenza percepita da 800 ms a 50 ms.
+</p>
+
+<h3>Caching locale e distribuito</h3>
+
+<div class="compare-grid">
+  <div class="compare-card">
+    <h5>Cache locale</h5>
+    <ul>
+      <li>Memoria in-process (dizionario/mappa)</li>
+      <li>Accesso più veloce possibile: 1-3ms</li>
+      <li>Privato per ogni istanza del server</li>
+      <li><strong>Problema:</strong> incoerenza della cache tra le istanze</li>
+    </ul>
+  </div>
+  <div class="compare-card">
+    <h5>Cache distribuita</h5>
+    <ul>
+      <li>Servizio esterno (Redis, Memcached, Valkey)</li>
+      <li>Condiviso tra tutte le istanze del server</li>
+      <li>Nessuna incoerenza tra i server</li>
+      <li><strong>Contro:</strong> il viaggio di andata e ritorno della rete aggiunge ~ 5-50 ms</li>
+    </ul>
+  </div>
+</div>
+
+<h3>Caching a più livelli</h3>
+
+<p>
+  Molti sistemi di produzione utilizzano entrambi: una piccola cache locale per i dati più &quot;caldi&quot; (elementi a cui si accede più frequentemente) supportata da una cache distribuita più grande. Una richiesta controlla prima la cache locale (meno di un millisecondo), quindi ritorna alla cache distribuita (pochi millisecondi) e colpisce il database solo in caso di fallimento totale.
+</p>
+
+<h4>Semplice memorizzazione nella cache Redis in Go</h4>
+
+<pre><code><span class="code-label">Go</span>
+<span class="syn-kw">import</span> (
+    <span class="syn-str">"context"</span>
+    <span class="syn-str">"encoding/json"</span>
+    <span class="syn-str">"time"</span>
+    <span class="syn-str">"github.com/redis/go-redis/v9"</span>
+)
+
+<span class="syn-kw">var</span> rdb = redis.<span class="syn-fn">NewClient</span>(&redis.Options{Addr: <span class="syn-str">"localhost:6379"</span>})
+
+<span class="syn-kw">func</span> <span class="syn-fn">GetProduct</span>(ctx <span class="syn-type">context.Context</span>, id <span class="syn-type">string</span>) (*<span class="syn-type">Product</span>, <span class="syn-type">error</span>) {
+    cacheKey := <span class="syn-str">"product:"</span> + id
+
+    <span class="syn-cm">// 1. Try cache first</span>
+    cached, err := rdb.<span class="syn-fn">Get</span>(ctx, cacheKey).<span class="syn-fn">Result</span>()
+    <span class="syn-kw">if</span> err == <span class="syn-kw">nil</span> {
+        <span class="syn-kw">var</span> p <span class="syn-type">Product</span>
+        json.<span class="syn-fn">Unmarshal</span>([]<span class="syn-kw">byte</span>(cached), &p)
+        <span class="syn-kw">return</span> &p, <span class="syn-kw">nil</span>  <span class="syn-cm">// Cache HIT, ~2ms</span>
+    }
+
+    <span class="syn-cm">// 2. Cache miss, query database</span>
+    p, err := <span class="syn-fn">queryProductFromDB</span>(ctx, id)
+    <span class="syn-kw">if</span> err != <span class="syn-kw">nil</span> {
+        <span class="syn-kw">return</span> <span class="syn-kw">nil</span>, err
+    }
+
+    <span class="syn-cm">// 3. Store in cache with TTL</span>
+    data, _ := json.<span class="syn-fn">Marshal</span>(p)
+    rdb.<span class="syn-fn">Set</span>(ctx, cacheKey, data, <span class="syn-num">10</span>*time.Minute)
+
+    <span class="syn-kw">return</span> p, <span class="syn-kw">nil</span>
+}</code></pre>
+
+<h4>Semplice memorizzazione nella cache Redis in Python</h4>
+
+<pre><code><span class="code-label">Python</span>
+<span class="syn-kw">import</span> json, redis
+
+r = redis.<span class="syn-fn">Redis</span>(host=<span class="syn-str">"localhost"</span>, port=<span class="syn-num">6379</span>, decode_responses=<span class="syn-kw">True</span>)
+
+<span class="syn-kw">def</span> <span class="syn-fn">get_product</span>(product_id: <span class="syn-type">str</span>) -> <span class="syn-type">dict</span>:
+    cache_key = <span class="syn-str">f"product:</span>{product_id}<span class="syn-str">"</span>
+
+    <span class="syn-cm"># 1. Try cache</span>
+    cached = r.<span class="syn-fn">get</span>(cache_key)
+    <span class="syn-kw">if</span> cached:
+        <span class="syn-kw">return</span> json.<span class="syn-fn">loads</span>(cached)  <span class="syn-cm"># Cache HIT</span>
+
+    <span class="syn-cm"># 2. Cache miss, query database</span>
+    product = <span class="syn-fn">query_product_from_db</span>(product_id)
+
+    <span class="syn-cm"># 3. Store with 10-minute TTL</span>
+    r.<span class="syn-fn">setex</span>(cache_key, <span class="syn-num">600</span>, json.<span class="syn-fn">dumps</span>(product))
+    <span class="syn-kw">return</span> product</code></pre>
+
+
+<hr class="section-rule">
+
+
+<!-- SECTION 13 -->
+
+<div id="s13" class="section-heading">
+  <span class="section-num">13</span>
+  <h2>Invalidazione della cache</h2>
+</div>
+
+<p>
+  C'è un famoso detto in informatica: <em>&quot;Ci sono solo due problemi difficili nella programmazione: nominare le cose, invalidare la cache ed errori off-by-one.&quot;</em> L'invalidazione della cache, ovvero il mantenimento dei dati memorizzati nella cache sincronizzati con la fonte della verità, è davvero uno dei problemi più difficili nei sistemi distribuiti.
+</p>
+
+<h3>Scadenza basata sul tempo (TTL)</h3>
+
+<p>
+  L'approccio più semplice: impostare a <strong>Tempo di vivere (TTL)</strong> su ogni voce della cache. Allo scadere del TTL, la voce viene automaticamente eliminata. La richiesta successiva attiva una nuova query sul database. La sfida è scegliere il TTL giusto, troppo breve e si perde la maggior parte dei vantaggi della memorizzazione nella cache; troppo lungo e gli utenti vedranno dati non aggiornati.
+</p>
+
+<h3>Invalidazione basata sugli eventi</h3>
+
+<p>
+  Invece di attendere un timer, elimini o aggiorni esplicitamente la voce della cache ogni volta che cambiano i dati sottostanti. Ad esempio, quando un utente aggiorna il proprio profilo, il gestore degli aggiornamenti elimina anche la voce del profilo memorizzato nella cache. La successiva richiesta di lettura recupererà nuovi dati dal database e ripopolerà la cache.
+</p>
+
+<p>
+  Il vantaggio: i dati sono sempre aggiornati. Il rischio: se si dimentica di invalidare anche un solo percorso di codice che modifica i dati, si ottengono risultati obsoleti. Ciò richiede disciplina e revisione approfondita del codice.
+</p>
+
+
+<hr class="section-rule">
+
+
+<!-- SECTION 14 -->
+
+<div id="s14" class="section-heading">
+  <span class="section-num">14</span>
+  <h2>Modelli di memorizzazione nella cache</h2>
+</div>
+
+<p>
+  La memorizzazione nella cache <em>modello</em> determina quando e come i dati entrano nella cache. Tre modelli principali dominano l'ingegneria di backend:
+</p>
+
+<h3>1. Cache-Aside (caricamento lento)</h3>
+
+<p>
+  Il modello più comune. Il codice dell'applicazione gestisce la cache in modo esplicito: controlla la cache -&gt; in caso di errore, interroga il DB -&gt; memorizza il risultato nella cache -&gt; restituisci. Durante la scrittura, invalida o elimina la voce della cache.
+</p>
+
+<div class="callout">
+  <div class="callout-title">Flusso cache-aside</div>
+  <p><strong>Leggi:</strong> Controlla la cache -&gt; hit? Ritorno. Mancare? Interroga DB -&gt; scrivi nella cache -&gt; ritorna.<br>
+  <strong>Scrivi:</strong> Aggiorna DB -&gt; elimina la voce della cache (la lettura successiva viene ripopolata).</p>
+</div>
+
+<h3>2. Scrittura attraverso</h3>
+
+<p>
+  Ogni operazione di scrittura viene aggiornata <em>entrambi</em> la cache e il database contemporaneamente. Le letture trovano sempre nuovi dati nella cache, non ci sono errori nella cache dopo la prima scrittura. Il compromesso: la latenza di scrittura aumenta perché stai scrivendo su due sistemi prima di restituire una risposta di successo.
+</p>
+
+<h3>3. Write-Behind (Write-Back)</h3>
+
+<p>
+  La scrittura aggiorna solo la cache e ritorna immediatamente. L'aggiornamento del database avviene in modo asincrono in background. Ciò garantisce la latenza di scrittura più rapida ma introduce un rischio: se la cache fallisce prima del completamento della scrittura asincrona, i dati vengono persi. La cache e il database potrebbero essere temporaneamente incoerenti.
+</p>
+
+<table>
+  <thead><tr><th>Modello</th><th>Leggi Velocità</th><th>Scrivi velocità</th><th>Coerenza</th><th>Complessità</th></tr></thead>
+  <tbody>
+    <tr><td>Cache-Aside</td><td>Veloce (dopo il primo errore)</td><td>Normale</td><td>Buono (invalidazione esplicita)</td><td>Basso</td></tr>
+    <tr><td>Scrittura attraverso</td><td>Sempre veloce</td><td>Più lento (doppia scrittura)</td><td>Forte</td><td>Medio</td></tr>
+    <tr><td>Write-behind</td><td>Sempre veloce</td><td>Il più veloce</td><td>Eventuale (rischio di perdita)</td><td>Alto</td></tr>
+  </tbody>
+</table>
+
+
+<hr class="section-rule">
+
+
+<!-- SECTION 15 -->
+
+<div id="s15" class="section-heading">
+  <span class="section-num">15</span>
+  <h2>Tasso di riscontri nella cache</h2>
+</div>
+
+<p>
+  Il <span class="keyword">tasso di riscontro nella cache</span> misura la percentuale di richieste che vengono servite con successo dalla cache anziché cadere nel database. Una percentuale di successo del 90% significa che 9 richieste su 10 vengono servite dalla cache; solo il 10% tocca il database. Una percentuale di successo del 20% significa che il tuo livello di memorizzazione nella cache funziona a malapena.
+</p>
+
+<div class="formula">
+  Percentuale di riscontri nella cache = Riscontri nella cache / (Riscontri nella cache + Riscontri nella cache) x 100%
+</div>
+
+<h3>Fattori che influenzano il tasso di successo</h3>
+
+<p>
+  <strong>Durata TTL:</strong> TTL più lunghi mantengono gli elementi nella cache più a lungo, aumentando il tasso di successo ma rischiando di diventare obsoleti. <strong>Dimensione della cache:</strong> Una cache più grande contiene più voci, aumentando naturalmente la probabilità di un successo. <strong>Modelli di accesso ai dati:</strong> Se il tuo traffico è altamente concentrato su un piccolo insieme di elementi &quot;caldi&quot; (distribuzione basata sulla legge di potenza), la memorizzazione nella cache è estremamente efficace. Se il traffico viene distribuito uniformemente su milioni di chiavi univoche, i tassi di successo saranno inferiori. <strong>Politica di sfratto:</strong> Algoritmi come LRU (Least Recently Used) e LFU (Least Frequently Used) determinano quali voci vengono eliminate quando la cache è piena, la scelta di quella giusta dipende dai tuoi modelli di accesso.
+</p>
+
+<div class="callout info">
+  <div class="callout-title">Tassi di successo del target</div>
+  <p>Per la maggior parte delle applicazioni Web, a <strong>70-95%</strong> il tasso di successo è considerato salutare. Al di sotto del 50% suggerisce una discrepanza fondamentale tra la strategia di memorizzazione nella cache e i modelli di accesso effettivi, è tempo di riesaminare i TTL, le chiavi di cache e la politica di eliminazione.</p>
+</div>
+
+
+<hr class="section-rule">
+
+
+<!-- SECTION 16 -->
+
+<div id="s16" class="section-heading">
+  <span class="section-num">16</span>
+  <h2>Scala verticale</h2>
+</div>
+
+<p>
+  <span class="keyword">Scala verticale</span> (chiamato anche &quot;scaling up&quot;) significa sostituire il server con una macchina più potente, più core CPU, più RAM, spazio di archiviazione più veloce, schede di rete migliori. Il tuo codice non cambia. La tua architettura non cambia. Aggiorna semplicemente l'hardware.
+</p>
+
+<h3>Perché è attraente</h3>
+
+<p>
+  Il ridimensionamento verticale è la forma più semplice di ridimensionamento. Un server con il doppio dei core della CPU gestisce circa il doppio delle richieste. Un server con il doppio della RAM può contenere il doppio dei dati memorizzati nella cache. Eviti l'intera categoria della complessità dei sistemi distribuiti: nessun sistema di bilanciamento del carico, nessuna sincronizzazione dello stato, nessuna gestione delle partizioni di rete. Dal punto di vista economico, una singola macchina con una potenza doppia spesso costa meno di due macchine della metà delle sue dimensioni e si evitano i costi operativi legati alla gestione di una flotta.
+</p>
+
+<h3>Limiti rigidi del ridimensionamento verticale</h3>
+
+<p>
+  <strong>Soffitto hardware:</strong> I fornitori di servizi cloud offrono macchine fino a una certa dimensione. Una volta esaurita l'istanza più grande disponibile (ad esempio, 96 core, 384 GB di RAM), semplicemente non è possibile scalare ulteriormente. <strong>Singolo punto di guasto:</strong> Una macchina significa un dominio di errore. Se si blocca, l'intero servizio va offline. <strong>Nessuna distribuzione geografica:</strong> Un singolo server in un data center significa che gli utenti dall'altra parte del mondo sperimentano un'elevata latenza, la fisica impone una velocità massima della luce nei viaggi di andata e ritorno attraverso il continente (~ 100 ms USA&lt;-&gt;India).
+</p>
+
+<div class="diagram-container">
+  <svg viewBox="0 0 580 170" xmlns="http://www.w3.org/2000/svg" style="max-width:580px;width:100%">
+    <!-- Small server -->
+    <rect x="30" y="60" width="80" height="80" rx="5" fill="#e9e2d3" stroke="#5b5347" stroke-width="1.2"/>
+    <text x="70" y="90" text-anchor="middle" font-family="'JetBrains Mono',monospace" font-size="9" fill="#5b5347">2 nuclei</text>
+    <text x="70" y="105" text-anchor="middle" font-family="'JetBrains Mono',monospace" font-size="9" fill="#5b5347">4 GB</text>
+    <text x="70" y="120" text-anchor="middle" font-family="'JetBrains Mono',monospace" font-size="9" fill="#5b5347">50 GB</text>
+    <text x="70" y="155" text-anchor="middle" font-family="'Libre Franklin',sans-serif" font-size="9" fill="#5b5347">$50/mese</text>
+
+    <!-- Arrow -->
+    <text x="175" y="105" text-anchor="middle" font-family="'Source Serif 4',serif" font-size="22" fill="#b8402e">-&gt;</text>
+
+    <!-- Medium server -->
+    <rect x="220" y="45" width="100" height="95" rx="5" fill="#e9e2d3" stroke="#5b5347" stroke-width="1.2"/>
+    <text x="270" y="78" text-anchor="middle" font-family="'JetBrains Mono',monospace" font-size="9" fill="#5b5347">8 nuclei</text>
+    <text x="270" y="93" text-anchor="middle" font-family="'JetBrains Mono',monospace" font-size="9" fill="#5b5347">32 GB</text>
+    <text x="270" y="108" text-anchor="middle" font-family="'JetBrains Mono',monospace" font-size="9" fill="#5b5347">SSD da 500GB</text>
+    <text x="270" y="155" text-anchor="middle" font-family="'Libre Franklin',sans-serif" font-size="9" fill="#5b5347">$ 320/mese</text>
+
+    <!-- Arrow -->
+    <text x="385" y="105" text-anchor="middle" font-family="'Source Serif 4',serif" font-size="22" fill="#b8402e">-&gt;</text>
+
+    <!-- Big server -->
+    <rect x="420" y="25" width="130" height="115" rx="5" fill="#e9e2d3" stroke="#b8402e" stroke-width="1.5"/>
+    <text x="485" y="60" text-anchor="middle" font-family="'JetBrains Mono',monospace" font-size="9" fill="#5b5347">32 nuclei</text>
+    <text x="485" y="75" text-anchor="middle" font-family="'JetBrains Mono',monospace" font-size="9" fill="#5b5347">96 GB di RAM</text>
+    <text x="485" y="90" text-anchor="middle" font-family="'JetBrains Mono',monospace" font-size="9" fill="#5b5347">NVMe da 2TB</text>
+    <text x="485" y="105" text-anchor="middle" font-family="'JetBrains Mono',monospace" font-size="9" fill="#5b5347">Scheda di rete da 10 Gbps</text>
+    <text x="485" y="155" text-anchor="middle" font-family="'Libre Franklin',sans-serif" font-size="9" fill="#5b5347">$ 2.400 / mese</text>
+
+    <!-- Ceiling label -->
+    <line x1="420" y1="18" x2="550" y2="18" stroke="#b8402e" stroke-width="1.5" stroke-dasharray="4,3"/>
+    <text x="485" y="12" text-anchor="middle" font-family="'Libre Franklin',sans-serif" font-size="8" font-weight="700" fill="#b8402e" letter-spacing="0.1em">SOFFITTO FERRAMENTA</text>
+  </svg>
+  <div class="diagram-caption">Fig 8 / Ridimensionamento verticale: macchine più grandi, stessa architettura, soffitto rigido</div>
+</div>
+
+
+<hr class="section-rule">
+
+
+<!-- SECTION 17 -->
+
+<div id="s17" class="section-heading">
+  <span class="section-num">17</span>
+  <h2>Ridimensionamento orizzontale</h2>
+</div>
+
+<p>
+  <span class="keyword">Ridimensionamento orizzontale</span> (chiamato anche &quot;scaling out&quot;) adotta l'approccio opposto: invece di ingrandire una macchina, si aggiungono più macchine di dimensioni simili che lavorano insieme per gestire il carico.
+</p>
+
+<h3>Vantaggi</h3>
+
+<p>
+  <strong>Nessun soffitto rigido:</strong> Hai bisogno di più capacità? Aggiungi più server. Non c'è limite al numero di istanze che puoi eseguire. <strong>Ridondanza:</strong> Se un server si guasta, gli altri continuano a servire il traffico, il guasto viene assorbito e non è catastrofico. <strong>Distribuzione geografica:</strong> Puoi posizionare i server in più data center in tutto il mondo, instradando gli utenti a quello più vicino per una latenza minima.
+</p>
+
+<h3>Il costo della complessità</h3>
+
+<p>
+  Il ridimensionamento orizzontale introduce una categoria completamente nuova di problemi, i problemi dei sistemi distribuiti:
+</p>
+
+<p>
+  <strong>Richiedi la distribuzione:</strong> Come decidi quale server gestisce ciascuna richiesta? Hai bisogno di un bilanciatore del carico, un nuovo componente nella tua infrastruttura. <strong>Sincronizzazione dello stato:</strong> Se l'utente A aggiorna il proprio profilo sul Server 1, come fa il Server 2 a saperlo? <strong>Partizioni di rete:</strong> Cosa succede quando la rete che collega i tuoi server fallisce? I server possono prendere decisioni contrastanti. <strong>Controllo sanitario:</strong> Come si rileva quando un server è inattivo e come si reindirizza il traffico lontano da esso e lo riporta ad esso quando viene ripristinato?
+</p>
+
+<p>
+  Tutti questi problemi hanno soluzioni, bilanciatori del carico, database condivisi, algoritmi di consenso, controlli di integrità, ma ogni soluzione aggiunge complessità e richiede un'attenta progettazione. I sistemi distribuiti non eliminano i problemi; loro <em>trasformare</em> una serie di problemi in una serie diversa e devi valutare quale serie di problemi è più gestibile per la tua situazione.
+</p>
+
+<div class="compare-grid">
+  <div class="compare-card">
+    <h5>Scala verticale</h5>
+    <ul>
+      <li>Semplice, senza modifiche architettoniche</li>
+      <li>Nessuna complessità di sistemi distribuiti</li>
+      <li>Economicamente efficiente su piccola scala</li>
+      <li>Soffitto hardware rigido</li>
+      <li>Singolo punto di guasto</li>
+      <li>Nessuna distribuzione geografica</li>
+    </ul>
+  </div>
+  <div class="compare-card">
+    <h5>Ridimensionamento orizzontale</h5>
+    <ul>
+      <li>Nessun tetto massimo di capacità</li>
+      <li>Ridondanza integrata</li>
+      <li>Distribuzione geografica possibile</li>
+      <li>Richiede il bilanciamento del carico</li>
+      <li>È necessaria la sincronizzazione dello stato</li>
+      <li>Operativamente complesso</li>
+    </ul>
+  </div>
+</div>
+
+
+<hr class="section-rule">
+
+
+<!-- SECTION 18 -->
+
+<div id="s18" class="section-heading">
+  <span class="section-num">18</span>
+  <h2>Bilanciamento del carico</h2>
+</div>
+
+<p>
+  Nel momento in cui hai più di un server, hai bisogno di un meccanismo per distribuire le richieste in entrata su di essi. Questo meccanismo è il <span class="keyword">bilanciatore del carico</span>. Si trova davanti ai tuoi server, riceve tutto il traffico in entrata e inoltra ogni richiesta a una delle istanze di backend disponibili in base a un algoritmo scelto.
+</p>
+
+<h3>Algoritmi comuni</h3>
+
+<p>
+  <strong>Girotondo all'italiana:</strong> Le richieste vengono distribuite in sequenza, server 1, server 2, server 3, ripetizione. Semplice e uniforme. <strong>Minime connessioni:</strong> Ogni richiesta va al server che attualmente gestisce il minor numero di connessioni attive. Meglio per richieste di durata variabile. <strong>Hash IP:</strong> L'indirizzo IP del client determina quale server riceve la richiesta, garantendo che lo stesso client raggiunga sempre lo stesso server (utile per l'affinità di sessione). <strong>Round Robin ponderato:</strong> I server con maggiore capacità ricevono proporzionalmente più richieste.
+</p>
+
+<div class="diagram-container">
+  <svg viewBox="0 0 600 210" xmlns="http://www.w3.org/2000/svg" style="max-width:600px;width:100%">
+    <!-- Users -->
+    <rect x="20" y="70" width="65" height="70" rx="4" fill="#e9e2d3" stroke="#5b5347" stroke-width="1.2"/>
+    <text x="52" y="100" text-anchor="middle" font-family="'Source Serif 4',serif" font-size="10" fill="#5b5347">Utenti</text>
+    <text x="52" y="118" text-anchor="middle" font-family="'JetBrains Mono',monospace" font-size="8" fill="#5b5347">10K RPS</text>
+
+    <!-- Arrow to LB -->
+    <line x1="85" y1="105" x2="160" y2="105" stroke="#5b5347" stroke-width="1.2" marker-end="url(#arrowD2)"/>
+
+    <!-- Load Balancer -->
+    <rect x="160" y="55" width="110" height="100" rx="6" fill="#b8402e" fill-opacity="0.1" stroke="#b8402e" stroke-width="1.5"/>
+    <text x="215" y="85" text-anchor="middle" font-family="'Libre Franklin',sans-serif" font-size="9" font-weight="700" fill="#b8402e" letter-spacing="0.06em">CARICO</text>
+    <text x="215" y="100" text-anchor="middle" font-family="'Libre Franklin',sans-serif" font-size="9" font-weight="700" fill="#b8402e" letter-spacing="0.06em">BILANCIATORE</text>
+    <text x="215" y="120" text-anchor="middle" font-family="'JetBrains Mono',monospace" font-size="8" fill="#5b5347">Nginx/HAProxy</text>
+    <text x="215" y="140" text-anchor="middle" font-family="'JetBrains Mono',monospace" font-size="8" fill="#5b5347">ALB/Traefik</text>
+
+    <!-- Arrows to servers -->
+    <line x1="270" y1="80" x2="370" y2="40" stroke="#5b5347" stroke-width="1" marker-end="url(#arrowD2)"/>
+    <line x1="270" y1="105" x2="370" y2="105" stroke="#5b5347" stroke-width="1" marker-end="url(#arrowD2)"/>
+    <line x1="270" y1="130" x2="370" y2="170" stroke="#5b5347" stroke-width="1" marker-end="url(#arrowD2)"/>
+
+    <!-- Servers -->
+    <rect x="370" y="18" width="90" height="42" rx="4" fill="#e9e2d3" stroke="#5b5347" stroke-width="1.2"/>
+    <text x="415" y="38" text-anchor="middle" font-family="'JetBrains Mono',monospace" font-size="9" fill="#5b5347">Server1</text>
+    <text x="415" y="52" text-anchor="middle" font-family="'JetBrains Mono',monospace" font-size="8" fill="#5b5347">Stati Uniti orientali</text>
+
+    <rect x="370" y="84" width="90" height="42" rx="4" fill="#e9e2d3" stroke="#5b5347" stroke-width="1.2"/>
+    <text x="415" y="104" text-anchor="middle" font-family="'JetBrains Mono',monospace" font-size="9" fill="#5b5347">Server2</text>
+    <text x="415" y="118" text-anchor="middle" font-family="'JetBrains Mono',monospace" font-size="8" fill="#5b5347">UE-Ovest</text>
+
+    <rect x="370" y="150" width="90" height="42" rx="4" fill="#e9e2d3" stroke="#5b5347" stroke-width="1.2"/>
+    <text x="415" y="170" text-anchor="middle" font-family="'JetBrains Mono',monospace" font-size="9" fill="#5b5347">Server3</text>
+    <text x="415" y="184" text-anchor="middle" font-family="'JetBrains Mono',monospace" font-size="8" fill="#5b5347">AP-Sud</text>
+
+    <!-- RPS labels -->
+    <text x="520" y="42" font-family="'JetBrains Mono',monospace" font-size="8" fill="#3f6f4e">~3,3K RPS</text>
+    <text x="520" y="108" font-family="'JetBrains Mono',monospace" font-size="8" fill="#3f6f4e">~3,3K RPS</text>
+    <text x="520" y="174" font-family="'JetBrains Mono',monospace" font-size="8" fill="#3f6f4e">~3,3K RPS</text>
+
+    <defs>
+      <marker id="arrowD2" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6" fill="#5b5347"/></marker>
+    </defs>
+  </svg>
+  <div class="diagram-caption">Fig 9/Il bilanciatore del carico distribuisce il traffico su server distribuiti geograficamente</div>
+</div>
+
+<h3>Bilanciatore del carico in pratica (configurazione Nginx)</h3>
+
+<pre><code><span class="code-label">Nginx</span>
+<span class="syn-kw">upstream</span> backend {
+    <span class="syn-cm"># Least connections algorithm</span>
+    <span class="syn-kw">least_conn</span>;
+
+    <span class="syn-kw">server</span> <span class="syn-str">10.0.1.10:8080</span> <span class="syn-kw">weight</span>=<span class="syn-num">3</span>;   <span class="syn-cm"># stronger machine</span>
+    <span class="syn-kw">server</span> <span class="syn-str">10.0.1.11:8080</span> <span class="syn-kw">weight</span>=<span class="syn-num">2</span>;
+    <span class="syn-kw">server</span> <span class="syn-str">10.0.1.12:8080</span> <span class="syn-kw">weight</span>=<span class="syn-num">2</span>;
+    <span class="syn-kw">server</span> <span class="syn-str">10.0.1.13:8080</span> <span class="syn-kw">backup</span>;     <span class="syn-cm"># only used if others are down</span>
+}
+
+<span class="syn-kw">server</span> {
+    <span class="syn-kw">listen</span> <span class="syn-num">443</span> ssl;
+    <span class="syn-kw">server_name</span> api.example.com;
+
+    <span class="syn-kw">location</span> / {
+        <span class="syn-kw">proxy_pass</span> http://backend;
+        <span class="syn-kw">proxy_set_header</span> Host $host;
+        <span class="syn-kw">proxy_set_header</span> X-Real-IP $remote_addr;
+    }
+}</code></pre>
+
+<h3>Controlli sanitari</h3>
+
+<p>
+  I sistemi di bilanciamento del carico inviano periodicamente sonde di controllo dello stato (richieste HTTP a a <code>/health</code> endpoint) a ciascun backend. Se un server non risponde, il sistema di bilanciamento del carico interrompe l'instradamento del traffico verso di esso. Quando il server viene ripristinato, il traffico riprende. Questo è il meccanismo che offre il vantaggio di ridondanza del ridimensionamento orizzontale.
+</p>
+
+<h4>Endpoint sanitario semplice in Go</h4>
+
+<pre><code><span class="code-label">Go</span>
+http.<span class="syn-fn">HandleFunc</span>(<span class="syn-str">"/health"</span>, <span class="syn-kw">func</span>(w <span class="syn-type">http.ResponseWriter</span>, r *<span class="syn-type">http.Request</span>) {
+    <span class="syn-cm">// Check database connectivity</span>
+    <span class="syn-kw">if</span> err := db.<span class="syn-fn">PingContext</span>(r.<span class="syn-fn">Context</span>()); err != <span class="syn-kw">nil</span> {
+        w.<span class="syn-fn">WriteHeader</span>(http.StatusServiceUnavailable)
+        json.<span class="syn-fn">NewEncoder</span>(w).<span class="syn-fn">Encode</span>(<span class="syn-kw">map</span>[<span class="syn-type">string</span>]<span class="syn-type">string</span>{
+            <span class="syn-str">"status"</span>: <span class="syn-str">"unhealthy"</span>,
+            <span class="syn-str">"reason"</span>: <span class="syn-str">"database unreachable"</span>,
+        })
+        <span class="syn-kw">return</span>
+    }
+    w.<span class="syn-fn">WriteHeader</span>(http.StatusOK)
+    json.<span class="syn-fn">NewEncoder</span>(w).<span class="syn-fn">Encode</span>(<span class="syn-kw">map</span>[<span class="syn-type">string</span>]<span class="syn-type">string</span>{
+        <span class="syn-str">"status"</span>: <span class="syn-str">"healthy"</span>,
+    })
+})</code></pre>
+
+
+<hr class="section-rule">
+
+
+<!-- FINAL SUMMARY -->
+
+
+<div class="section-heading">
+  <span class="section-num" style="background:#5b5347">Somma</span>
+  <h2>Riepilogo e principi chiave</h2>
+</div>
+
+<p>
+  L'ingegneria delle prestazioni non consiste nel memorizzare una lista di tecniche. Si tratta di costruire modelli mentali sul comportamento dei sistemi sotto carico e di applicare lo strumento giusto al momento giusto. Ecco i principi fondamentali:
+</p>
+
+<p>
+  <strong>1. Misura, non indovinare.</strong> Non dare mai per scontato dove sia il collo di bottiglia. Utilizza middleware di temporizzazione, tracciamento distribuito, profiler e <code>EXPLAIN ANALYZE</code> identificare il problema reale prima di investire in una soluzione.
+</p>
+
+<p>
+  <strong>2. Pensa in percentili, non in medie.</strong> P50 ti racconta l'esperienza tipica. P99 ti racconta l'esperienza peggiore e spesso rappresenta gli utenti più preziosi che eseguono le operazioni più complesse.
+</p>
+
+<p>
+  <strong>3. Rispettare la curva di utilizzo.</strong> La latenza cresce in modo esponenziale man mano che l'utilizzo si avvicina al 100%. Mantieni spazio per gli attacchi di traffico. Obiettivo: utilizzo del 60-80% nella produzione.
+</p>
+
+<p>
+  <strong>4. Correggere prima il database.</strong> Elimina N+1 query, aggiungi indici appropriati (ma non troppi) e utilizza il pool di connessioni. Queste ottimizzazioni a basso impatto spesso forniscono i maggiori vantaggi.
+</p>
+
+<p>
+  <strong>5. Memorizza nella cache strategicamente.</strong> Comprendi i tuoi modelli di accesso. Scegli il modello di memorizzazione nella cache corretto (cache-aside, write-through, write-behind). Monitora la percentuale di riscontri nella cache. Ricorda che l'invalidazione della cache è davvero difficile, rispettala.
+</p>
+
+<p>
+  <strong>6. Scalare in modo appropriato.</strong> Inizia con il ridimensionamento verticale, è più semplice ed economico. Passa alla scalabilità orizzontale quando raggiungi i limiti hardware, hai bisogno di ridondanza o di distribuzione geografica. Comprendi che il ridimensionamento orizzontale trasforma i tuoi problemi anziché eliminarli.
+</p>
+
+<div class="ref-box">
+  <span><strong>Ulteriori letture:</strong>
+    <a href="https://developer.mozilla.org/en-US/docs/Web/Performance" target="_blank">Prestazioni Web MDN</a> /
+    <a href="https://www.postgresql.org/docs/current/performance-tips.html" target="_blank">Suggerimenti sulle prestazioni di Postgres</a> /
+    <a href="https://opentelemetry.io/docs/" target="_blank">Documenti OpenTelemetry</a> /
+    <a href="https://redis.io/docs/latest/" target="_blank">Documentazione Redis</a>
+  </span>
+</div>
+
+<a href="#top" class="back-to-top">^ Torna all'inizio</a>
+
+
+      <footer class="bfp-footer">Backend dai Primi Principi / Capitolo 18 / Scaling. Il codice è destinato a Go 1.22+ e Python 3.11+.</footer>
+</main>
+</div>
+<!-- CHAPTER NAVIGATION -->
+<nav class="chapter-nav" id="chapterNav">
+  <a href="../../17.Backend Security - Everything You Need to Know/html_notes/notes.html" class="nav-chapter-link"><span class="nav-arrow"><svg class="ico-arrow" width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="13.5" y1="8" x2="3.5" y2="8"/><polyline points="7.5,4 3.5,8 7.5,12"/></svg></span><span class="nav-label"><span class="nav-small">Capitolo 17</span>Sicurezza del back-end</span></a>
+  <a href="../../index.html" class="nav-indicator"><span class="nav-dot"></span> Capitolo 18 <span class="nav-sep">/</span> 24</a>
+  <a href="../../19.Backend Scaling and Performance Engineering - Part-2/html_notes/notes.html" class="nav-chapter-link nav-next"><span class="nav-label"><span class="nav-small">Capitolo 19</span>Scalabilità e prestazioni (Parte 2)</span><span class="nav-arrow"><svg class="ico-arrow" width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="2.5" y1="8" x2="12.5" y2="8"/><polyline points="8.5,4 12.5,8 8.5,12"/></svg></span></a>
+</nav>
+  <script src="../../assets/copy-button.js"></script>
+  <script src="../../assets/enhancements.js"></script>
+<script src="../../assets/shell.js"></script>
+</body>
+
+</html>

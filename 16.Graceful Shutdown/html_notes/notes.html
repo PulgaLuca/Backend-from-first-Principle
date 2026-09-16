@@ -1,0 +1,1182 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8"/>
+<meta name="referrer" content="no-referrer"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Graceful Shutdown / Capitolo 16 / Backend dai Primi Principi</title>
+  <meta name="description" content="Capitolo 16 di Backend from First Principles: Graceful Shutdown. Note sui principi primi, diagrammi ed esempi eseguibili in Go e Python.">
+  <meta name="theme-color" content="#f3ede2">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2032%2032'%3E%3Crect%20width='32'%20height='32'%20rx='7'%20fill='%23b8402e'/%3E%3Ctext%20x='16'%20y='23'%20font-family='Georgia,serif'%20font-size='19'%20font-weight='700'%20fill='%23f3ede2'%20text-anchor='middle'%3EB%3C/text%3E%3C/svg%3E">
+<style>
+  :root{
+  --bg: #f3ede2;
+  --surface: #ece3d4;
+  --surface2: #e6dcca;
+  --ink: #211e1a;
+  --ink2: #5b5347;
+  --ink3: #8d8475;
+  --red: #b8402e;
+  --red-bg: #f4ded6;
+  --red-border: #e3c4b8;
+  --sidebar: #ece3d4;
+  --sidebar-text: #211e1a;
+  --sidebar-muted: #5b5347;
+  --sidebar-accent: #b8402e;
+  --code-bg: #232019;
+  --code-text: #e9e2d3;
+  --code-comment: #7d7468;
+  --code-keyword: #e0896a;
+  --code-string: #a9c98a;
+  --code-number: #7fb0c9;
+  --code-type: #d8b66a;
+  --border: #d8cfbe;
+  --accent-gold: #b07d2b;
+  --accent-gold-bg: #f0e5c9;
+  --teal: #3f6f4e;
+  --teal-bg: #e0e9dd;
+  --chapter-num: #b8402e;
+  --divider: #d8cfbe;
+}
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family:"Spline Sans", system-ui, sans-serif;
+    font-size: 17px;
+    line-height: 1.7;
+    
+    min-height: 100vh;
+  }
+
+  /* -- CHAPTER HEADER -- */
+  .chapter-eyebrow {
+    font-family:"JetBrains Mono", ui-monospace, monospace;
+    font-size: 11px;
+    letter-spacing: 0.18em;
+    color: var(--chapter-num);
+    text-transform: uppercase;
+    margin-bottom: 0.75rem;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .chapter-eyebrow::after {
+    content: '';
+    flex: 1;
+    max-width:60px;
+    height: 1px;
+    background: var(--chapter-num);
+    opacity: 0.5;
+  }
+  .chapter-title {
+    font-family:"Fraunces", Georgia, serif;
+    font-size: 52px;
+    font-weight: 700;
+    line-height: 1.05;
+    letter-spacing: -0.02em;
+    color: var(--ink);
+    margin-bottom: 1rem;
+  }
+  .chapter-subtitle {
+    font-size: 19px;
+    font-weight: 300;
+    color: var(--ink3);
+    font-style: italic;
+    margin-bottom: 2.5rem;
+    max-width:560px;
+  }
+  .chapter-divider {
+    border: none;
+    border-top: 1px solid var(--divider);
+    margin: 2.5rem 0;
+  }
+
+  /* -- SECTION HEADINGS -- */
+  .section-num {
+    font-family:"JetBrains Mono", ui-monospace, monospace;
+    font-size: 10px;
+    color: var(--red);
+    letter-spacing: 0.12em;
+    display: inline-block;
+    background: var(--red-bg);
+    padding: 3px 8px;
+    border-radius: 3px;
+    margin-bottom: 10px;
+  }
+  h2 {
+    font-family:"Fraunces", Georgia, serif;
+    font-size: 30px;
+    font-weight: 700;
+    line-height: 1.2;
+    color: var(--ink);
+    margin: 3rem 0 0.75rem;
+  }
+  h2:first-of-type { margin-top: 0; }
+  h3 {
+    font-family:"Fraunces", Georgia, serif;
+    font-size: 21px;
+    font-weight: 700;
+    color: var(--ink);
+    margin: 2.25rem 0 0.6rem;
+  }
+  h4 {
+    font-family:"Spline Sans", system-ui, sans-serif;
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--ink2);
+    margin: 1.5rem 0 0.4rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  p { margin-bottom: 1rem; }
+  a { color: var(--red); text-decoration: none; border-bottom: 1px solid var(--red-border); }
+  a:hover { border-bottom-color: var(--red); }
+
+  /* -- CALLOUT BOXES -- */
+  .callout {
+    border-left: 3px solid var(--red);
+    background: var(--red-bg);
+    padding: 1rem 1.25rem;
+    margin: 1.5rem 0;
+    border-radius: 0 6px 6px 0;
+  }
+  .callout-label {
+    font-family:"JetBrains Mono", ui-monospace, monospace;
+    font-size: 10px;
+    letter-spacing: 0.15em;
+    color: var(--red);
+    text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+  .callout p { margin: 0; font-size: 15px; color: var(--ink2); }
+
+  .callout-gold {
+    border-left-color: var(--accent-gold);
+    background: var(--accent-gold-bg);
+  }
+  .callout-gold .callout-label { color: var(--accent-gold); }
+
+  .callout-teal {
+    border-left-color: var(--teal);
+    background: var(--teal-bg);
+  }
+  .callout-teal .callout-label { color: var(--teal); }
+
+  /* -- CODE BLOCKS -- */
+  pre {
+    background: var(--code-bg);
+    color: var(--code-text);
+    border-radius: 8px;
+    padding: 1.25rem 1.5rem;
+    overflow-x: auto;
+    font-family:"JetBrains Mono", ui-monospace, monospace;
+    font-size: 13.5px;
+    line-height: 1.65;
+    margin: 1.25rem 0;
+    border: 1px solid rgba(255,255,255,0.06);
+  }
+  code {
+    font-family:"JetBrains Mono", ui-monospace, monospace;
+    font-size: 13px;
+    background: var(--surface2);
+    color: var(--red);
+    padding: 2px 6px;
+    border-radius: 3px;
+  }
+  pre code { background: none; color: inherit; padding: 0; font-size: inherit; }
+
+  .kw  { color: var(--code-keyword); }
+  .str { color: var(--code-string); }
+  .num { color: var(--code-number); }
+  .ty  { color: var(--code-type); }
+  .cm  { color: var(--code-comment); font-style: italic; }
+  .fn  { color: #7fb0c9; }
+
+  /* -- CODE FILE HEADER -- */
+  .code-file {
+    background: #1a1813;
+    border-radius: 8px 8px 0 0;
+    padding: 8px 1.5rem;
+    font-family:"JetBrains Mono", ui-monospace, monospace;
+    font-size: 11px;
+    color: #7d7468;
+    border: 1px solid rgba(255,255,255,0.06);
+    border-bottom: none;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 1.25rem;
+  }
+  .code-file + pre { border-radius: 0 0 8px 8px; margin-top: 0; }
+  .code-dot { width:10px; height: 10px; border-radius: 50%; }
+  .dot-r { background: #d05a47; }
+  .dot-y { background: #cf9f4b; }
+  .dot-g { background: #5a9a5f; }
+
+  /* -- DEFINITION TERMS -- */
+  .def-term {
+    font-family:"Fraunces", Georgia, serif;
+    font-style: italic;
+    font-weight: 700;
+    font-size: 18px;
+    color: var(--ink);
+    border-bottom: 2px solid var(--red);
+    display: inline;
+  }
+
+  /* -- DIAGRAM SVG CONTAINERS -- */
+  .diagram-wrap {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 1.5rem;
+    margin: 1.75rem 0;
+    overflow: hidden;
+  }
+  .diagram-caption {
+    font-family:"JetBrains Mono", ui-monospace, monospace;
+    font-size: 11px;
+    color: var(--ink3);
+    margin-top: 0.75rem;
+    text-align: center;
+    letter-spacing: 0.05em;
+  }
+
+  /* -- COMPARISON TABLE -- */
+  .compare-table {
+    width:100%;
+    border-collapse: collapse;
+    font-size: 14px;
+    margin: 1.5rem 0;
+  }
+  .compare-table th {
+    background: var(--sidebar);
+    color: var(--sidebar-text);
+    font-family:"JetBrains Mono", ui-monospace, monospace;
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    padding: 10px 14px;
+    text-align: left;
+    font-weight: 500;
+  }
+  .compare-table td {
+    padding: 9px 14px;
+    border-bottom: 1px solid var(--border);
+    color: var(--ink2);
+    vertical-align: top;
+  }
+  .compare-table tr:nth-child(even) td { background: var(--surface); }
+  .compare-table tr:last-child td { border-bottom: none; }
+  .tag-fast { color: var(--teal); font-weight: 600; }
+  .tag-slow { color: var(--red); font-weight: 600; }
+
+  /* -- STRATEGY CARDS -- */
+  .strategy-grid {
+    display: grid;
+    grid-template-columns:1fr 1fr;
+    gap: 1rem;
+    margin: 1.5rem 0;
+  }
+  .strategy-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1.2rem 1.4rem;
+  }
+  .strategy-card-label {
+    font-family:"JetBrains Mono", ui-monospace, monospace;
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    color: var(--ink3);
+    text-transform: uppercase;
+    margin-bottom: 4px;
+  }
+  .strategy-card h4 {
+    font-family:"Fraunces", Georgia, serif;
+    font-size: 17px;
+    color: var(--ink);
+    margin: 0 0 8px;
+    text-transform: none;
+    letter-spacing: 0;
+    font-style: italic;
+  }
+  .strategy-card p { font-size: 14px; color: var(--ink2); margin: 0; }
+
+  /* -- EVICTION POLICY BADGES -- */
+  .policy-list { list-style: none; margin: 1rem 0 1.5rem; }
+  .policy-list li {
+    display: flex;
+    gap: 14px;
+    align-items: flex-start;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .policy-list li:last-child { border-bottom: none; }
+  .policy-badge {
+    font-family:"JetBrains Mono", ui-monospace, monospace;
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    padding: 4px 10px;
+    border-radius: 4px;
+    white-space: nowrap;
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+  .badge-none { background: var(--surface2); color: var(--ink3); }
+  .badge-lru  { background: var(--teal-bg); color: var(--teal); }
+  .badge-lfu  { background: var(--accent-gold-bg); color: var(--accent-gold); }
+  .badge-ttl  { background: var(--red-bg); color: var(--red); }
+
+  /* -- USE-CASE TILES -- */
+  .usecase-grid {
+    display: grid;
+    grid-template-columns:repeat(2, 1fr);
+    gap: 1rem;
+    margin: 1.5rem 0;
+  }
+  .usecase-tile {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-top: 3px solid var(--red);
+    border-radius: 0 0 8px 8px;
+    padding: 1rem 1.2rem;
+  }
+  .usecase-tile h4 {
+    font-family:"Fraunces", Georgia, serif;
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--ink);
+    margin: 0 0 6px;
+    text-transform: none;
+    letter-spacing: 0;
+  }
+  .usecase-tile p { font-size: 13.5px; color: var(--ink2); margin: 0; }
+
+  /* -- REFERENCE LINKS -- */
+  .ref-box {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1rem 1.25rem;
+    margin: 1rem 0;
+  }
+  .ref-box-label {
+    font-family:"JetBrains Mono", ui-monospace, monospace;
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    color: var(--ink3);
+    text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+  .ref-box a { font-size: 13.5px; display: block; margin-bottom: 4px; }
+
+  /* -- PULL QUOTE -- */
+  .pull-quote {
+    border-top: 2px solid var(--ink);
+    border-bottom: 2px solid var(--ink);
+    padding: 1.25rem 0;
+    margin: 2rem 0;
+    font-family:"Fraunces", Georgia, serif;
+    font-size: 22px;
+    font-style: italic;
+    font-weight: 400;
+    color: var(--ink);
+    line-height: 1.4;
+  }
+
+  /* -- INLINE TERM HIGHLIGHT -- */
+  .term { color: var(--red); font-weight: 600; font-style: italic; }
+
+  /* -- SVG -- */
+  svg text { font-family:"Spline Sans", system-ui, sans-serif; }
+
+  /* -- PRINT / SCROLL -- */
+  @media (max-width:900px) {
+    .chapter-title { font-size: 36px; }
+    .strategy-grid, .usecase-grid { grid-template-columns:1fr; }}
+
+  /* Smooth scroll */
+  html { scroll-behavior: smooth; }
+
+  /* Section spacing */
+  section { padding-top: 1rem; }</style>
+<style>
+.chapter-nav{position:fixed;bottom:0;left:0;right:0;z-index:9998;display:flex;align-items:center;justify-content:space-between;padding:14px clamp(16px,4vw,48px);background:rgba(243,237,226,.88);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border-top:1.5px solid #c7bca6;box-shadow:0 -8px 32px -16px rgba(40,30,20,.18);font-family:"JetBrains Mono", ui-monospace, monospace;}
+.nav-chapter-link{display:flex;align-items:center;gap:12px;text-decoration:none;color:#5b5347;padding:10px 18px;border-radius:10px;transition:all .2s ease;max-width:38%;}
+.nav-chapter-link:hover{background:rgba(184,64,46,.08);color:#b8402e;transform:translateY(-1px);}
+.nav-chapter-link.nav-next{text-align:right;flex-direction:row;}
+.nav-arrow{font-size:22px;color:#b8402e;font-weight:700;flex:none;}
+.nav-label{display:flex;flex-direction:column;gap:2px;font-size:13.5px;line-height:1.3;}
+.nav-small{font-size:10px;letter-spacing:.22em;text-transform:uppercase;color:#8d8475;font-weight:600;}
+.nav-indicator{font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:#b8402e;font-weight:700;text-decoration:none;padding:8px 16px;border:1.5px solid #c7bca6;border-radius:40px;background:rgba(255,255,255,.5);transition:all .2s;white-space:nowrap;}
+.nav-indicator:hover{background:#b8402e;color:#fff;border-color:#b8402e;}
+.nav-dot{display:inline-block;width:7px;height:7px;background:#b8402e;border-radius:50%;margin-right:4px;vertical-align:middle;}
+.nav-sep{color:#c7bca6;margin:0 2px;}
+.nav-disabled{visibility:hidden;pointer-events:none;}
+@media(max-width:700px){.nav-label{font-size:11.5px;}.nav-chapter-link{padding:8px 10px;max-width:38%;}.chapter-nav{padding:10px 12px;}.nav-small{font-size:9px;letter-spacing:.16em;}}
+@media(max-width:520px){.nav-label{display:none;}.nav-chapter-link{max-width:none;padding:8px 12px;}.nav-arrow{font-size:20px;}.nav-indicator{font-size:11px;padding:7px 13px;letter-spacing:.12em;}}
+body{padding-bottom:80px;}
+</style>
+  <link rel="stylesheet" href="../../assets/copy-button.css">
+  <link rel="stylesheet" href="../../assets/enhancements.css">
+  <link rel="stylesheet" href="../../assets/shell.css">
+  <link rel="stylesheet" href="../../assets/theme.css">
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;0,9..144,900;1,9..144,400;1,9..144,600&family=Spline+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="../../assets/theme.js"></script>
+</head>
+<body>
+<button class="bfp-toc-toggle" id="bfpTocToggle" aria-controls="bfpToc" aria-expanded="false"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><line x1="2" y1="4" x2="14" y2="4"/><line x1="2" y1="8" x2="14" y2="8"/><line x1="2" y1="12" x2="14" y2="12"/></svg>Contenuto</button>
+<div class="bfp-toc-scrim" id="bfpTocScrim"></div>
+<div class="bfp-shell">
+    <aside class="bfp-toc" id="bfpToc">
+      <div class="bfp-brand"><span class="bfp-brand-name">Spegnimento</span><span class="bfp-brand-slash">/</span><span class="bfp-brand-lens">l'obiettivo del back-end</span></div>
+      <div class="bfp-brand-sub">Capitolo 16/Manuale da campo</div>
+      <div class="bfp-toc-rule"></div>
+      <nav class="bfp-toc-nav">
+        <a class="bfp-toc-link" href="#scenario"><span class="bfp-toc-num">01</span><span class="bfp-toc-text">Lo scenario</span></a>
+        <a class="bfp-toc-link" href="#what-is-gs"><span class="bfp-toc-num">02</span><span class="bfp-toc-text">Cos'è lo spegnimento grazioso?</span></a>
+        <a class="bfp-toc-link" href="#lifecycle"><span class="bfp-toc-num">03</span><span class="bfp-toc-text">Ciclo di vita del processo</span></a>
+        <a class="bfp-toc-link" href="#signals"><span class="bfp-toc-num">04</span><span class="bfp-toc-text">Segnali e IPC</span></a>
+        <a class="bfp-toc-link is-sub" href="#sigterm"><span class="bfp-toc-num"></span><span class="bfp-toc-text">SIGTERM</span></a>
+        <a class="bfp-toc-link is-sub" href="#sigint"><span class="bfp-toc-num"></span><span class="bfp-toc-text">SIGINT</span></a>
+        <a class="bfp-toc-link is-sub" href="#sigkill"><span class="bfp-toc-num"></span><span class="bfp-toc-text">SIGKILL</span></a>
+        <a class="bfp-toc-link" href="#draining"><span class="bfp-toc-num">05</span><span class="bfp-toc-text">Connessione Drenante</span></a>
+        <a class="bfp-toc-link is-sub" href="#timeout"><span class="bfp-toc-num"></span><span class="bfp-toc-text">Compromesso di timeout</span></a>
+        <a class="bfp-toc-link" href="#cleanup"><span class="bfp-toc-num">06</span><span class="bfp-toc-text">Pulizia delle risorse</span></a>
+        <a class="bfp-toc-link" href="#code"><span class="bfp-toc-num">07</span><span class="bfp-toc-text">Esempi di codici</span></a>
+        <div class="bfp-toc-part">Riferimenti</div>
+        <a class="bfp-toc-link" href="#refs"><span class="bfp-toc-num">08</span><span class="bfp-toc-text">Documenti e collegamenti</span></a>
+      </nav>
+    </aside>
+    <main class="bfp-content">
+
+  <!-- CHAPTER HEADER -->
+  <div class="chapter-eyebrow">Capitolo 16/Arresto graduale</div>
+  <h1 class="chapter-title">Grazioso<br/>Spegnimento</h1>
+  <p class="chapter-subtitle">Insegnare le buone maniere al tuo backend, come finire il lavoro in corso, ripulirlo e chiudere educatamente la porta invece di sbatterla.</p>
+  <hr class="chapter-divider"/>
+
+  <!-- SECTION 1: THE SCENARIO -->
+  <section id="scenario">
+    <div class="section-num">01 / MOTIVAZIONE</div>
+    <h2>Lo scenario</h2>
+
+    <p>Immaginiamo uno scenario molto realistico. Sei nel bel mezzo dell'elaborazione a <strong>transazione di pagamento critica</strong> e all'improvviso il tuo server deve essere riavviato per una distribuzione. Qualcuno ha inviato qualcosa all'ambiente di produzione e il tuo server deve distribuirsi.</p>
+
+    <h3>La distribuzione senza tempi di inattività non elimina il problema</h3>
+    <p>Naturalmente, abbiamo tecniche come <span class="term">distribuzione senza tempi di inattività</span> ciò garantisce che il nostro server esistente non si interrompa prima che il nostro nuovo server (il server con il nostro nuovo codice) si attivi e sia pronto a ricevere traffico. Quei meccanismi ci sono.</p>
+
+    <p>Ma ecco il problema: a un certo punto, quando il nostro nuovo server sarà pronto per andare online e a ricevere traffico, <strong>il nostro vecchio server deve essere spento</strong>. Deve smettere di ricevere traffico e la transizione avverrà al nuovo server. Stiamo parlando di quel momento critico in cui ti trovi nel bel mezzo di una transazione.</p>
+
+    <div class="callout">
+      <div class="callout-label">La questione dei pagamenti nell’e-commerce</div>
+      <p>Supponiamo che tu stia effettuando una transazione di e-commerce, acquistando qualcosa da Amazon o Flipkart e che il server Amazon/Flipkart debba essere riavviato per una distribuzione. La domanda diventa:<br/><br/>
+      <strong>1.</strong> Cosa succede esattamente a quel pagamento? Si perde nel mondo digitale?<br/>
+      <strong>2.</strong> Il cliente (tu) ottiene <strong>addebitato due volte</strong> a causa di una sorta di condizione di gara?<br/><br/>
+      Questi sono scenari a cui devi pensare come ingegnere di backend.</p>
+    </div>
+
+    <p>Questo non è un problema nuovo. Esiste dall'inizio dei server e dei backend. E ovviamente abbiamo già una soluzione, si chiama quella soluzione <span class="term">spegnimento grazioso</span>, ed è esattamente come suona il nome: vogliamo fermare il nostro server <em>con grazia</em>. Non vogliamo fermarci bruscamente o all'improvviso. Questa è l'idea.</p>
+
+    <div class="callout callout-gold">
+      <div class="callout-label">Perché lo spegnimento graduale è importante</div>
+      <p>Preoccuparsi dell'arresto regolare offre alla tua applicazione un'esperienza utente molto positiva ed evita problemi come <strong>corruzione dei dati</strong>. Se sei nel mezzo di un'operazione di pagamento, ti consente di evitare:<br/><br/>
+      - Doppio addebito al cliente<br/>
+      - La transazione viene persa<br/>
+      - Dovere elaborare i rimborsi per addebiti non riusciti/duplicati</p>
+    </div>
+  </section>
+
+  <hr class="chapter-divider"/>
+
+  <!-- SECTION 2: WHAT IS GRACEFUL SHUTDOWN -->
+  <section id="what-is-gs">
+    <div class="section-num">02/DEFINIZIONE</div>
+    <h2>Cos'è lo spegnimento grazioso?</h2>
+
+    <div class="pull-quote">
+      Vogliamo insegnare al nostro backend le buone maniere, non possiamo semplicemente sbattere la porta quando è il momento di andarsene.
+    </div>
+
+    <p>Se semplifichiamo eccessivamente cosa significa &quot;arresto regolare&quot; per il nostro server, possiamo sostanzialmente dire che vogliamo insegnare al nostro server, insegnare al nostro backend, <strong>buone maniere</strong>. Non può interrompersi bruscamente quando si trova nel mezzo di una transizione verso una nuova distribuzione. Deve eseguire alcuni tipi di passaggi.</p>
+
+    <h3>L'analogia delle &quot;buone maniere&quot;.</h3>
+    <p>Pensalo come se avessi degli ospiti. Quando sono le 21:00 ed è ora di andare a dormire, non puoi semplicemente spingere i tuoi ospiti fuori dalla porta e sbattergli la porta in faccia. Ci sono dei passaggi che devi eseguire. Allo stesso modo, il tuo backend educatamente:</p>
+
+    <ul style="margin:0.5rem 0 1rem 1.5rem; color:var(--ink2)">
+      <li style="margin-bottom:8px"><strong>Termina le conversazioni in corso</strong>: completa qualunque cosa stia attualmente facendo</li>
+      <li style="margin-bottom:8px"><strong>Saluta tutti gli ospiti</strong>: chiude correttamente le interazioni esistenti</li>
+      <li style="margin-bottom:8px"><strong>Si pulisce da solo</strong>: riordina le risorse che stava utilizzando</li>
+      <li style="margin-bottom:8px"><strong>Poi finalmente chiude la porta</strong>: solo allora esce effettivamente</li>
+    </ul>
+
+    <p>Questa è l'arte e la scienza di rendere le tue applicazioni backend quanto più educate ed efficienti possibile. Il resto di questo capitolo getta le basi: <em>perché</em> lo facciamo, i concetti circostanti e come viene effettivamente implementato.</p>
+  </section>
+
+  <hr class="chapter-divider"/>
+
+  <!-- SECTION 3: PROCESS LIFECYCLE -->
+  <section id="lifecycle">
+    <div class="section-num">03 / FONDAZIONI</div>
+    <h2>Gestione del ciclo di vita del processo</h2>
+
+    <p>Il primo concetto da capire. Il tuo backend è un'applicazione che funziona come a <span class="term">processo</span> in una specie di server, in una specie di computer. Questo è importante: <strong>tutto ciò che viene eseguito in un sistema operativo viene eseguito come un processo</strong>.</p>
+
+    <p>Se hai familiarità con i concetti del sistema operativo, questo avrà senso. In caso contrario, non è un grosso problema, impara semplicemente il termine: <em>processo</em>. Qualunque cosa esegui, viene eseguita all'interno di un processo.</p>
+
+    <h3>Ogni processo ha un ciclo di vita</h3>
+    <p>Come tutti gli esseri viventi, ogni processo ha un ciclo di vita, quando inizia, come inizia, quando finisce e come finisce. In un certo senso:</p>
+
+    <div class="diagram-wrap">
+      <svg width="100%" viewBox="0 0 720 110" role="img">
+        <title>Ciclo di vita del processo in tre fasi</title>
+        <defs>
+          <marker id="lc" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </marker>
+        </defs>
+        <rect x="40" y="35" width="180" height="50" rx="8" fill="#e0e9dd" stroke="#3f6f4e" stroke-width="0.8"/>
+        <text x="130" y="56" text-anchor="middle" font-size="13" font-weight="600" fill="#211e1a">Nato</text>
+        <text x="130" y="73" text-anchor="middle" font-size="10" fill="#3f6f4e">il processo inizia</text>
+        <line x1="222" y1="60" x2="258" y2="60" stroke="#8d8475" stroke-width="1.2" marker-end="url(#lc)"/>
+        <rect x="260" y="35" width="180" height="50" rx="8" fill="#f0e5c9" stroke="#b07d2b" stroke-width="0.8"/>
+        <text x="350" y="56" text-anchor="middle" font-size="13" font-weight="600" fill="#211e1a">Vivere</text>
+        <text x="350" y="73" text-anchor="middle" font-size="10" fill="#b07d2b">processo in esecuzione</text>
+        <line x1="442" y1="60" x2="478" y2="60" stroke="#8d8475" stroke-width="1.2" marker-end="url(#lc)"/>
+        <rect x="480" y="35" width="180" height="50" rx="8" fill="#f4ded6" stroke="#b8402e" stroke-width="0.8"/>
+        <text x="570" y="56" text-anchor="middle" font-size="13" font-weight="600" fill="#211e1a">Muore</text>
+        <text x="570" y="73" text-anchor="middle" font-size="10" fill="#b8402e">processo terminato</text>
+      </svg>
+      <div class="diagram-caption">Fig 1.1: Le tre fasi del ciclo di vita di un processo: nato -&gt; vissuto -&gt; muore</div>
+    </div>
+
+    <p>Lo sono <strong>nato</strong> quando il processo inizia, loro <strong>vivere</strong> mentre il processo è in esecuzione, e loro <strong>morire</strong> quando il processo è terminato. Tutta questa faccenda è chiamata il ciclo di vita di un processo. Comprenderlo è essenziale perché è strettamente connesso al modo in cui viene implementato lo spegnimento graduale.</p>
+
+    <h3>Il sistema operativo non si limita a staccare la spina</h3>
+    <p>Quando il tuo sistema operativo decide che è ora che l'applicazione smetta di funzionare, lo fa <strong>no</strong> basta staccare la spina o interrompere il processo. Ne consegue un <strong>protocollo di comunicazione stabilito</strong>: come comunicare con il processo per dire &quot;è ora che ti fermi, seguiremo questi passaggi e poi lo fermeremo&quot;.</p>
+
+    <p>Puoi immaginarlo come una conversazione tra il tuo sistema operativo e la tua applicazione (che è in esecuzione all'interno di un processo nel tuo sistema operativo):</p>
+
+    <div class="callout">
+      <div class="callout-label">La conversazione (semplificata)</div>
+      <p><strong>Sistema operativo:</strong> &quot;Ehi, è ora che ti fermi.&quot;<br/>
+      <strong>Applicazione:</strong> &quot;Va bene, dammi qualche secondo (realisticamente), poi mi fermerò, oppure puoi fermarmi tu.&quot;<br/><br/>
+      Naturalmente questa conversazione non avviene tramite testo, stiamo parlando di programmi che non capiscono il testo. L'intera comunicazione avviene attraverso un concetto chiamato <strong>segnali</strong>.</p>
+    </div>
+  </section>
+
+  <hr class="chapter-divider"/>
+
+  <!-- SECTION 4: SIGNALS -->
+  <section id="signals">
+    <div class="section-num">04 / SEGNALI</div>
+    <h2>Segnali e comunicazione tra processi</h2>
+
+    <p>I segnali sono un concetto importante in <strong>Sistemi operativi Unix</strong>. Quando diciamo Unix intendiamo tutti i sistemi operativi Linux (Arch, Ubuntu, ecc.) e anche i Mac, i Mac hanno avuto origine da un core Unix, un kernel Unix.</p>
+
+    <div class="callout callout-gold">
+      <div class="callout-label">Perché Linux è importante per i server</div>
+      <p>Principalmente quando parliamo di server, intendiamo solo Linux, perché il 99% delle volte, ogni volta che distribuisci la tua applicazione a un provider cloud, seleziona un sistema operativo Linux e distribuisce lì la tua applicazione. Non vedrai mai Windows tranne che per alcuni casi d'uso specializzati come Windows Server. Per l'implementazione dei server utilizziamo prevalentemente sistemi operativi basati su Linux.</p>
+    </div>
+
+    <h3>I segnali vengono utilizzati per IPC</h3>
+    <p>I sistemi operativi Unix hanno questo concetto chiamato segnali, che viene utilizzato per <span class="term">IPC (comunicazione tra processi)</span>. In parole povere, IPC è una tecnica mediante la quale due processi possono comunicare tra loro utilizzando un protocollo stabilito (di cui non devi preoccuparti delle parti interne).</p>
+
+    <h3>Come funzionano i gestori</h3>
+    <p>La tua applicazione viene eseguita all'interno di un processo e it <strong>registra alcuni gestori</strong>. Cosa intendiamo per gestori?</p>
+
+    <p>I gestori sono fondamentalmente codice che:</p>
+    <ul style="margin:0.5rem 0 1rem 1.5rem; color:var(--ink2)">
+      <li style="margin-bottom:8px">Aspetta e corre continuamente dietro le quinte</li>
+      <li style="margin-bottom:8px">Sta aspettando un qualche tipo di comunicazione, una specie di <strong>segnale</strong>: dal sistema operativo</li>
+      <li style="margin-bottom:8px">Rileva ogni volta che arrivano questi segnali e poi fa qualcosa (pulizia, richieste di finitura, ecc.)</li>
+    </ul>
+
+    <p>Questi gestori essenzialmente dicono al tuo sistema operativo: <em>&quot;Quando vuoi che mi fermi, mandami questo messaggio specifico e lo gestirò in modo appropriato. Mi fermerò utilizzando protocolli e passaggi predefiniti.&quot;</em> Non puoi semplicemente dire &quot;stop&quot;, è un testo leggibile dall'uomo. Deve essere un segnale specifico.</p>
+
+    <div class="diagram-wrap">
+      <svg width="100%" viewBox="0 0 720 160" role="img">
+        <title>Comunicazione dal sistema operativo al gestore del segnale dell'applicazione</title>
+        <defs>
+          <marker id="sg" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </marker>
+        </defs>
+        <!-- OS -->
+        <rect x="30" y="50" width="170" height="60" rx="8" fill="#f0e5c9" stroke="#b07d2b" stroke-width="0.8"/>
+        <text x="115" y="76" text-anchor="middle" font-size="13" font-weight="600" fill="#211e1a">Sistema operativo</text>
+        <text x="115" y="93" text-anchor="middle" font-size="10" fill="#b07d2b">invia il segnale</text>
+        <!-- Process container -->
+        <rect x="300" y="25" width="380" height="115" rx="10" fill="#f3ede2" stroke="#5b5347" stroke-width="0.8" stroke-dasharray="5 4"/>
+        <text x="490" y="45" text-anchor="middle" font-size="11" fill="#5b5347" font-style="italic">Processo</text>
+        <rect x="330" y="58" width="150" height="56" rx="8" fill="#e0e9dd" stroke="#3f6f4e" stroke-width="0.8"/>
+        <text x="405" y="82" text-anchor="middle" font-size="12" font-weight="600" fill="#211e1a">Applicazione</text>
+        <text x="405" y="98" text-anchor="middle" font-size="10" fill="#3f6f4e">il tuo back-end</text>
+        <rect x="500" y="58" width="160" height="56" rx="8" fill="#f4ded6" stroke="#b8402e" stroke-width="0.8"/>
+        <text x="580" y="82" text-anchor="middle" font-size="12" font-weight="600" fill="#211e1a">Gestore del segnale</text>
+        <text x="580" y="98" text-anchor="middle" font-size="10" fill="#b8402e">aspetta + reagisce</text>
+        <!-- arrows -->
+        <line x1="200" y1="80" x2="328" y2="86" stroke="#8d8475" stroke-width="1.2" marker-end="url(#sg)"/>
+        <text x="262" y="72" text-anchor="middle" font-size="9" fill="#8d8475">SIGTERM</text>
+        <line x1="480" y1="86" x2="498" y2="86" stroke="#3f6f4e" stroke-width="1.2" marker-end="url(#sg)"/>
+        <text x="490" y="135" text-anchor="middle" font-size="10" fill="#5b5347" font-style="italic">il gestore esegue la pulizia e termina il lavoro, quindi il processo esce</text>
+      </svg>
+      <div class="diagram-caption">Fig 2.1: Il sistema operativo invia un segnale; il gestore registrato dell'applicazione lo rileva ed esegue i passaggi di arresto</div>
+    </div>
+
+    <h3>I tre segnali</h3>
+    <p>Il prefisso <code>SIG</code> in tutto ciò significa semplicemente <strong>segnale</strong>. La seconda parte è il comando vero e proprio. Ci sono tre segnali a cui teniamo:</p>
+
+    <!-- SIGTERM -->
+    <h3 id="sigterm">4.1: SIGTERM (Terminare)</h3>
+    <p><code>SIG</code> significa segnale, <code>TERM</code> significa terminare. SIGTERM è un <strong>modo educato</strong> affinché il tuo sistema operativo chieda all'applicazione di spegnersi. Non è un modo estremo, è solo una spintarella.</p>
+
+    <div class="callout">
+      <div class="callout-label">L'analogia del colpo di spalla</div>
+      <p>Immagina di stare in piedi e qualcuno arriva da dietro e ti colpisce delicatamente la spalla, &quot;ehi, scusami, potresti finire e andartene?&quot; Questo è SIGTERM. È una richiesta molto gentile e, per questo motivo, il tuo backend ha un file <strong>opportunità di completare ciò che sta già facendo</strong>. Non è necessario che parta in quel momento esatto, ha una finestra di pochi secondi.</p>
+    </div>
+
+    <p>Cosa potrebbe fare il tuo backend quando riceve SIGTERM? Dato che stiamo parlando di un backend HTTP, potrebbe esserlo <strong>elaborazione delle richieste</strong>: questa è la cosa principale che fa il tuo backend. Il tuo client (front-end, app Web, estensione Chrome, qualunque cosa) invia richieste HTTP e il tuo back-end le elabora e restituisce risposte.</p>
+
+    <p>In un momento casuale, il tuo backend potrebbe elaborare 10-12 richieste o, se la tua applicazione è abbastanza grande, centinaia o addirittura 500-600 richieste contemporaneamente. Quando riceve un segnale SIGTERM, è il momento di eseguire questi tre passaggi:</p>
+
+    <div class="diagram-wrap">
+      <svg width="100%" viewBox="0 0 720 100" role="img">
+        <title>SIGTERM tre passi</title>
+        <defs>
+          <marker id="st" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </marker>
+        </defs>
+        <rect x="30" y="30" width="190" height="48" rx="8" fill="#e0e9dd" stroke="#3f6f4e" stroke-width="0.8"/>
+        <text x="125" y="50" text-anchor="middle" font-size="12" font-weight="600" fill="#211e1a">1. Completa le richieste esistenti</text>
+        <text x="125" y="66" text-anchor="middle" font-size="10" fill="#3f6f4e">completare il lavoro in volo</text>
+        <line x1="222" y1="54" x2="248" y2="54" stroke="#8d8475" stroke-width="1.2" marker-end="url(#st)"/>
+        <rect x="250" y="30" width="190" height="48" rx="8" fill="#f0e5c9" stroke="#b07d2b" stroke-width="0.8"/>
+        <text x="345" y="50" text-anchor="middle" font-size="12" font-weight="600" fill="#211e1a">2. Pulisci le risorse</text>
+        <text x="345" y="66" text-anchor="middle" font-size="10" fill="#b07d2b">DB, file, connessioni</text>
+        <line x1="442" y1="54" x2="468" y2="54" stroke="#8d8475" stroke-width="1.2" marker-end="url(#st)"/>
+        <rect x="470" y="30" width="190" height="48" rx="8" fill="#f4ded6" stroke="#b8402e" stroke-width="0.8"/>
+        <text x="565" y="50" text-anchor="middle" font-size="12" font-weight="600" fill="#211e1a">3. Esci</text>
+        <text x="565" y="66" text-anchor="middle" font-size="10" fill="#b8402e">chiudere la porta</text>
+      </svg>
+      <div class="diagram-caption">Fig 2.2: I tre passaggi SIGTERM: completare le richieste -&gt; ripulire -&gt; esci</div>
+    </div>
+
+    <h4>Chi utilizza SIGTERM?</h4>
+    <p>SIGTERM è utilizzato principalmente da <strong>sistemi di distribuzione, gestori di processi o piattaforme di orchestrazione</strong>: praticamente qualsiasi sistema che hai stabilito per gestire il tuo processo:</p>
+    <ul style="margin:0.5rem 0 1rem 1.5rem; color:var(--ink2)">
+      <li style="margin-bottom:6px"><strong>Kubernetes</strong>: orchestrazione del contenitore</li>
+      <li style="margin-bottom:6px"><strong>systemd</strong>: gestore dei servizi Linux</li>
+      <li style="margin-bottom:6px"><strong>PM2</strong>: Gestore del processo Node.js</li>
+    </ul>
+    <p>Questi sistemi e strumenti utilizzano SIGTERM per consentire alla tua applicazione di completare correttamente qualsiasi cosa stia facendo, ripulire e uscire con garbo.</p>
+
+    <!-- SIGINT -->
+    <h3 id="sigint">4.2: SIGINT (interruzione)</h3>
+    <p><code>SIG</code> significa segnale, <code>INT</code> significa interrompere. Il caso d'uso più famoso di questo segnale, che quasi sicuramente hai utilizzato come sviluppatore, è <strong>CTRL+C</strong>.</p>
+
+    <p>Se hai lavorato con applicazioni da riga di comando o basate su terminale, hai utilizzato questo, alcuni processi o attività sono in esecuzione e se desideri chiuderli bruscamente, premi <code>Ctrl + C</code> e quel processo viene immediatamente interrotto.</p>
+
+    <div class="callout callout-gold">
+      <div class="callout-label">Demo dal vivo dalla conferenza</div>
+      <p>Nella conferenza, un backend basato su Go era in esecuzione localmente, pronto ad accettare richieste. Premendo <code>Ctrl + C</code> sulla tastiera registrato: <em>&quot;è stato ricevuto un segnale e il tipo di segnale è un segnale di interruzione.&quot;</em> Poiché è stato implementato lo spegnimento graduale, l'app ha registrato ogni passaggio mentre si spegneva, anziché morire all'istante.</p>
+    </div>
+
+    <p>SIGINT richiede a <strong>all'utente/sviluppatore di premere un tasto</strong> (Ctrl + C utilizzando una tastiera). Quindi viene utilizzato principalmente negli ambienti di sviluppo ed è anche chiamato a <span class="term">arresto avviato dall'utente</span>. Nella comunicazione da processo a processo, SIGINT normalmente non viene utilizzato, poiché richiede la pressione di un tasto.</p>
+
+    <h4>Gestire SIGINT allo stesso modo di SIGTERM</h4>
+    <p>In quasi tutti i casi, vuoi gestire SIGINT the <strong>allo stesso modo</strong> ti occupi di SIGTERM. Se ci pensi, ha senso:</p>
+
+    <table class="compare-table">
+      <thead>
+        <tr><th>Segnale</th><th>Tipicamente avviato da</th><th>Contesto di esempio</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>SIGINT</td><td>Un essere umano (pressione di un tasto)</td><td>Lo sviluppatore preme Ctrl+C localmente per arrestare il server di sviluppo</td></tr>
+        <tr><td>SIGTERM</td><td>Un programma</td><td>PM2 su un'istanza AWS EC2 che segnala l'arresto del backend distribuito</td></tr>
+      </tbody>
+    </table>
+
+    <p>Non importa se il tuo backend è in esecuzione in un ambiente di sviluppo e lo interrompi con Ctrl + C, anziché in esecuzione all'interno di un'istanza AWS EC2 gestita da PM2 (un gestore di processi) che invia un SIGTERM. In entrambi i casi, il <strong>l'intenzione è la stessa</strong>: vogliamo chiudere. E vogliamo chiudere in modo pulito e aggraziato. Ciò che conta è l’intenzione, non se un essere umano o un programma l’ha avviata.</p>
+
+    <!-- SIGKILL -->
+    <h3 id="sigkill">4.3: SIGKILL (L'opzione nucleare)</h3>
+    <p><code>SIG</code> significa segnale, <code>KILL</code> è il comando vero e proprio, ed è esattamente come sembra. Lo vogliamo <strong>uccidi immediatamente l'applicazione</strong>.</p>
+
+    <div class="callout">
+      <div class="callout-label">SIGKILL non può essere catturato o ignorato</div>
+      <p>La cosa interessante (e pericolosa) di SIGKILL è che <strong>non può essere catturato</strong> e <strong>non può essere ignorato</strong>:<br/><br/>
+      <strong>Non può essere catturato</strong>: l'applicazione non può registrare un gestore che esegue la pulizia quando riceve SIGKILL. All'applicazione semplicemente non viene concessa la capacità/autorizzazione per rilevarlo.<br/><br/>
+      <strong>Non può essere ignorato</strong>: Non puoi dire &quot;poiché non sono riuscito a rilevarlo, lo ignorerò e non mi fermerò&quot;. Nemmeno questo accade.</p>
+    </div>
+
+    <p>Se alla tua applicazione viene inviato un SIGKILL, non sarà in grado di rilevarlo e dovrà interrompersi in quell'esatto momento. Non succede nient'altro, tutto si ferma. Ecco perché si chiama segnale di uccisione.</p>
+
+    <div class="callout callout-gold">
+      <div class="callout-label">L'analogia del staccare la spina</div>
+      <p>Immagina la differenza tra due modi per spegnere il computer:<br/><br/>
+      <strong>Grazioso (SIGTERM/SIGINT):</strong> Facendo clic sull'icona del sistema -&gt; facendo clic su &quot;Arresto&quot; -&gt; il sistema operativo chiude correttamente le app.<br/><br/>
+      <strong>SIGKILL:</strong> Andando direttamente alla presa di corrente e <strong>tirandolo</strong>. Il tuo computer semplicemente muore. Nessuna pulizia, nessun addio.</p>
+    </div>
+
+    <h3>Perché questo rende importante lo spegnimento regolare</h3>
+    <p>Ecco la catena critica di conseguenze. Il <strong>segnali educati</strong> sono SIGTERM e SIGINT, ti consentono di finire qualunque cosa tu stia facendo, ripulire e uscire con grazia. Se tu <strong>non rispettare</strong> i segnali educati, poi alla fine tu <em>volontà</em> ricevere un SIGKILL. Dovrai fermarti e non avrai nemmeno l'opportunità di ripulirti.</p>
+
+    <div class="diagram-wrap">
+      <svg width="100%" viewBox="0 0 720 130" role="img">
+        <title>Escalation del segnale da educato a forzato</title>
+        <defs>
+          <marker id="es" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </marker>
+        </defs>
+        <rect x="30" y="40" width="240" height="56" rx="8" fill="#e0e9dd" stroke="#3f6f4e" stroke-width="0.8"/>
+        <text x="150" y="63" text-anchor="middle" font-size="12" font-weight="600" fill="#211e1a">Gentile: SIGTERM / SIGINT</text>
+        <text x="150" y="80" text-anchor="middle" font-size="10" fill="#3f6f4e">finestra da finire + pulire</text>
+        <text x="350" y="60" text-anchor="middle" font-size="10" fill="#b8402e" font-style="italic">se ignorato /</text>
+        <text x="350" y="74" text-anchor="middle" font-size="10" fill="#b8402e" font-style="italic">timeout superato</text>
+        <line x1="272" y1="68" x2="428" y2="68" stroke="#b8402e" stroke-width="1.2" marker-end="url(#es)" stroke-dasharray="5 3"/>
+        <rect x="430" y="40" width="240" height="56" rx="8" fill="#f4ded6" stroke="#b8402e" stroke-width="1.2"/>
+        <text x="550" y="63" text-anchor="middle" font-size="12" font-weight="600" fill="#b8402e">Forzato: SIGKILL</text>
+        <text x="550" y="80" text-anchor="middle" font-size="10" fill="#b8402e">arresto immediato, nessuna pulizia</text>
+      </svg>
+      <div class="diagram-caption">Fig 2.3: Ignora i segnali educati e il sistema operativo passa a SIGKILL, il che non ti dà alcuna possibilità di ripulire</div>
+    </div>
+
+    <p>Questo è il motivo principale per cui lo spegnimento graduale è un concetto importante: è la tua occasione per gestire lo spegnimento <em>prima</em> l’OS ricorre all’opzione nucleare.</p>
+  </section>
+
+  <hr class="chapter-divider"/>
+
+  <!-- SECTION 5: CONNECTION DRAINING -->
+  <section id="draining">
+    <div class="section-num">05 / PASSO UNO</div>
+    <h2>Connessione Drenante</h2>
+    <p>Ora approfondiamo le due cose importanti che accadono durante uno spegnimento regolare: <strong>completare le richieste esistenti</strong> (questa sezione) e <strong>ripulire le risorse</strong> (sezione successiva). La prima parte importante è fermare le richieste al volo.</p>
+
+    <h3>Cosa sono le richieste al volo?</h3>
+    <p>Il tuo server HTTP elabora più richieste contemporaneamente. Quando è il momento di fermare il tuo server, è possibile che il tuo backend stia già elaborando un numero di richieste, 10, 12, centinaia o migliaia a seconda della scala. Quelle richieste già in elaborazione in quel momento sono le <span class="term">richieste al volo (in volo).</span>.</p>
+
+    <h3>L'analogia del ristorante</h3>
+    <p>Immagina di essere andato in un ristorante con gli amici e che il ristorante debba chiudere (sono le 22:30-23 o per qualche altro motivo). Che succede? I proprietari <strong>non può</strong> spegni tutte le luci e buttati fuori. Invece:</p>
+
+    <div class="diagram-wrap">
+      <svg width="100%" viewBox="0 0 720 110" role="img">
+        <title>Analogia di chiusura del ristorante in tre passaggi</title>
+        <defs>
+          <marker id="rs" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </marker>
+        </defs>
+        <rect x="20" y="32" width="205" height="50" rx="8" fill="#f4ded6" stroke="#b8402e" stroke-width="0.8"/>
+        <text x="122" y="52" text-anchor="middle" font-size="12" font-weight="600" fill="#211e1a">1. Blocca nuovi clienti</text>
+        <text x="122" y="68" text-anchor="middle" font-size="10" fill="#b8402e">-&gt; smetti di accettare nuovi collegamenti</text>
+        <line x1="227" y1="57" x2="251" y2="57" stroke="#8d8475" stroke-width="1.2" marker-end="url(#rs)"/>
+        <rect x="253" y="32" width="205" height="50" rx="8" fill="#f0e5c9" stroke="#b07d2b" stroke-width="0.8"/>
+        <text x="355" y="52" text-anchor="middle" font-size="12" font-weight="600" fill="#211e1a">2. Lascia che i commensali finiscano</text>
+        <text x="355" y="68" text-anchor="middle" font-size="10" fill="#b07d2b">-&gt; completare le richieste in volo</text>
+        <line x1="460" y1="57" x2="484" y2="57" stroke="#8d8475" stroke-width="1.2" marker-end="url(#rs)"/>
+        <rect x="486" y="32" width="205" height="50" rx="8" fill="#e0e9dd" stroke="#3f6f4e" stroke-width="0.8"/>
+        <text x="588" y="52" text-anchor="middle" font-size="12" font-weight="600" fill="#211e1a">3. Paga e parti</text>
+        <text x="588" y="68" text-anchor="middle" font-size="10" fill="#3f6f4e">-&gt; chiudi la connessione</text>
+      </svg>
+      <div class="diagram-caption">Fig 3.1: Mappa di chiusura del ristorante direttamente sul collegamento di scarico</div>
+    </div>
+
+    <ul style="margin:0.5rem 0 1rem 1.5rem; color:var(--ink2)">
+      <li style="margin-bottom:8px"><strong>Smetti di consentire nuovi clienti</strong>: Qualcuno alla reception/al cancello smette di far entrare nuove persone. Non vuoi nuovi clienti a cui dovresti dire di no.</li>
+      <li style="margin-bottom:8px"><strong>Annuncio ai clienti esistenti</strong>: Dite a tutti quelli che stanno già mangiando: &quot;È ora di chiudere, avete 15-20 minuti per finire il pasto. Prendetevi il vostro tempo&quot;. 15-20 minuti sono più che sufficienti.</li>
+      <li style="margin-bottom:8px"><strong>Paga le bollette e vattene</strong>: Finiscono, pagano i conti (e le mance!) e lasciano il ristorante.</li>
+    </ul>
+
+    <h3>La stessa idea per il tuo backend</h3>
+    <p>Chiamiamo questo processo <span class="term">drenaggio del collegamento</span>. Quando la tua applicazione riceve un segnale di arresto (SIGTERM da un processo o SIGINT da Ctrl+C di uno sviluppatore), la prima cosa che deve fare è <strong>smettere di accettare nuove connessioni</strong>: esattamente come impedire l'ingresso di nuovi clienti. Ciò impedisce che la situazione diventi più complicata e difficile da gestire. Quindi lascia che le connessioni esistenti finiscano il prima possibile.</p>
+
+    <h3>Connessione Drenante Per Architettura</h3>
+    <p>L'implementazione differisce a seconda dell'architettura dell'applicazione, ma l'idea di alto livello è sempre lo stesso processo in tre fasi: <strong>smetti di accettare nuovi -&gt; termina esistente -&gt; chiudi connessione</strong>.</p>
+
+    <table class="compare-table">
+      <thead>
+        <tr><th>Architettura</th><th>Cosa significa &quot;drenante&quot;.</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Back-end HTTP</td><td>Smettere di accettare nuove richieste HTTP da qualsiasi client; consentire il completamento delle richieste in volo</td></tr>
+        <tr><td>Database (anche un backend!)</td><td>Completare tutte le query/transazioni esistenti; interrompere l'esecuzione di nuove query prima di chiudere la connessione</td></tr>
+        <tr><td>Connessioni WebSocket</td><td>Per prima cosa avvisa i client che si sta chiudendo, quindi chiudi il socket, non chiuderlo mai bruscamente</td></tr>
+      </tbody>
+    </table>
+
+    <div class="callout">
+      <div class="callout-label">Anche un database è un backend</div>
+      <p>Come discusso nei capitoli precedenti, un database è anche un backend, può essere immaginato come un backend. Non nel senso HTTP, ma è comunque un'applicazione che viene eseguita come un processo e segue gli stessi principi di chiusura graduale: terminare le transazioni esistenti, smettere di accettarne di nuove, quindi chiudere.</p>
+    </div>
+
+    <!-- TIMEOUT -->
+    <h3 id="timeout">5.1: Il compromesso del timeout</h3>
+    <p>La sfida con il drenaggio della connessione è la <strong>tempistica</strong>. Vuoi dare alle connessioni esistenti abbastanza tempo per completare il loro lavoro, ma non puoi aspettare tutto il tempo necessario. Ci deve essere un limite.</p>
+
+    <p>La maggior parte dei sistemi di produzione implementano a <strong>meccanismo di timeout</strong>: comunemente <strong>30 secondi</strong> (a volte 60). Questa è la durata massima di attesa del sistema. Dopodiché, si ferma. Nella maggior parte dei casi, se non accetti nuove richieste, 30 secondi sono più che sufficienti per completare tutte le richieste esistenti. Ma se alcune operazioni di blocco non possono terminare all'interno della finestra, lo sarai <strong>fermato con forza</strong>: questo è il piano di riserva. Non puoi lasciare che il tuo backend impieghi tutto il tempo che vuole; il timeout è il limite rigido.</p>
+
+    <div class="callout callout-gold">
+      <div class="callout-label">La considerazione del design / Quanto tempo dovresti aspettare?</div>
+      <p><strong>Troppo corto</strong> -&gt; rischi di interrompere le effettive operazioni legittime (un pagamento reale durante il volo viene interrotto).<br/><br/>
+      <strong>Troppo lungo</strong> -&gt; l'intero processo di arresto diventa lento, il che alla fine influisce sulla velocità di distribuzione e sulla reattività del sistema.<br/><br/>
+      Non esiste una regola ferrea. Il timeout corretto dipende dall'applicazione <strong>durata tipica della richiesta</strong> e il tuo <strong>requisiti operativi</strong>. Per un backend tradizionale/normale, 30 secondi sono più che sufficienti. Per i WebSocket o le architetture più complicate, devi comprendere il tuo sistema e scegliere di conseguenza.</p>
+    </div>
+
+    <h3>Coordinamento con bilanciatori di carico e rilevamento dei servizi</h3>
+    <p>Lo svuotamento della connessione richiede anche il coordinamento tra i tuoi <strong>bilanciatori di carico</strong> e <strong>sistemi di rilevamento dei servizi</strong>. Deve funzionare con i tuoi sistemi di controllo dello stato e con la registrazione/annullamento della registrazione con il rilevamento del servizio.</p>
+
+    <p>Questo è leggermente avanzato: <span class="term">scoperta del servizio</span> significa che se hai distribuito una serie di applicazioni (il tuo backend, il tuo database, la tua istanza Elasticsearch), l'individuazione dei servizi è il meccanismo responsabile del modo in cui si trovano, si connettono e comunicano tra loro dopo la distribuzione. Durante l'arresto, l'istanza deve annullare la registrazione in modo che il sistema di bilanciamento del carico interrompa l'instradamento di nuovo traffico verso di essa.</p>
+  </section>
+
+  <hr class="chapter-divider"/>
+
+  <!-- SECTION 6: RESOURCE CLEANUP -->
+  <section id="cleanup">
+    <div class="section-num">06 / FASE DUE</div>
+    <h2>Pulizia delle risorse</h2>
+
+    <p>Il secondo passo importante. Pensa a lavorare alla scrivania: quando è il momento di uscire di casa o di andare a dormire, fai prima un po' di pulizia. Se hai preso il caffè, porti la tazza nel lavandino; gestisci i tuoi cavi, ecc. Tutti noi abbiamo piccoli compiti di pulizia prima di lasciare le nostre scrivanie. Lo stesso vale per il tuo backend.</p>
+
+    <h3>Cosa conta come &quot;risorsa&quot;?</h3>
+    <p>Quando diciamo risorse, intendiamo cose che l'applicazione ha acquisito durante la sua esecuzione e che ora deve lasciare andare:</p>
+    <ul style="margin:0.5rem 0 1rem 1.5rem; color:var(--ink2)">
+      <li style="margin-bottom:6px"><strong>Maniglie dei file</strong></li>
+      <li style="margin-bottom:6px"><strong>Connessioni di rete</strong></li>
+      <li style="margin-bottom:6px"><strong>Connessioni al database</strong></li>
+      <li style="margin-bottom:6px"><strong>File temporanei</strong></li>
+      <li style="margin-bottom:6px"><strong>Cache</strong></li>
+      <li style="margin-bottom:6px"><strong>Eventuali altre risorse di sistema</strong></li>
+    </ul>
+
+    <h3>Maniglie dei file</h3>
+    <p>Quando il tuo backend era in esecuzione e tentava di accedere a una particolare posizione nel file system, il modo in cui funziona è: invii un segnale al tuo sistema operativo e questo ti fornisce un <strong>maniglia</strong> a quel file. Esiste un protocollo per il modo in cui un processo accede al file system sottostante, ma ad alto livello ottieni un handle che puoi <strong>deve lasciare andare/ripulire</strong> ad un certo punto.</p>
+
+    <div class="callout">
+      <div class="callout-label">Perché le maniglie non chiuse sono pericolose</div>
+      <p>Se non ripulisci l'handle di un file, quell'handle continua a funzionare e acquisirai sempre più memoria, il che significa che continuerai a consumare il tuo <strong>RAM (memoria ad accesso casuale)</strong>, e ad un certo punto ne rimarrai senza. Anche i sistemi operativi <strong>limitare il numero di handle di file</strong> (e connessioni di rete) un singolo processo può essere aperto contemporaneamente, quindi la loro perdita alla fine interrompe la tua app.</p>
+    </div>
+
+    <h3>Connessioni di rete (la pulizia più comune)</h3>
+    <p>Il tipo più comune di pulizia delle risorse è la pulizia delle connessioni di rete. Il tuo sistema operativo è il <strong>mediatore</strong>: tutte le richieste provenienti da Internet passano attraverso il tuo sistema operativo prima di raggiungere la tua applicazione. Il sistema operativo è il vero driver che riceve tutte le richieste dalla tua scheda di rete e te le trasmette, quindi ha piena conoscenza di tutte le tue connessioni di rete.</p>
+
+    <div class="diagram-wrap">
+      <svg width="100%" viewBox="0 0 720 130" role="img">
+        <title>Il sistema operativo come mediatore tra Internet e l'applicazione</title>
+        <defs>
+          <marker id="nw" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </marker>
+        </defs>
+        <rect x="30" y="42" width="170" height="50" rx="8" fill="#e0e9dd" stroke="#3f6f4e" stroke-width="0.8"/>
+        <text x="115" y="63" text-anchor="middle" font-size="12" font-weight="600" fill="#211e1a">Internet</text>
+        <text x="115" y="79" text-anchor="middle" font-size="10" fill="#3f6f4e">richieste in arrivo</text>
+        <line x1="202" y1="67" x2="258" y2="67" stroke="#8d8475" stroke-width="1.2" marker-end="url(#nw)"/>
+        <rect x="260" y="42" width="200" height="50" rx="8" fill="#f0e5c9" stroke="#b07d2b" stroke-width="0.8"/>
+        <text x="360" y="63" text-anchor="middle" font-size="12" font-weight="600" fill="#211e1a">Sistema operativo</text>
+        <text x="360" y="79" text-anchor="middle" font-size="10" fill="#b07d2b">mediatore/autista</text>
+        <line x1="462" y1="67" x2="518" y2="67" stroke="#8d8475" stroke-width="1.2" marker-end="url(#nw)"/>
+        <rect x="520" y="42" width="170" height="50" rx="8" fill="#f4ded6" stroke="#b8402e" stroke-width="0.8"/>
+        <text x="605" y="63" text-anchor="middle" font-size="12" font-weight="600" fill="#211e1a">Il tuo back-end</text>
+        <text x="605" y="79" text-anchor="middle" font-size="10" fill="#b8402e">l'applicazione</text>
+      </svg>
+      <div class="diagram-caption">Fig 4.1: Tutto il traffico di rete passa attraverso il sistema operativo prima di raggiungere l'applicazione</div>
+    </div>
+
+    <p>Proprio come gli handle di file, se non rinunci a una connessione di rete dopo averla gestita, alla fine rimarrai senza memoria o dovrai affrontare problemi di prestazioni, perché il sistema operativo limita il numero di connessioni che un processo può tenere aperte.</p>
+
+    <h3>Connessioni al database: commit o rollback</h3>
+    <p>Questa è la parte direttamente collegata al nostro scenario di pagamento fin dall'inizio. Prima che l'applicazione/il processo backend si spenga, le transazioni del database con cui aveva a che fare devono essere entrambe <strong>impegnato</strong> o <strong>rollback esplicito</strong> dalla tua candidatura.</p>
+
+    <div class="callout callout-gold">
+      <div class="callout-label">Cosa succede se non lo fai</div>
+      <p>Se non esegui il commit o il rollback delle transazioni aperte, potrebbero entrare in un file <strong>stato incoerente</strong>, che può portare a:<br/><br/>
+      - <strong>Deadlock</strong><br/>
+      - <strong>Corruzione dei dati</strong><br/>
+      - Tutti i tipi di altri problemi<br/><br/>
+      Questo è esattamente il problema del doppio addebito/mancato pagamento dello scenario di apertura, risolto dalla gestione esplicita delle transazioni durante la chiusura.</p>
+    </div>
+
+    <h3>Ripulire in ordine inverso di acquisizione</h3>
+    <p>Una regola importante: quando si puliscono le risorse durante l'arresto regolare, è necessario pulirle nel file <strong>ordine inverso</strong> di come li hai acquisiti, Last In, First Out (LIFO), come una pila.</p>
+
+    <div class="diagram-wrap">
+      <svg width="100%" viewBox="0 0 720 175" role="img">
+        <title>LIFO pulizia delle risorse in ordine inverso</title>
+        <defs>
+          <marker id="ro" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </marker>
+        </defs>
+        <!-- Acquire column -->
+        <text x="175" y="22" text-anchor="middle" font-size="11" font-weight="600" fill="#3f6f4e">ACQUISTA (in ordine)</text>
+        <rect x="90" y="32" width="170" height="34" rx="6" fill="#e0e9dd" stroke="#3f6f4e" stroke-width="0.8"/>
+        <text x="175" y="54" text-anchor="middle" font-size="11" fill="#211e1a">1. Connessione Redis</text>
+        <rect x="90" y="72" width="170" height="34" rx="6" fill="#e0e9dd" stroke="#3f6f4e" stroke-width="0.8"/>
+        <text x="175" y="94" text-anchor="middle" font-size="11" fill="#211e1a">2. Connessione DB</text>
+        <rect x="90" y="112" width="170" height="34" rx="6" fill="#e0e9dd" stroke="#3f6f4e" stroke-width="0.8"/>
+        <text x="175" y="134" text-anchor="middle" font-size="11" fill="#211e1a">3. ServerHTTP</text>
+        <line x1="175" y1="66" x2="175" y2="70" stroke="#3f6f4e" stroke-width="1.2" marker-end="url(#ro)"/>
+        <line x1="175" y1="106" x2="175" y2="110" stroke="#3f6f4e" stroke-width="1.2" marker-end="url(#ro)"/>
+        <!-- arrow across -->
+        <line x1="270" y1="89" x2="445" y2="89" stroke="#8d8475" stroke-width="1" marker-end="url(#ro)" stroke-dasharray="5 3"/>
+        <text x="357" y="80" text-anchor="middle" font-size="10" fill="#8d8475" font-style="italic">lo spegnimento lo inverte</text>
+        <!-- Release column -->
+        <text x="555" y="22" text-anchor="middle" font-size="11" font-weight="600" fill="#b8402e">RILASCIO (retromarcia)</text>
+        <rect x="470" y="32" width="170" height="34" rx="6" fill="#f4ded6" stroke="#b8402e" stroke-width="0.8"/>
+        <text x="555" y="54" text-anchor="middle" font-size="11" fill="#211e1a">1. ServerHTTP</text>
+        <rect x="470" y="72" width="170" height="34" rx="6" fill="#f4ded6" stroke="#b8402e" stroke-width="0.8"/>
+        <text x="555" y="94" text-anchor="middle" font-size="11" fill="#211e1a">2. Connessione DB</text>
+        <rect x="470" y="112" width="170" height="34" rx="6" fill="#f4ded6" stroke="#b8402e" stroke-width="0.8"/>
+        <text x="555" y="134" text-anchor="middle" font-size="11" fill="#211e1a">3. Connessione Redis</text>
+        <line x1="555" y1="66" x2="555" y2="70" stroke="#b8402e" stroke-width="1.2" marker-end="url(#ro)"/>
+        <line x1="555" y1="106" x2="555" y2="110" stroke="#b8402e" stroke-width="1.2" marker-end="url(#ro)"/>
+      </svg>
+      <div class="diagram-caption">Fig 4.2: Acquisisci Redis -&gt; DB -&gt; HTTP, ma rilascia al contrario: HTTP -&gt; DB -&gt; Redis (LIFO)</div>
+    </div>
+
+    <p>Ad esempio, supponiamo di aver stabilito una connessione Redis, quindi una connessione DB, quindi avviato il server HTTP. Quando rinunci alle risorse, procedi al contrario. <strong>Perché?</strong> Per evitare situazioni in cui stai ripulendo una risorsa o un'operazione che <em>dipende da un'operazione precedente</em>. L'eliminazione al contrario garantisce che le dipendenze siano ancora vive quando le cose che ne hanno bisogno vengono chiuse.</p>
+  </section>
+
+  <hr class="chapter-divider"/>
+
+  <!-- SECTION 7: CODE -->
+  <section id="code">
+    <div class="section-num">07/CODICE</div>
+    <h2>Esempi di codici</h2>
+    <p>In genere evitiamo di esaminare il codice in questa serie, ma un esempio pratico aiuta a evitare una comprensione vuota. Non è necessario capire ogni riga, basta seguire la narrazione. In pratica, la maggior parte dei framework (Node.js, Go, Rust, Python) forniscono questo codice pronto per il copia-incolla; ciò che conta è capire <em>cosa succede</em> e <em>perché</em>.</p>
+
+    <!-- GO -->
+    <h3>7.1: Spegnimento regolare in Go</h3>
+    <p>Ciò rispecchia la demo live della lezione: registrare un gestore in attesa di segnali, quindi, al ricevimento, eseguire la funzione di spegnimento che chiude il server HTTP, quindi il database, quindi il server dei processi in background supportato da Redis, in ordine inverso rispetto all'acquisizione.</p>
+    <div class="code-file">
+      <div class="code-dot dot-r"></div><div class="code-dot dot-y"></div><div class="code-dot dot-g"></div>
+      <span>main.go/Go/net/http + signal.NotifyContext</span>
+    </div>
+<pre><code><span class="kw">package</span> main
+
+<span class="kw">import</span> (
+    <span class="str">"context"</span>
+    <span class="str">"errors"</span>
+    <span class="str">"log"</span>
+    <span class="str">"net/http"</span>
+    <span class="str">"os"</span>
+    <span class="str">"os/signal"</span>
+    <span class="str">"syscall"</span>
+    <span class="str">"time"</span>
+)
+
+<span class="kw">func</span> <span class="fn">main</span>() {
+    <span class="cm">// --- Startup phase: acquire resources in order ---</span>
+    db := connectDatabase()           <span class="cm">// 1. acquire DB (TCP pool)</span>
+    jobs := startBackgroundJobs()     <span class="cm">// 2. acquire Redis-backed worker</span>
+
+    srv := &amp;http.Server{Addr: <span class="str">":8080"</span>, Handler: router()}
+
+    <span class="cm">// Register a handler that waits for SIGINT (Ctrl+C) or SIGTERM (PM2/k8s).</span>
+    <span class="cm">// We handle BOTH the same way, the intention is identical: shut down.</span>
+    ctx, stop := signal.NotifyContext(context.Background(),
+        os.Interrupt, syscall.SIGTERM)
+    <span class="kw">defer</span> stop()
+
+    <span class="cm">// Run the server in a goroutine so main can wait for the signal.</span>
+    <span class="kw">go</span> <span class="kw">func</span>() {
+        log.Println(<span class="str">"server started, ready to accept requests"</span>)
+        <span class="kw">if</span> err := srv.ListenAndServe(); err != <span class="kw">nil</span> &amp;&amp;
+            !errors.Is(err, http.ErrServerClosed) {
+            log.Fatalf(<span class="str">"listen error: %v"</span>, err)
+        }
+    }()
+
+    <span class="cm">// Block here until a signal arrives (the "living" phase).</span>
+    &lt;-ctx.Done()
+    log.Println(<span class="str">"signal received, starting graceful shutdown"</span>)
+
+    <span class="cm">// Hard limit: give in-flight work up to 30 seconds, then force stop.</span>
+    shutdownCtx, cancel := context.WithTimeout(
+        context.Background(), <span class="num">30</span>*time.Second)
+    <span class="kw">defer</span> cancel()
+
+    gracefulShutdown(shutdownCtx, srv, db, jobs)
+    log.Println(<span class="str">"server exited properly"</span>)
+}
+
+<span class="cm">// gracefulShutdown releases resources in REVERSE order of acquisition.</span>
+<span class="cm">// Acquired: DB -> jobs -> HTTP server. Released: HTTP -> jobs -> DB.</span>
+<span class="kw">func</span> <span class="fn">gracefulShutdown</span>(
+    ctx context.Context,
+    srv *http.Server,
+    db *Database,
+    jobs *JobServer,
+) {
+    <span class="cm">// 1. CONNECTION DRAINING: srv.Shutdown stops accepting NEW</span>
+    <span class="cm">//    connections and waits for in-flight requests to finish</span>
+    <span class="cm">//    (or until the 30s ctx deadline forces it).</span>
+    log.Println(<span class="str">"draining HTTP connections..."</span>)
+    <span class="kw">if</span> err := srv.Shutdown(ctx); err != <span class="kw">nil</span> {
+        log.Printf(<span class="str">"forced HTTP shutdown: %v"</span>, err)
+    }
+
+    <span class="cm">// 2. Stop the background job server (closes Redis connections,</span>
+    <span class="cm">//    waits for workers to finish current jobs).</span>
+    log.Println(<span class="str">"stopping background job server..."</span>)
+    jobs.Shutdown()
+
+    <span class="cm">// 3. Close the database LAST, finish/commit open transactions,</span>
+    <span class="cm">//    then close all pooled TCP connections one by one.</span>
+    log.Println(<span class="str">"closing database connection..."</span>)
+    <span class="kw">if</span> err := db.Close(); err != <span class="kw">nil</span> {
+        log.Printf(<span class="str">"db close error: %v"</span>, err)
+    }
+}</code></pre>
+
+    <!-- PYTHON -->
+    <h3>7.2: Spegnimento ordinato in Python</h3>
+    <p>Gli stessi concetti in Python usando il file <code>signal</code> modulo: registra i gestori per SIGINT e SIGTERM, drena il lavoro in volo, quindi rilascia le risorse al contrario.</p>
+    <div class="code-file">
+      <div class="code-dot dot-r"></div><div class="code-dot dot-y"></div><div class="code-dot dot-g"></div>
+      <span>server.py/Python/segnale + asyncio</span>
+    </div>
+<pre><code><span class="kw">import</span> asyncio
+<span class="kw">import</span> signal
+<span class="kw">import</span> logging
+
+logging.basicConfig(level=logging.INFO)
+log = logging.getLogger(<span class="str">"app"</span>)
+
+SHUTDOWN_TIMEOUT = <span class="num">30</span>  <span class="cm"># hard limit in seconds</span>
+
+
+<span class="kw">class</span> <span class="ty">Application</span>:
+    <span class="kw">def</span> <span class="fn">__init__</span>(self):
+        self._shutdown = asyncio.Event()
+
+    <span class="kw">async def</span> <span class="fn">startup</span>(self):
+        <span class="cm"># Acquire resources IN ORDER</span>
+        self.redis = <span class="kw">await</span> connect_redis()       <span class="cm"># 1</span>
+        self.db = <span class="kw">await</span> connect_database()      <span class="cm"># 2</span>
+        self.server = <span class="kw">await</span> start_http_server()  <span class="cm"># 3</span>
+        log.info(<span class="str">"server started, ready to accept requests"</span>)
+
+    <span class="kw">def</span> <span class="fn">install_signal_handlers</span>(self):
+        <span class="cm"># Handle SIGINT (Ctrl+C, dev) and SIGTERM (PM2/k8s, prod)</span>
+        <span class="cm"># the SAME way, both mean "shut down gracefully".</span>
+        loop = asyncio.get_running_loop()
+        <span class="kw">for</span> sig <span class="kw">in</span> (signal.SIGINT, signal.SIGTERM):
+            loop.add_signal_handler(sig, self._on_signal, sig)
+
+    <span class="kw">def</span> <span class="fn">_on_signal</span>(self, sig):
+        <span class="cm"># NOTE: SIGKILL can never reach here, it cannot be</span>
+        <span class="cm"># caught or ignored. Only the polite signals arrive.</span>
+        log.info(f<span class="str">"signal received: {sig.name}, shutting down"</span>)
+        self._shutdown.set()
+
+    <span class="kw">async def</span> <span class="fn">graceful_shutdown</span>(self):
+        <span class="cm"># 1. CONNECTION DRAINING: stop accepting new requests,</span>
+        <span class="cm">#    let in-flight requests finish within the timeout.</span>
+        log.info(<span class="str">"draining HTTP connections..."</span>)
+        self.server.stop_accepting_new()
+        <span class="kw">try</span>:
+            <span class="kw">await</span> asyncio.wait_for(
+                self.server.wait_for_inflight(),
+                timeout=SHUTDOWN_TIMEOUT,
+            )
+        <span class="kw">except</span> asyncio.TimeoutError:
+            log.warning(<span class="str">"timeout exceeded, forcing shutdown"</span>)
+
+        <span class="cm"># 2 &amp; 3. Release resources in REVERSE order of acquisition.</span>
+        <span class="cm">#    Acquired redis -> db -> server; release server -> db -> redis.</span>
+        log.info(<span class="str">"committing/rolling back open transactions..."</span>)
+        <span class="kw">await</span> self.db.close()     <span class="cm"># commit or rollback, then close pool</span>
+        log.info(<span class="str">"closing redis connection..."</span>)
+        <span class="kw">await</span> self.redis.close()
+        log.info(<span class="str">"server exited properly"</span>)
+
+
+<span class="kw">async def</span> <span class="fn">main</span>():
+    app = Application()
+    <span class="kw">await</span> app.startup()
+    app.install_signal_handlers()
+    <span class="kw">await</span> app._shutdown.wait()   <span class="cm"># the "living" phase, block until signal</span>
+    <span class="kw">await</span> app.graceful_shutdown()
+
+
+<span class="kw">if</span> __name__ == <span class="str">"__main__"</span>:
+    asyncio.run(main())</code></pre>
+  </section>
+
+  <hr class="chapter-divider"/>
+
+  <!-- REFERENCES -->
+  <section id="refs">
+    <div class="section-num">RIFERIMENTI</div>
+    <h2>Ulteriori letture e documentazione</h2>
+
+    <h4>Segnali Unix</h4>
+    <div class="ref-box">
+      <a href="https://man7.org/linux/man-pages/man7/signal.7.html" target="_blank">man7, signal(7): panoramica dei segnali (SIGTERM, SIGINT, SIGKILL)</a>
+      <a href="https://www.gnu.org/software/libc/manual/html_node/Termination-Signals.html" target="_blank">GNU libc, Segnali di terminazione</a>
+    </div>
+
+    <h4>Vai</h4>
+    <div class="ref-box">
+      <a href="https://pkg.go.dev/net/http#Server.Shutdown" target="_blank">Vai a documenti, http.Server.Shutdown (drenaggio HTTP semplice)</a>
+      <a href="https://pkg.go.dev/os/signal#NotifyContext" target="_blank">Vai a documenti, signal.NotifyContext</a>
+    </div>
+
+    <h4>Python e Node.js</h4>
+    <div class="ref-box">
+      <a href="https://docs.python.org/3/library/signal.html" target="_blank">Documenti Python, modulo signal</a>
+      <a href="https://nodejs.org/api/process.html#signal-events" target="_blank">Documenti Node.js, elabora eventi di segnale</a>
+    </div>
+
+    <h4>Responsabili di orchestrazione e processi</h4>
+    <div class="ref-box">
+      <a href="https://kubernetes.io/docs/concepts/containers/container-lifecycle-hooks/" target="_blank">Kubernetes, ciclo di vita del container e terminazione (SIGTERM -&gt; periodo di grazia -&gt; SIGKILL)</a>
+      <a href="https://pm2.keymetrics.io/docs/usage/signals-clean-restart/" target="_blank">PM2, avvio/spegnimento graduale e segnali</a>
+      <a href="https://www.freedesktop.org/software/systemd/man/systemd.kill.html" target="_blank">systemd, comportamento kill e shutdown</a>
+    </div>
+
+    <h4>Documenti Web MDN</h4>
+    <div class="ref-box">
+      <a href="https://developer.mozilla.org/en-US/docs/Web/API/WebSockets_API" target="_blank">MDN, API WebSocket (handshake di chiusura)</a>
+      <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Connection_management_in_HTTP_1.x" target="_blank">MDN, gestione della connessione HTTP</a>
+    </div>
+
+    <div style="margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid var(--divider);">
+      <p style="font-family:'JetBrains Mono', ui-monospace, monospace; font-size:11px; color:var(--ink3); letter-spacing:0.08em;">
+        MANUALE DI INGEGNERIA DEL BACKEND / V2 / CAPITOLO 14 / SPEGNIMENTO GRAZIATO<br/>
+        Appunti compilati dalla trascrizione della lezione/esempi Go+Python/segnali Unix e riferimenti all'orchestrazione in linea
+      </p>
+    </div>
+  </section>
+
+
+      <footer class="bfp-footer">Backend da Primi Principi / Capitolo 16 / Arresto. Il codice è destinato a Go 1.22+ e Python 3.11+.</footer>
+</main>
+</div>
+<!-- SIDEBAR -->
+
+
+<!-- MAIN -->
+
+
+
+<!-- CHAPTER NAVIGATION -->
+<nav class="chapter-nav" id="chapterNav">
+  <a href="../../15.Logging, Monitoring and Observability/html_notes/notes.html" class="nav-chapter-link"><span class="nav-arrow"><svg class="ico-arrow" width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="13.5" y1="8" x2="3.5" y2="8"/><polyline points="7.5,4 3.5,8 7.5,12"/></svg></span><span class="nav-label"><span class="nav-small">Capitolo 15</span>Registrazione e osservabilità</span></a>
+  <a href="../../index.html" class="nav-indicator"><span class="nav-dot"></span> Capitolo 16 <span class="nav-sep">/</span> 24</a>
+  <a href="../../17.Backend Security - Everything You Need to Know/html_notes/notes.html" class="nav-chapter-link nav-next"><span class="nav-label"><span class="nav-small">Capitolo 17</span>Sicurezza del back-end</span><span class="nav-arrow"><svg class="ico-arrow" width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="2.5" y1="8" x2="12.5" y2="8"/><polyline points="8.5,4 12.5,8 8.5,12"/></svg></span></a>
+</nav>
+  <script src="../../assets/copy-button.js"></script>
+  <script src="../../assets/enhancements.js"></script>
+<script src="../../assets/shell.js"></script>
+</body>
+
+</html>

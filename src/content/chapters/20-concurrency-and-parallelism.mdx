@@ -1,0 +1,899 @@
+---
+order: 20
+title: "Concorrenza e parallelismo"
+navTitle: "Concorrenza e parallelismo"
+summary: "Perché un backend trascorre gran parte della sua vita in attesa e i quattro modelli creati per smettere di sprecare quel tempo: thread del sistema operativo, loop di eventi, goroutine e thread virtuali. Quindi i bug creati dalla concorrenza, le condizioni di competizione attraverso un punto di snervamento e i blocchi e i canali che li risolvono. Confronto tra Go, Python, JavaScript, TypeScript e Java."
+readingTime: "2-3 ore"
+keywords:
+  - "concurrency"
+  - "parallelism"
+  - "goroutines"
+  - "asyncio"
+  - "threads"
+  - "io-bound"
+  - "cpu-bound"
+---
+Un riferimento dettagliato al backend
+
+# Padroneggiare la concorrenza e il parallelismo
+
+Ogni sistema backend che costruirai condivide un requisito non negoziabile: deve gestire più cose contemporaneamente. Un server Web che può elaborare solo una richiesta alla volta costringe tutti gli altri utenti ad attendere e ciò semplicemente non funziona in produzione. Questa guida costruisce il modello mentale completo da zero, dai cicli grezzi della CPU e dalle operazioni di I/O, attraverso i thread del sistema operativo e i cicli di eventi, fino alle moderne primitive di concorrenza come goroutine e `async/await`. Tutto si basa su un pratico codice backend che utilizza **Go** e **Python**.
+
+---
+
+01
+
+## Perché la concorrenza è importante
+
+Quando parliamo di "applicazione backend" in questo contesto, intendiamo un server web basato su HTTP, un processo in esecuzione su una macchina, in ascolto su una porta, ricevendo richieste da browser e altri client e inviando risposte.
+
+Se il tuo server può elaborare solo **una richiesta alla volta**, allora tutti gli altri utenti, potenzialmente migliaia, dovranno attendere in fila o ricevere un errore. Questa è una situazione impossibile per qualsiasi applicazione di produzione reale.
+
+<Callout type="info" title="Intuizione chiave">
+Capire come il tuo server fa più cose contemporaneamente non è solo "bello da sapere", ma modella il modo in cui esegui il debug dei problemi, strutturi la tua applicazione e prendi decisioni sull'architettura.
+</Callout>
+
+La maggior parte di noi impara parole chiave come `async`, `await`, e `threading` dalla documentazione del nostro linguaggio di programmazione. Sappiamo che "rendono le cose concorrenti". Ma raramente capiamo cosa fanno queste parole chiave _effettivamente_ dietro le quinte, a livello meccanico, cosa succede nella CPU e nel sistema operativo.
+
+---
+
+02
+
+## Il costo di restare inattivi
+
+Cominciamo con uno scenario concreto. Hai un browser che effettua una richiesta al tuo backend. Il backend deve interrogare un database, attendere la risposta e restituire i dati al client. Questo è il ciclo di vita tipico di una chiamata API.
+
+### Quanto tempo richiede una query sul database?
+
+Il tempo di attesa dipende da dove risiede il tuo database rispetto al tuo server:
+
+| Scenario | Latenza | Descrizione |
+| ----------------------------- | --------- | ------------------------------------------------------------ |
+| **Host locale** | 1-2 ms | Server e database sulla stessa macchina |
+| **Stessa regione, diversa AZ** | 20-30 ms | Configurazione di produzione tipica (ad esempio AWS us-east-1a -&gt; us-east-1b) |
+| **Interregionale** | 90-100 ms | Database in una regione geograficamente distante |
+
+Durante quel tempo di attesa, che sia 2 ms o 100 ms, se il tuo server elabora in modo sincrono (una richiesta alla volta, riga per riga), la tua CPU non sta facendo **assolutamente nulla**. È completamente inattivo.
+
+### Quantificare i rifiuti
+
+Una CPU moderna esegue circa **3 miliardi di istruzioni al secondo**, ovvero circa **3 milioni di istruzioni al millisecondo**. Se il tuo server rimane inattivo per 100 ms in attesa di una risposta del database, avrebbe potuto eseguire **300 milioni di istruzioni**: ma invece ne ha eseguite zero.
+
+<Diagram caption="Fig 1: A synchronous server wastes the vast majority of its CPU cycles waiting for IO">
+<svg viewBox="0 0 700 200" xmlns="http://www.w3.org/2000/svg"><rect x="40" y="30" width="620" height="45" rx="4" fill="var(--dg-surface)" stroke="var(--dg-line)"></rect><text x="50" y="18" font-family="var(--font-diagram-mono)" font-size="10" fill="var(--dg-ink-3)" letter-spacing="0.1em" text-transform="uppercase">SERVER SINCRONO, RICHIESTA SINGOLA</text><rect x="40" y="30" width="60" height="45" rx="4" fill="var(--dg-accent)"></rect><text x="70" y="57" font-family="var(--font-ui)" font-size="11" fill="var(--dg-on-accent)" text-anchor="middle">CPU</text><rect x="100" y="30" width="460" height="45" rx="0" fill="var(--dg-line-2)" stroke="var(--dg-line)" stroke-dasharray="4 2"></rect><text x="330" y="57" font-family="var(--font-ui)" font-size="11" fill="var(--dg-on-accent)" text-anchor="middle">  IDLE, in attesa della risposta del DB (100 ms)</text><rect x="560" y="30" width="100" height="45" rx="4" fill="var(--dg-accent)"></rect><text x="610" y="57" font-family="var(--font-ui)" font-size="11" fill="var(--dg-on-accent)" text-anchor="middle">CPU</text><text x="40" y="110" font-family="var(--font-diagram-mono)" font-size="11" fill="var(--dg-ink)">Utilizzo della CPU:</text><text x="200" y="110" font-family="var(--font-diagram-mono)" font-size="11" fill="var(--dg-accent)" font-weight="700">~5%</text><text x="40" y="130" font-family="var(--font-diagram-mono)" font-size="11" fill="var(--dg-ink)">Potenziale sprecato:</text><text x="200" y="130" font-family="var(--font-diagram-mono)" font-size="11" fill="var(--dg-accent)" font-weight="700">300 milioni di istruzioni</text><text x="40" y="150" font-family="var(--font-diagram-mono)" font-size="11" fill="var(--dg-ink)">Risorse inattive:</text><text x="200" y="150" font-family="var(--font-diagram-mono)" font-size="11" fill="var(--dg-accent)" font-weight="700">Il 95% delle volte</text></svg>
+</Diagram>
+
+### Una ripartizione realistica delle chiamate API
+
+Una tipica chiamata API di medio-complessità prevede 3-5 query di database più 1-2 chiamate di servizio esterne (e-mail, cache come Redis, ecc.). Se ciascuna di queste cinque operazioni di rete richiede in media 50 ms, il tempo totale trascorso in attesa dell'IO è di circa **250 ms**. Ma il calcolo effettivo della CPU, la convalida, l'analisi JSON e la serializzazione durano solo circa **10 ms**. Ciò significa che l'hardware del tuo server è inattivo **il 95% delle volte**. Questo è esattamente il problema che la concorrenza risolve.
+
+---
+
+03
+
+## Associato a IO e associato a CPU
+
+Ogni operazione eseguita dal tuo backend rientra in una delle due categorie. Questa distinzione è _il concetto più importante_ dell'intera guida e guida ogni decisione su quale modello di concorrenza utilizzare.
+
+### Operazioni legate a IO
+
+IO sta per **Input/Output**: qualsiasi operazione in cui la CPU non può fare nulla di utile perché è in attesa di qualcosa di esterno. La "I" si riferisce ai dati che entrano _nel_ tuo processo; la "O" si riferisce ai dati in uscita. Secondo [Linux `read(2)` pagina man](https://man7.org/linux/man-pages/man2/read.2.html), una lettura su un descrittore di file (socket, file, pipe) bloccherà il thread chiamante fino all'arrivo dei dati.
+
+Operazioni comuni legate all'IO nei sistemi backend:
+
+- **Query sul database**: invio di una query SQL su TCP, in attesa del ritorno delle righe
+- **Chiamate API esterne**: richieste HTTP a servizi di terze parti (gateway di pagamento, provider di posta elettronica)
+- **Operazioni sul file system**: lettura di file di configurazione, scrittura di caricamenti, gestione di file temporanei
+- **Interazioni cache**: Redis `GET`/`SET` operazioni in rete
+- **I/O standard**: accesso a `stdout`, leggendo da `stdin`
+- **Code di messaggi**: pubblicazione o consumo da Kafka, RabbitMQ, ecc.
+
+### Operazioni legate alla CPU
+
+Il lavoro legato alla CPU avviene quando il processore elabora attivamente i dati, esegue le istruzioni il più velocemente possibile e il collo di bottiglia è la CPU stessa, non una risorsa esterna. La maggior parte del lavoro legato alla CPU in un backend tipico è leggero (1-2 ms per l'analisi o la convalida JSON), ma alcune operazioni sono fortemente legate alla CPU:
+
+- **Elaborazione immagini/video**: moltiplicazioni di matrici, convoluzioni, trasformazioni dello spazio colore
+- **Crittografia/hashing**: verifica JWT, hashing della password bcrypt, handshake TLS
+- **Compressione**: codifica gzip, zstd, Brotli dei corpi delle risposte
+- **Serializzazione**: JSON/Protobuf marshal/unmarshal su larga scala
+- **Inferenza ML**: esecuzione di un passaggio in avanti del modello senza offload della GPU
+
+<Callout type="info" title="La regola pratica">
+Oltre il **70%** del tempo in una tipica applicazione backend viene dedicato all'I/O. Per il lavoro associato a IO, la **concorrenza** è obbligatoria. Per il lavoro legato alla CPU, il **parallelismo** (core multipli) aumenta la velocità.
+</Callout>
+
+<Diagram caption="Fig 2: CPU work (red) is dwarfed by IO waiting (orange) in a typical API call">
+<svg viewBox="0 0 700 240" xmlns="http://www.w3.org/2000/svg"><text x="350" y="18" font-family="var(--font-diagram-mono)" font-size="10" fill="var(--dg-ink-3)" text-anchor="middle" letter-spacing="0.1em">CHIAMATA API TIPICA, RIPARTIZIONE DEL TEMPO</text><rect x="40" y="35" width="620" height="50" rx="6" fill="var(--dg-surface)" stroke="var(--dg-line)"></rect><rect x="40" y="35" width="24" height="50" rx="6" fill="var(--dg-accent)"></rect><rect x="160" y="35" width="12" height="50" fill="var(--dg-accent)"></rect><rect x="330" y="35" width="18" height="50" fill="var(--dg-accent)"></rect><rect x="510" y="35" width="10" height="50" fill="var(--dg-accent)"></rect><rect x="636" y="35" width="24" height="50" rx="6" fill="var(--dg-accent)"></rect><rect x="64" y="35" width="96" height="50" fill="var(--dg-warn-tint)"></rect><rect x="172" y="35" width="158" height="50" fill="var(--dg-warn-tint)"></rect><rect x="348" y="35" width="162" height="50" fill="var(--dg-warn-tint)"></rect><rect x="520" y="35" width="116" height="50" fill="var(--dg-warn-tint)"></rect><text x="110" y="63" font-family="var(--font-ui)" font-size="9" fill="var(--dg-ink-3)" text-anchor="middle">Interrogazione DB 1</text><text x="250" y="63" font-family="var(--font-ui)" font-size="9" fill="var(--dg-ink-3)" text-anchor="middle">Interrogazione DB 2</text><text x="430" y="63" font-family="var(--font-ui)" font-size="9" fill="var(--dg-ink-3)" text-anchor="middle">Cache Redis</text><text x="578" y="63" font-family="var(--font-ui)" font-size="9" fill="var(--dg-ink-3)" text-anchor="middle">API di posta elettronica</text><rect x="200" y="110" width="14" height="14" rx="2" fill="var(--dg-accent)"></rect><text x="220" y="122" font-family="var(--font-ui)" font-size="11" fill="var(--dg-ink)">Lavoro della CPU (~10 ms, ~5%)</text><rect x="400" y="110" width="14" height="14" rx="2" fill="var(--dg-warn-tint)"></rect><text x="420" y="122" font-family="var(--font-ui)" font-size="11" fill="var(--dg-ink)">Attesa IO (~250 ms, ~95%)</text><line x1="40" y1="150" x2="660" y2="150" stroke="var(--dg-line)" stroke-dasharray="3 3"></line><text x="40" y="175" font-family="var(--font-prose)" font-size="13" fill="var(--dg-ink)">Tempo totale dell'orologio da parete: <tspan font-weight="700" fill="var(--dg-ink)">~260 ms</tspan></text><text x="40" y="198" font-family="var(--font-prose)" font-size="13" fill="var(--dg-ink)">Utilizzo effettivo della CPU: <tspan font-weight="700" fill="var(--dg-accent)">~10 ms</tspan>, il resto sta solo aspettando</text></svg>
+</Diagram>
+
+---
+
+04
+
+## Concorrenza vs Parallelismo
+
+Questi due termini vengono spesso confusi, e per una buona ragione, poiché entrambi implicano "fare più cose". Ma la distinzione è fondamentale.
+
+### Parallelismo: fare più cose contemporaneamente
+
+Un programma è **parallelo** quando esegue più istruzioni _nello stesso momento_. Ciò richiede supporto hardware: almeno due core CPU, perché un singolo core può eseguire solo un'istruzione alla volta. Se hai 4 core, puoi eseguire 4 istruzioni veramente contemporaneamente.
+
+### Concorrenza: gestire più cose contemporaneamente
+
+La **concorrenza** riguarda la _strutturazione_ del tuo programma in modo che più attività possano essere avviate, messe in pausa e riprese, anche su un singolo core. Dall'esterno sembra che tutto stia accadendo contemporaneamente. Ma se si esamina ogni singolo momento, si vedrà che solo una cosa è effettivamente in esecuzione su un dato core. La chiave è che quando un'attività viene bloccata (in attesa di IO), un'altra attività ottiene la CPU.
+
+<Callout type="info" title="Il classico one-liner">
+Il **Parallelismo** riguarda il _fare_ più cose contemporaneamente.\
+La **concorrenza** significa _gestire_ più cose contemporaneamente.
+
+Attribuito a Rob Pike, co-creatore di Go
+</Callout>
+
+<Diagram caption="Fig 3: Concurrency interleaves tasks on one core; Parallelism runs them on separate cores simultaneously">
+<svg viewBox="0 0 700 320" xmlns="http://www.w3.org/2000/svg"><text x="350" y="18" font-family="var(--font-diagram-mono)" font-size="10" fill="var(--dg-ink-3)" text-anchor="middle" letter-spacing="0.1em">CONCORRENZA (1 CORE) vs PARALLELISMO (2 CORE)</text><text x="98" y="45" font-family="var(--font-diagram-mono)" font-size="8" fill="var(--dg-ink-3)">0ms</text><text x="188" y="45" font-family="var(--font-diagram-mono)" font-size="8" fill="var(--dg-ink-3)">10</text><text x="278" y="45" font-family="var(--font-diagram-mono)" font-size="8" fill="var(--dg-ink-3)">20</text><text x="368" y="45" font-family="var(--font-diagram-mono)" font-size="8" fill="var(--dg-ink-3)">30</text><text x="458" y="45" font-family="var(--font-diagram-mono)" font-size="8" fill="var(--dg-ink-3)">40</text><text x="548" y="45" font-family="var(--font-diagram-mono)" font-size="8" fill="var(--dg-ink-3)">50</text><text x="638" y="45" font-family="var(--font-diagram-mono)" font-size="8" fill="var(--dg-ink-3)">60</text><text x="35" y="75" font-family="var(--font-ui)" font-size="10" fill="var(--dg-ink)" font-weight="700">CONCORRENTE</text><text x="35" y="87" font-family="var(--font-ui)" font-size="9" fill="var(--dg-ink-3)">(1 nucleo)</text><text x="75" y="110" font-family="var(--font-diagram-mono)" font-size="9" fill="var(--dg-ink)">Richiesta A</text><rect x="110" y="97" width="45" height="22" rx="3" fill="var(--dg-accent)"></rect><text x="132" y="112" font-family="var(--font-ui)" font-size="8" fill="var(--dg-on-accent)" text-anchor="middle">CPU</text><rect x="155" y="97" width="180" height="22" rx="0" fill="var(--dg-line-2)" stroke="var(--dg-line)" stroke-dasharray="3 2"></rect><text x="245" y="112" font-family="var(--font-ui)" font-size="8" fill="var(--dg-on-accent)" text-anchor="middle">Io aspetto</text><rect x="470" y="97" width="60" height="22" rx="3" fill="var(--dg-accent)"></rect><text x="500" y="112" font-family="var(--font-ui)" font-size="8" fill="var(--dg-on-accent)" text-anchor="middle">CPU</text><text x="75" y="145" font-family="var(--font-diagram-mono)" font-size="9" fill="var(--dg-ink)">Richiesta B</text><rect x="155" y="130" width="135" height="22" rx="3" fill="var(--dg-info-surface)"></rect><text x="222" y="145" font-family="var(--font-ui)" font-size="8" fill="var(--dg-ink)" text-anchor="middle">CPU</text><rect x="290" y="130" width="180" height="22" rx="0" fill="var(--dg-info-surface)" stroke="var(--dg-info-soft)" stroke-dasharray="3 2"></rect><text x="380" y="145" font-family="var(--font-ui)" font-size="8" fill="var(--dg-info-soft)" text-anchor="middle">Io aspetto</text><rect x="530" y="130" width="50" height="22" rx="3" fill="var(--dg-info-surface)"></rect><text x="555" y="145" font-family="var(--font-ui)" font-size="8" fill="var(--dg-ink)" text-anchor="middle">CPU</text><line x1="155" y1="92" x2="155" y2="157" stroke="var(--dg-ink)" stroke-dasharray="2 2" opacity="0.4"></line><text x="157" y="170" font-family="var(--font-ui)" font-size="7.5" fill="var(--dg-ink-3)" font-style="italic">A fa una pausa -&gt; B ottiene la CPU</text><line x1="40" y1="195" x2="660" y2="195" stroke="var(--dg-line)"></line><text x="35" y="220" font-family="var(--font-ui)" font-size="10" fill="var(--dg-ink)" font-weight="700">PARALLELO</text><text x="35" y="232" font-family="var(--font-ui)" font-size="9" fill="var(--dg-ink-3)">(2 nuclei)</text><text x="75" y="255" font-family="var(--font-diagram-mono)" font-size="9" fill="var(--dg-ink)">Richiesta A</text><rect x="110" y="242" width="45" height="22" rx="3" fill="var(--dg-accent)"></rect><text x="132" y="257" font-family="var(--font-ui)" font-size="8" fill="var(--dg-on-accent)" text-anchor="middle">CPU</text><rect x="155" y="242" width="180" height="22" rx="0" fill="var(--dg-line-2)" stroke="var(--dg-line)" stroke-dasharray="3 2"></rect><rect x="335" y="242" width="50" height="22" rx="3" fill="var(--dg-accent)"></rect><text x="360" y="257" font-family="var(--font-ui)" font-size="8" fill="var(--dg-on-accent)" text-anchor="middle">CPU</text><text x="75" y="287" font-family="var(--font-diagram-mono)" font-size="9" fill="var(--dg-ink)">Richiesta B</text><rect x="110" y="275" width="90" height="22" rx="3" fill="var(--dg-info-surface)"></rect><text x="155" y="290" font-family="var(--font-ui)" font-size="8" fill="var(--dg-ink)" text-anchor="middle">CPU</text><rect x="200" y="275" width="130" height="22" rx="0" fill="var(--dg-info-surface)" stroke="var(--dg-info-soft)" stroke-dasharray="3 2"></rect><rect x="330" y="275" width="55" height="22" rx="3" fill="var(--dg-info-surface)"></rect><text x="357" y="290" font-family="var(--font-ui)" font-size="8" fill="var(--dg-ink)" text-anchor="middle">CPU</text><line x1="110" y1="237" x2="110" y2="302" stroke="var(--dg-ok)" stroke-dasharray="2 2" opacity="0.5"></line><text x="112" y="315" font-family="var(--font-ui)" font-size="7.5" fill="var(--dg-ok)" font-style="italic">Entrambi iniziano contemporaneamente su core separati</text></svg>
+</Diagram>
+
+---
+
+05
+
+## Thread del sistema operativo
+
+Il primo meccanismo fondamentale per fare più cose contemporaneamente è il **thread**. Un thread è un'unità di esecuzione indipendente gestita dal sistema operativo. Non è una caratteristica del tuo linguaggio di programmazione, è una caratteristica del kernel del sistema operativo. Quando "crei una discussione", stai effettuando una **chiamata di sistema** (come `clone()` su Linux o `pthread_create()` tramite POSIX) per chiedere al kernel di impostare un nuovo contesto di esecuzione.
+
+### Ciò che il sistema operativo crea per ogni thread
+
+Quando viene creato un nuovo thread, il kernel gli assegna diverse cose:
+
+- **Uno stack**: utilizzato per tenere traccia delle chiamate di funzione (frame di chiamata), variabili locali e indirizzi di ritorno. Su Linux, la dimensione dello stack predefinita è **8 MB** di memoria virtuale (sebbene le pagine fisiche vengano allocate solo su richiesta tramite errori di pagina).
+- **Un puntatore di istruzioni (IP)**: tiene traccia esattamente della posizione del thread nel suo codice, in modo che il kernel possa riprenderlo dopo un cambio di contesto.
+- **Strutture dati del kernel**: metadati per lo scheduler: stato del thread (in esecuzione/inattivo/bloccato), priorità, affinità CPU, maschere di segnale, ecc.
+
+<Callout type="info" title="Riferimento">
+[pthreads(7), pagina man di Linux](https://man7.org/linux/man-pages/man7/pthreads.7.html) [clone(2), la chiamata di sistema dietro la creazione del thread](https://man7.org/linux/man-pages/man2/clone.2.html) [Documentazione del modulo threading Python](https://docs.python.org/3/library/threading.html)
+</Callout>
+
+### Pianificazione preventiva
+
+Lo **programmatore** del sistema operativo decide quale thread ottiene il tempo della CPU e per quanto tempo. Assegna a ciascun thread un **intervallo di tempo** (in genere pochi millisecondi). Dopo che la sezione è scaduta, lo scheduler _forzatamente_ mette in pausa il thread, che sia finito o meno, salva il suo stato e passa a un altro thread. Questa è chiamata **pianificazione preventiva** perché i thread vengono preinterrotti (interrotti) senza la loro cooperazione.
+
+### Memoria condivisa tra thread
+
+Una proprietà importante: i thread all'interno dello _stesso processo_ condividono lo stesso spazio di memoria (heap, variabili globali, descrittori di file). Se il thread 1 alloca un oggetto nell'heap, il thread 2 può accedervi tramite un puntatore. Ciò rende la comunicazione tra thread veloce (nessuna copia, nessuna serializzazione), ma anche _pericolosa_, come vedremo nella sezione sulle condizioni di gara.
+
+I thread attraverso diversi _processi_, tuttavia, sono completamente isolati, non possono vedere la memoria dell'altro. Questo isolamento viene applicato dal sistema di memoria virtuale del kernel per garantire sicurezza e stabilità.
+
+### Thread per richiesta in Python
+
+```python
+# Python, threading model (simplified)
+import threading
+
+def handle_request(conn):
+    # 1. Parse the HTTP request (CPU work)
+    request = parse_http(conn)
+
+    # 2. Database query, this BLOCKS the thread
+    #    The OS scheduler will switch to another thread
+    user = db.execute(
+        "SELECT * FROM users WHERE id = %s",
+        (request.user_id,)
+    )
+
+    # 3. Thread resumes here after DB responds
+    response = json.dumps(user)
+    conn.send(response)
+
+# Create a new OS thread for each incoming connection
+while True:
+    conn = server_socket.accept()
+    t = threading.Thread(target=handle_request, args=(conn,))
+    t.start()
+```
+
+Nota che non c'è `async` o `await` ovunque. Il blocco avviene in modo trasparente, a livello del sistema operativo, quando `db.execute()` effettua una chiamata di rete. Il thread è contrassegnato come "bloccato", il sistema operativo passa a un altro thread e successivamente riattiva questo thread quando arriva la risposta del database sul socket.
+
+---
+
+06
+
+## Overhead del thread e cambio di contesto
+
+I thread sono potenti, ma presentano tre categorie di sovraccarico che limitano il numero che puoi praticamente eseguire.
+
+### 1. Sovraccarico di memoria
+
+Ogni thread ottiene il proprio stack. Su Linux il valore predefinito è 8 MB di spazio di indirizzi virtuali (anche se solo le pagine toccate consumano RAM fisica). Anche con un valore conservativo di 500 KB-1 MB di memoria fisica effettiva per thread, 10.000 connessioni simultanee consumerebbero **5-10 GB** di RAM solo per gli stack di thread, prima ancora che l'applicazione allochi una singola struttura dati.
+
+### 2. Sovraccarico della creazione
+
+La creazione di un thread richiede una chiamata di sistema al kernel. Il kernel deve allocare lo stack, impostare strutture dati interne (descrittore del thread, stato del segnale, metadati dello scheduler) e registrare il thread con lo scheduler. Ciò richiede da pochi **microsecondi a pochi millisecondi**: veloce per gli standard umani, ma significativo su larga scala quando crei e distruggi migliaia di thread.
+
+### 3. Cambio di contesto in alto
+
+Questa è la cosa più importante. Ogni volta che lo scheduler passa da un thread all'altro deve:
+
+1. Salva i registri della CPU del thread corrente (generico, a virgola mobile, SIMD)
+2. Aggiornare le strutture contabili (stato del thread, contabilità temporale)
+3. Seleziona il thread successivo da eseguire (coinvolge l'algoritmo dello scheduler)
+4. Ripristina i registri salvati del nuovo thread
+5. Potenzialmente svuotare le cache della CPU (le linee della cache L1/L2 diventano "fredde")
+
+Ogni cambio di contesto costa **1-10 microsecondi** sull'hardware moderno. Con 4 core e 1.000 thread, lo scheduler deve costantemente destreggiarsi tra di essi e questo sovraccarico può diventare una fonte misurabile di latenza. Il tempo di cambio di contesto è puramente improduttivo, è un lavoro di manutenzione, non un calcolo reale.
+
+<Diagram caption="Fig 4: Context switching is pure overhead: no useful work happens during the switch">
+<svg viewBox="0 0 700 220" xmlns="http://www.w3.org/2000/svg"><text x="350" y="18" font-family="var(--font-diagram-mono)" font-size="10" fill="var(--dg-ink-3)" text-anchor="middle" letter-spacing="0.1em">CAMBIO DI CONTESTO TRA FILETTI</text><rect x="40" y="50" width="180" height="35" rx="4" fill="var(--dg-accent-surface)"></rect><text x="130" y="72" font-family="var(--font-ui)" font-size="11" fill="var(--dg-ink)" text-anchor="middle">Thread 1 in esecuzione</text><rect x="220" y="40" width="80" height="55" rx="4" fill="var(--dg-warn-surface)" stroke="var(--dg-warn)" stroke-width="1.5" stroke-dasharray="4 2"></rect><text x="260" y="58" font-family="var(--font-ui)" font-size="9" fill="var(--dg-warn)" text-anchor="middle" font-weight="700">CONTESTO</text><text x="260" y="72" font-family="var(--font-ui)" font-size="9" fill="var(--dg-warn)" text-anchor="middle" font-weight="700">INTERRUTTORE</text><text x="260" y="86" font-family="var(--font-diagram-mono)" font-size="8" fill="var(--dg-ink-3)" text-anchor="middle">1-10 us</text><rect x="300" y="50" width="200" height="35" rx="4" fill="var(--dg-info-surface)"></rect><text x="400" y="72" font-family="var(--font-ui)" font-size="11" fill="var(--dg-ink)" text-anchor="middle">Thread 2 in esecuzione</text><rect x="500" y="40" width="80" height="55" rx="4" fill="var(--dg-warn-surface)" stroke="var(--dg-warn)" stroke-width="1.5" stroke-dasharray="4 2"></rect><text x="540" y="65" font-family="var(--font-ui)" font-size="9" fill="var(--dg-warn)" text-anchor="middle" font-weight="700">INTERRUTTORE</text><rect x="580" y="50" width="80" height="35" rx="4" fill="var(--dg-ok-surface)"></rect><text x="620" y="72" font-family="var(--font-ui)" font-size="10" fill="var(--dg-ink)" text-anchor="middle">Discussione 3</text><text x="40" y="130" font-family="var(--font-ui)" font-size="10" fill="var(--dg-ink)" font-weight="700">Durante un cambio di contesto il sistema operativo deve:</text><text x="40" y="150" font-family="var(--font-prose)" font-size="12" fill="var(--dg-ink)">(1) Salva i registri della CPU e il puntatore delle istruzioni</text><text x="40" y="170" font-family="var(--font-prose)" font-size="12" fill="var(--dg-ink)">(2) Aggiorna la contabilità dello scheduler</text><text x="40" y="190" font-family="var(--font-prose)" font-size="12" fill="var(--dg-ink)">(3) Ripristina i registri e lo stato del thread successivo</text><text x="40" y="210" font-family="var(--font-prose)" font-size="12" fill="var(--dg-ink)">(4) Potenzialmente invalidano le linee della cache della CPU</text></svg>
+</Diagram>
+
+<Callout type="info" title="Perché il thread per richiesta è in difficoltà">
+Questo è esattamente il motivo per cui il modello "un thread per richiesta" non funziona in caso di concorrenza elevata. 10.000 connessioni simultanee = 10.000 thread = gigabyte di memoria dello stack + sovraccarico di cambio di contesto costante. Il [problema C10k](https://en.wikipedia.org/wiki/C10k_problem) è stata la consapevolezza del settore che questo modello semplicemente non è scalabile.
+</Callout>
+
+---
+
+07
+
+## Il modello del ciclo degli eventi
+
+Il ciclo di eventi adotta un approccio radicalmente diverso alla concorrenza: invece di molti thread, utilizza **un thread** e un ciclo che controlla continuamente le operazioni di I/O completate, quindi esegue il callback appropriato. Questo è il modello alla base di **Node.js**, **Python's asyncio**, **Nginx** e molti altri sistemi ad alte prestazioni.
+
+### Il meccanismo centrale
+
+Quando un'attività (come servire la Richiesta A) deve effettuare una query sul database, invece di bloccarsi e attendere,:
+
+1. **Avvia l'IO**: invia i byte di query al database tramite il socket TCP.
+2. **Registra un callback**: dice al loop degli eventi: "Quando il database risponde su questo socket, esegui questa funzione."
+3. **Rende il controllo**: ritorna immediatamente, liberando il singolo thread per riprendere l'attività successiva.
+
+Il ciclo degli eventi stesso è essenzialmente un ciclo infinito. Ad ogni iterazione, utilizza un meccanismo a livello di sistema operativo per verificare quali socket dispongono di dati pronti, quindi esegue i callback per le operazioni completate e torna al controllo.
+
+### Multiplexing IO a livello di sistema operativo
+
+Il ciclo di eventi non implementa il monitoraggio IO stesso, si basa sul sistema operativo. Il sistema operativo fornisce chiamate di sistema speciali in grado di monitorare in modo efficiente _migliaia_ di descrittori di file (socket, file, pipe) simultaneamente:
+
+| Sistema operativo | Meccanismo | Note |
+| --------------- | --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Linux** | `epoll`   | O(1) per evento pronto. Scala fino a milioni di connessioni. Vedi [epoll(7)](https://man7.org/linux/man-pages/man7/epoll.7.html)                                                  |
+| **macOS/BSD** | `kqueue`  | Simile a epoll ma con un'API diversa. Vedi [kqueue(2)](https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/man2/kqueue.2.html) |
+| **Finestre** | `IOCP`    | Porte di completamento IO, equivalenti di Windows |
+
+Sotto il cofano, Node.js utilizza **libuv** che astrae questi meccanismi specifici della piattaforma. Di Pitone `asyncio` usi `selectors` modulo che avvolge `epoll`/`kqueue`.
+
+<Diagram caption="Fig 5: The event loop checks IO status on each iteration and runs callbacks for completed operations">
+<svg viewBox="0 0 700 300" xmlns="http://www.w3.org/2000/svg"><text x="350" y="18" font-family="var(--font-diagram-mono)" font-size="10" fill="var(--dg-ink-3)" text-anchor="middle" letter-spacing="0.1em">LOOP DI EVENTI, CONCORRENZA A SINGOLO THREAD</text><circle cx="350" cy="140" r="75" fill="none" stroke="var(--dg-accent)" stroke-width="2" stroke-dasharray="8 4"></circle><text x="350" y="125" font-family="var(--font-prose)" font-size="14" fill="var(--dg-accent)" text-anchor="middle" font-weight="700">Evento</text><text x="350" y="145" font-family="var(--font-prose)" font-size="14" fill="var(--dg-accent)" text-anchor="middle" font-weight="700">Ciclo</text><text x="350" y="163" font-family="var(--font-diagram-mono)" font-size="8" fill="var(--dg-ink-3)" text-anchor="middle">(filo singolo)</text><rect x="40" y="75" width="100" height="28" rx="4" fill="var(--dg-accent-tint)" stroke="var(--dg-accent)" stroke-width="1"></rect><text x="90" y="93" font-family="var(--font-ui)" font-size="10" fill="var(--dg-accent)" text-anchor="middle" font-weight="600">Richiedi A</text><rect x="40" y="115" width="100" height="28" rx="4" fill="var(--dg-info-tint)" stroke="var(--dg-info)" stroke-width="1"></rect><text x="90" y="133" font-family="var(--font-ui)" font-size="10" fill="var(--dg-info)" text-anchor="middle" font-weight="600">Richiesta B</text><rect x="40" y="155" width="100" height="28" rx="4" fill="var(--dg-ok-tint)" stroke="var(--dg-ok)" stroke-width="1"></rect><text x="90" y="173" font-family="var(--font-ui)" font-size="10" fill="var(--dg-ok)" text-anchor="middle" font-weight="600">Richiedi C</text><line x1="140" y1="89" x2="272" y2="120" stroke="var(--dg-accent)" stroke-width="1" marker-end="url(#arr)"></line><line x1="140" y1="129" x2="272" y2="137" stroke="var(--dg-info)" stroke-width="1" marker-end="url(#arr2)"></line><line x1="140" y1="169" x2="272" y2="155" stroke="var(--dg-ok)" stroke-width="1" marker-end="url(#arr3)"></line><rect x="490" y="60" width="170" height="28" rx="4" fill="var(--dg-line-2)" stroke="var(--dg-line)"></rect><text x="575" y="78" font-family="var(--font-ui)" font-size="9" fill="var(--dg-on-accent)" text-anchor="middle">Interrogazione DB (in attesa...)</text><rect x="490" y="100" width="170" height="28" rx="4" fill="var(--dg-line-2)" stroke="var(--dg-line)"></rect><text x="575" y="118" font-family="var(--font-ui)" font-size="9" fill="var(--dg-on-accent)" text-anchor="middle">Redis GET (in attesa...)</text><rect x="490" y="140" width="170" height="28" rx="4" fill="var(--dg-line-2)" stroke="var(--dg-line)"></rect><text x="575" y="158" font-family="var(--font-ui)" font-size="9" fill="var(--dg-on-accent)" text-anchor="middle">API email (in attesa...)</text><rect x="490" y="180" width="170" height="28" rx="4" fill="var(--dg-ok-tint)" stroke="var(--dg-ok)"></rect><text x="575" y="198" font-family="var(--font-ui)" font-size="9" fill="var(--dg-ok)" text-anchor="middle" font-weight="600">Risposta DB PRONTA</text><line x1="428" y1="120" x2="488" y2="110" stroke="var(--dg-ink)" stroke-width="1" marker-end="url(#arr4)"></line><path d="M490,194 Q460,210 428,170" fill="none" stroke="var(--dg-ok)" stroke-width="1.5" marker-end="url(#arr3)"></path><text x="440" y="215" font-family="var(--font-ui)" font-size="8" fill="var(--dg-ok)" font-style="italic">eseguire la richiamata</text><text x="575" y="235" font-family="var(--font-diagram-mono)" font-size="9" fill="var(--dg-ink-3)" text-anchor="middle">Monitorato da epoll/kqueue</text><text x="350" y="280" font-family="var(--font-prose)" font-size="11" fill="var(--dg-ink)" text-anchor="middle">Ogni iterazione: controlla i completamenti IO -&gt; esegui callback -&gt; ripeti</text><defs><marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" fill="var(--dg-accent)"></path></marker><marker id="arr2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" fill="var(--dg-info)"></path></marker><marker id="arr3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" fill="var(--dg-ok)"></path></marker><marker id="arr4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" fill="var(--dg-inverse)"></path></marker></defs></svg>
+</Diagram>
+
+### Perché i loop di eventi sono efficienti per l'IO
+
+Poiché esiste un solo thread, non c'è **nessun sovraccarico di cambio di contesto**, **nessuna allocazione di stack di più megabyte** e nessuna manipolazione dello scheduler. La CPU trascorre il suo tempo eseguendo il codice effettivo (callback) o aspettando in modo efficiente all'interno `epoll_wait()`. Questo è il motivo per cui Node.js può gestire decine di migliaia di connessioni simultanee su hardware modesto.
+
+### Il compromesso fondamentale: non bloccare mai il ciclo
+
+Se esegui un'operazione ad uso intensivo della CPU, ad esempio un'attività di elaborazione di immagini da 100 ms, direttamente sul thread del ciclo di eventi, **tutto si ferma**. Non è possibile servire altre richieste, non possono essere attivati ​​callback, né è possibile elaborare completamenti I/O. L'intero server si blocca fino al termine del lavoro della CPU. Questo è il motivo per cui i linguaggi basati su loop di eventi come JavaScript insistono sul codice non bloccante e scaricano calcoli pesanti su thread di lavoro o processi separati.
+
+### Callback -&gt; Promesse -&gt; async/await: l'evoluzione
+
+Il ciclo degli eventi funziona sui callback, ma i callback grezzi portano a codice profondamente annidato (il famigerato "inferno dei callback"). L'evoluzione in JavaScript è andata:
+
+```js title="stage 1 / callback hell"
+// Stage 1: Raw callbacks (pre-ES6)
+db.query("SELECT * FROM users WHERE id = ?", [userId],
+  function(err, result) {
+    if (err) return sendError(res, err);
+    // Nested callback for second query
+    db.query("SELECT * FROM orders WHERE user_id = ?", [userId],
+      function(err, orders) {
+        if (err) return sendError(res, err);
+        // Another level of nesting...
+        sendResponse(res, { user: result, orders: orders });
+      }
+    );
+  }
+);
+```
+
+```js title="stage 2 / async-await"
+// Stage 2: async/await (modern, syntactic sugar over callbacks)
+async function handleRequest(req, res) {
+  const user  = await db.query("SELECT * FROM users WHERE id = ?", [req.userId]);
+  const orders = await db.query("SELECT * FROM orders WHERE user_id = ?", [req.userId]);
+  sendResponse(res, { user, orders });
+}
+```
+
+Il `await` la parola chiave è zucchero sintattico. Quando il runtime incontra `await`, dice: "Sto cedendo il controllo della CPU al loop degli eventi. Tutto ciò che segue questa riga è effettivamente un callback che verrà eseguito al completamento di questa operazione di IO."
+
+### L'asincio di Python: la stessa idea
+
+```python
+import asyncio
+import aiohttp
+
+async def handle_request(user_id: int) -> dict:
+    # await = "yield control to the event loop until this IO completes"
+    user = await db.fetchone(
+        "SELECT * FROM users WHERE id = $1", user_id
+    )
+    orders = await db.fetch(
+        "SELECT * FROM orders WHERE user_id = $1", user_id
+    )
+    return {"user": user, "orders": orders}
+
+# Run with an event loop (uvloop for performance)
+asyncio.run(handle_request(123))
+```
+
+<Callout type="info" title="Riferimento">
+[MDN, funzione asincrona](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Statements/async_function) [MDN, attendo operatore](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Operators/await) [MDN, Il ciclo degli eventi](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Event_loop) [Python, documentazione asincrona](https://docs.python.org/3/library/asyncio.html)
+</Callout>
+
+---
+
+08
+
+## Asincrono/Aspetta come macchina a stati
+
+Per capire veramente `async/await`, è utile vedere in cosa il compilatore o il runtime trasforma effettivamente il tuo codice. An `async` la funzione è essenzialmente convertita in una **macchina a stati** che interagisce con il ciclo degli eventi. Ciascuno `await` è un punto di transizione tra gli stati.
+
+### La funzione asincrona originale
+
+```python
+async def fetch_user_data(user_id):
+    user   = await db.get_user(user_id)      # State 0 -> 1
+    orders = await db.get_orders(user_id)    # State 1 -> 2
+    return {"user": user, "orders": orders}  # State 2 -> done
+```
+
+### Cosa vede il runtime (concettuale)
+
+```python title="the same function, as an explicit state machine"
+# Conceptual state machine representation
+def fetch_user_data_machine(user_id):
+    state = 0
+    user = None
+    orders = None
+
+    def step():
+        nonlocal state, user, orders
+
+        if state == 0:
+            state = 1
+            # Start the IO, register callback for when it completes
+            return db.get_user(user_id).then(
+                lambda result: (user := result, step())
+            )
+
+        elif state == 1:
+            state = 2
+            return db.get_orders(user_id).then(
+                lambda result: (orders := result, step())
+            )
+
+        elif state == 2:
+            return {"user": user, "orders": orders}
+
+    return step
+```
+
+<Diagram caption="Fig 6, Each await is a state transition; the event loop runs other work in between">
+<svg viewBox="0 0 700 180" xmlns="http://www.w3.org/2000/svg"><text x="350" y="18" font-family="var(--font-diagram-mono)" font-size="10" fill="var(--dg-ink-3)" text-anchor="middle" letter-spacing="0.1em">FUNZIONE ASINCOSA COME MACCHINA DI STATI</text><circle cx="100" cy="90" r="35" fill="var(--dg-accent-tint)" stroke="var(--dg-accent)" stroke-width="2"></circle><text x="100" y="85" font-family="var(--font-diagram-mono)" font-size="10" fill="var(--dg-accent)" text-anchor="middle" font-weight="600">Stato 0</text><text x="100" y="100" font-family="var(--font-ui)" font-size="8" fill="var(--dg-ink-3)" text-anchor="middle">get_utente()</text><line x1="138" y1="90" x2="212" y2="90" stroke="var(--dg-ink)" stroke-width="1.5" marker-end="url(#arr4)"></line><text x="175" y="80" font-family="var(--font-diagram-mono)" font-size="7.5" fill="var(--dg-ink-3)" text-anchor="middle">attendere</text><text x="175" y="112" font-family="var(--font-ui)" font-size="7.5" fill="var(--dg-warn)" text-anchor="middle" font-style="italic">il ciclo degli eventi è</text><text x="175" y="122" font-family="var(--font-ui)" font-size="7.5" fill="var(--dg-warn)" text-anchor="middle" font-style="italic">gratis qui</text><circle cx="250" cy="90" r="35" fill="var(--dg-info-tint)" stroke="var(--dg-info)" stroke-width="2"></circle><text x="250" y="85" font-family="var(--font-diagram-mono)" font-size="10" fill="var(--dg-info)" text-anchor="middle" font-weight="600">Stato 1</text><text x="250" y="100" font-family="var(--font-ui)" font-size="8" fill="var(--dg-ink-3)" text-anchor="middle">ricevi_ordini()</text><line x1="288" y1="90" x2="362" y2="90" stroke="var(--dg-ink)" stroke-width="1.5" marker-end="url(#arr4)"></line><text x="325" y="80" font-family="var(--font-diagram-mono)" font-size="7.5" fill="var(--dg-ink-3)" text-anchor="middle">attendere</text><text x="325" y="112" font-family="var(--font-ui)" font-size="7.5" fill="var(--dg-warn)" text-anchor="middle" font-style="italic">il ciclo degli eventi è</text><text x="325" y="122" font-family="var(--font-ui)" font-size="7.5" fill="var(--dg-warn)" text-anchor="middle" font-style="italic">gratis qui</text><circle cx="400" cy="90" r="35" fill="var(--dg-ok-tint)" stroke="var(--dg-ok)" stroke-width="2"></circle><text x="400" y="85" font-family="var(--font-diagram-mono)" font-size="10" fill="var(--dg-ok)" text-anchor="middle" font-weight="600">Stato 2</text><text x="400" y="100" font-family="var(--font-ui)" font-size="8" fill="var(--dg-ink-3)" text-anchor="middle">risultato restituito</text><line x1="438" y1="90" x2="500" y2="90" stroke="var(--dg-ink)" stroke-width="1.5" marker-end="url(#arr4)"></line><rect x="503" y="75" width="55" height="30" rx="15" fill="var(--dg-ok-surface)"></rect><text x="530" y="95" font-family="var(--font-ui)" font-size="10" fill="var(--dg-ink)" text-anchor="middle" font-weight="600">Fatto</text><text x="350" y="165" font-family="var(--font-prose)" font-size="11" fill="var(--dg-ink)" text-anchor="middle">Tra ogni stato, il ciclo degli eventi è libero di eseguire altre attività</text></svg>
+</Diagram>
+
+### Questo spiega due cose
+
+**1. Perché `await` può apparire solo all'interno `async` funzioni.** La funzione deve essere contrassegnata `async` perché deve essere trasformata in una macchina statale. Una funzione regolare non dispone di un'infrastruttura della macchina a stati per supportare la pausa e la ripresa.
+
+**2. Perché bloccare il ciclo degli eventi è catastrofico.** Se si esegue un'operazione ad uso intensivo della CPU all'interno di uno stato (ad esempio un calcolo di 500 ms), la macchina a stati non potrà mai effettuare la transizione. Nessun'altra macchina a stati (altre richieste) può avanzare. L'intero server si blocca.
+
+---
+
+09
+
+## Vai a routine e thread virtuali
+
+Go adotta un terzo approccio che non prevede né thread grezzi del sistema operativo né un loop di eventi a thread singolo. Utilizza **goroutine**: thread leggeri nello spazio utente gestiti dallo scheduler di runtime di Go. Il termine "thread virtuale" cattura l'idea: si comportano come thread (codice di blocco, logica sequenziale), ma sono molto più economici perché non sono costrutti a livello del sistema operativo.
+
+### Perché le goroutine costano poco
+
+| Immobile | Discussione del sistema operativo | Goroutine |
+| ------------------- | ------------------------------- | ------------------------------------ |
+| **Dimensione pila** | \~8 MB (virtuali), \~KB fisici | \~2-8 KB iniziali (cresce dinamicamente) |
+| **Tempo di creazione** | \~us a ms (chiamata di sistema) | \~ns a noi (allocazione dello spazio utente) |
+| **Cambio di contesto** | 1-10 noi (modalità kernel) | \~200 ns (scambio puntatore spazio utente) |
+| **Limite pratico** | \~10.000 (collo di bottiglia della memoria) | \~1.000.000+ (a seconda della RAM) |
+| **Programmato da** | Kernel del sistema operativo | Vai allo scheduler di runtime |
+
+### Server HTTP di Go: una goroutine per richiesta
+
+La libreria standard di Go `net/http` crea una **nuova goroutine per ogni richiesta in arrivo**. Sembra che il modello thread per richiesta che abbiamo appena detto non sia scalabile, ma le goroutine sono così leggere che funzionano magnificamente. Ecco il modello di codice sorgente effettivo di Go's `net/http` pacchetto:
+
+```go
+// From Go's standard library net/http/server.go (simplified)
+func (srv *Server) Serve(l net.Listener) error {
+    for {
+        conn, err := l.Accept()   // Accept new TCP connection
+        if err != nil {
+            return err
+        }
+        // Create a NEW goroutine for each connection
+        go srv.handleConn(conn)
+    }
+}
+```
+
+Il `go` la parola chiave genera una nuova goroutine. Ciò equivale a creare un thread, ma a una frazione del costo (nanosecondi contro microsecondi, kilobyte contro megabyte).
+
+### Un tipico gestore di Go
+
+```go
+func handleGetUser(w http.ResponseWriter, r *http.Request) {
+    userID := r.URL.Query().Get("id")
+
+    // This BLOCKS the goroutine, but not the OS thread.
+    // The Go scheduler parks this goroutine and runs another.
+    user, err := db.QueryRow(
+        "SELECT name, email FROM users WHERE id = $1",
+        userID,
+    )
+    if err != nil {
+        http.Error(w, "not found", http.StatusNotFound)
+        return
+    }
+
+    // Goroutine resumes here after DB responds
+    json.NewEncoder(w).Encode(user)
+}
+```
+
+Avviso: **no `async`, no `await`, nessuna richiamata**. Il codice si legge come un codice sincrono e bloccante, perché la goroutine _non_ blocca. Ma lo scheduler di runtime Go lo parcheggia in modo trasparente e prende un'altra goroutine. Ottieni l'ergonomia del codice bloccante con l'efficienza dell'IO non bloccante.
+
+---
+
+10
+
+## Lo schedulatore M:N
+
+Lo scheduler di Go utilizza un **modello M:N**: multipla le goroutine M sui thread N OS. Il numero di thread del sistema operativo è controllato da `GOMAXPROCS` variabile di ambiente (il valore predefinito è il numero di core della CPU). Ogni thread del sistema operativo esegue una coda locale di goroutine.
+
+<Diagram caption="Fig 7: Go multiplexes many goroutines across a fixed pool of OS threads">
+<svg viewBox="0 0 700 330" xmlns="http://www.w3.org/2000/svg"><text x="350" y="18" font-family="var(--font-diagram-mono)" font-size="10" fill="var(--dg-ink-3)" text-anchor="middle" letter-spacing="0.1em">SCHEDULER M:N DI GO, GOROUTINE MAPPATE AI THREAD DEL SO</text><text x="350" y="290" font-family="var(--font-ui)" font-size="10" fill="var(--dg-ink-3)" text-anchor="middle" letter-spacing="0.05em">FILETTI DEL SISTEMA OPERATIVO (GOMAXPROCS = 4)</text><rect x="60" y="240" width="120" height="35" rx="5" fill="var(--dg-inverse)"></rect><text x="120" y="262" font-family="var(--font-diagram-mono)" font-size="10" fill="var(--dg-on-inverse)" text-anchor="middle">M1 (Nucleo 1)</text><rect x="210" y="240" width="120" height="35" rx="5" fill="var(--dg-inverse)"></rect><text x="270" y="262" font-family="var(--font-diagram-mono)" font-size="10" fill="var(--dg-on-inverse)" text-anchor="middle">M2 (Nucleo 2)</text><rect x="360" y="240" width="120" height="35" rx="5" fill="var(--dg-inverse)"></rect><text x="420" y="262" font-family="var(--font-diagram-mono)" font-size="10" fill="var(--dg-on-inverse)" text-anchor="middle">M3 (Nucleo 3)</text><rect x="510" y="240" width="120" height="35" rx="5" fill="var(--dg-inverse)"></rect><text x="570" y="262" font-family="var(--font-diagram-mono)" font-size="10" fill="var(--dg-on-inverse)" text-anchor="middle">M4 (Nucleo 4)</text><text x="350" y="50" font-family="var(--font-ui)" font-size="10" fill="var(--dg-ink-3)" text-anchor="middle" letter-spacing="0.05em">GOROUTINE (migliaia possibili)</text><rect x="55" y="65" width="35" height="24" rx="3" fill="var(--dg-accent-surface)"></rect><text x="72" y="81" font-family="var(--font-diagram-mono)" font-size="7" fill="var(--dg-ink)" text-anchor="middle">G1</text><rect x="93" y="65" width="35" height="24" rx="3" fill="var(--dg-accent-surface)"></rect><text x="110" y="81" font-family="var(--font-diagram-mono)" font-size="7" fill="var(--dg-ink)" text-anchor="middle">G5</text><rect x="131" y="65" width="35" height="24" rx="3" fill="var(--dg-accent-tint)"></rect><text x="148" y="81" font-family="var(--font-diagram-mono)" font-size="7" fill="var(--dg-ink)" text-anchor="middle">G9</text><rect x="205" y="65" width="35" height="24" rx="3" fill="var(--dg-info-surface)"></rect><text x="222" y="81" font-family="var(--font-diagram-mono)" font-size="7" fill="var(--dg-ink)" text-anchor="middle">G2</text><rect x="243" y="65" width="35" height="24" rx="3" fill="var(--dg-info-surface)"></rect><text x="260" y="81" font-family="var(--font-diagram-mono)" font-size="7" fill="var(--dg-ink)" text-anchor="middle">G6</text><rect x="281" y="65" width="35" height="24" rx="3" fill="var(--dg-info-tint)"></rect><text x="298" y="81" font-family="var(--font-diagram-mono)" font-size="7" fill="var(--dg-ink)" text-anchor="middle">G10</text><rect x="355" y="65" width="35" height="24" rx="3" fill="var(--dg-ok-surface)"></rect><text x="372" y="81" font-family="var(--font-diagram-mono)" font-size="7" fill="var(--dg-ink)" text-anchor="middle">G3</text><rect x="393" y="65" width="35" height="24" rx="3" fill="var(--dg-ok-surface)"></rect><text x="410" y="81" font-family="var(--font-diagram-mono)" font-size="7" fill="var(--dg-ink)" text-anchor="middle">G7</text><rect x="505" y="65" width="35" height="24" rx="3" fill="var(--dg-warn-surface)"></rect><text x="522" y="81" font-family="var(--font-diagram-mono)" font-size="7" fill="var(--dg-ink)" text-anchor="middle">G4</text><rect x="543" y="65" width="35" height="24" rx="3" fill="var(--dg-warn-surface)"></rect><text x="560" y="81" font-family="var(--font-diagram-mono)" font-size="7" fill="var(--dg-ink)" text-anchor="middle">G8</text><rect x="581" y="65" width="35" height="24" rx="3" fill="var(--dg-warn-tint)"></rect><text x="598" y="81" font-family="var(--font-diagram-mono)" font-size="7" fill="var(--dg-ink)" text-anchor="middle">G11</text><line x1="120" y1="92" x2="120" y2="238" stroke="var(--dg-accent)" stroke-width="1" stroke-dasharray="4 3" opacity="0.5"></line><line x1="270" y1="92" x2="270" y2="238" stroke="var(--dg-info)" stroke-width="1" stroke-dasharray="4 3" opacity="0.5"></line><line x1="420" y1="92" x2="420" y2="238" stroke="var(--dg-ok)" stroke-width="1" stroke-dasharray="4 3" opacity="0.5"></line><line x1="570" y1="92" x2="570" y2="238" stroke="var(--dg-warn)" stroke-width="1" stroke-dasharray="4 3" opacity="0.5"></line><rect x="250" y="145" width="200" height="40" rx="20" fill="var(--dg-warn-surface)" stroke="var(--dg-accent)" stroke-width="1.5"></rect><text x="350" y="170" font-family="var(--font-prose)" font-size="13" fill="var(--dg-accent)" text-anchor="middle" font-weight="700">Vai a Utilità di pianificazione runtime</text><text x="350" y="210" font-family="var(--font-prose)" font-size="10" fill="var(--dg-ink-3)" text-anchor="middle">Quando G1 si blocca su IO -&gt; lo scheduler parcheggia G1, esegue G5 sullo stesso thread M1</text><text x="350" y="225" font-family="var(--font-prose)" font-size="10" fill="var(--dg-ink-3)" text-anchor="middle">Costo del cambio di contesto: ~200ns (scambio puntatore), non ~10us (modalità kernel)</text></svg>
+</Diagram>
+
+Quando una goroutine si blocca su IO (ad esempio, la lettura di un database), il **poller di rete** interno del runtime Go (basato su `epoll`/`kqueue` dietro le quinte) rileva il completamento dell'I/O e rimette la goroutine in una coda di esecuzione. Questo è il meglio di entrambi i mondi: **codice in stile blocco** con **efficienza a livello di loop di eventi**.
+
+<Callout type="info" title="Riferimento">
+[Vai, Vai efficace: Goroutine](https://go.dev/doc/effective_go#goroutines) [Go, Go efficace: concorrenza](https://go.dev/doc/effective_go#concurrency) [Vai al blog, vai ai modelli di concorrenza: pipeline](https://go.dev/blog/pipelines)
+</Callout>
+
+---
+
+11
+
+## Condizioni di gara e stato condiviso
+
+La concorrenza introduce un'intera categoria di bug che non esistono nel codice sequenziale. Quasi tutti risalgono a una causa principale: **stato mutevole condiviso**. Quando due attività simultanee leggono e scrivono la stessa variabile e le loro operazioni si intrecciano in modi inaspettati, si ottiene una **race condition**.
+
+### Il classico controesempio
+
+Due thread tentano entrambi di incrementare un contatore condiviso da 0 a 1. L'incremento richiede tre passaggi della CPU: **leggere** il valore corrente, **aggiungere** uno, **riscriverlo**. Se i thread si intercalano:
+
+<Diagram caption="Fig 8: Two threads read the same stale value, and one update overwrites the other">
+<svg viewBox="0 0 700 280" xmlns="http://www.w3.org/2000/svg"><text x="350" y="18" font-family="var(--font-diagram-mono)" font-size="10" fill="var(--dg-ink-3)" text-anchor="middle" letter-spacing="0.1em">CONDIZIONE DI GARA, PROBLEMA DI AGGIORNAMENTO PERSO</text><text x="40" y="50" font-family="var(--font-ui)" font-size="9" fill="var(--dg-ink-3)" font-weight="700">TEMPO</text><text x="180" y="50" font-family="var(--font-ui)" font-size="9" fill="var(--dg-accent)" font-weight="700">FILO A</text><text x="400" y="50" font-family="var(--font-ui)" font-size="9" fill="var(--dg-info)" font-weight="700">FILO B</text><text x="600" y="50" font-family="var(--font-ui)" font-size="9" fill="var(--dg-ink)" font-weight="700">contatore</text><line x1="40" y1="58" x2="660" y2="58" stroke="var(--dg-line)"></line><text x="50" y="80" font-family="var(--font-diagram-mono)" font-size="10" fill="var(--dg-ink-3)">t1</text><text x="120" y="80" font-family="var(--font-prose)" font-size="11" fill="var(--dg-ink)">Contatore di lettura -&gt;<tspan font-family="var(--font-diagram-mono)" font-size="10" fill="var(--dg-accent)">0</tspan></text><text x="600" y="80" font-family="var(--font-diagram-mono)" font-size="11" fill="var(--dg-ink)">0</text><text x="50" y="110" font-family="var(--font-diagram-mono)" font-size="10" fill="var(--dg-ink-3)">t2</text><text x="350" y="110" font-family="var(--font-prose)" font-size="11" fill="var(--dg-ink)">Contatore di lettura -&gt;<tspan font-family="var(--font-diagram-mono)" font-size="10" fill="var(--dg-info)">0</tspan></text><text x="600" y="110" font-family="var(--font-diagram-mono)" font-size="11" fill="var(--dg-ink)">0</text><text x="50" y="140" font-family="var(--font-diagram-mono)" font-size="10" fill="var(--dg-ink-3)">t3</text><text x="120" y="140" font-family="var(--font-prose)" font-size="11" fill="var(--dg-ink)">Aggiungi 1 -&gt; registro = <tspan font-family="var(--font-diagram-mono)" font-size="10" fill="var(--dg-accent)">1</tspan></text><text x="600" y="140" font-family="var(--font-diagram-mono)" font-size="11" fill="var(--dg-ink)">0</text><text x="50" y="170" font-family="var(--font-diagram-mono)" font-size="10" fill="var(--dg-ink-3)">t4</text><text x="350" y="170" font-family="var(--font-prose)" font-size="11" fill="var(--dg-ink)">Aggiungi 1 -&gt; registro = <tspan font-family="var(--font-diagram-mono)" font-size="10" fill="var(--dg-info)">1</tspan></text><text x="600" y="170" font-family="var(--font-diagram-mono)" font-size="11" fill="var(--dg-ink)">0</text><text x="50" y="200" font-family="var(--font-diagram-mono)" font-size="10" fill="var(--dg-ink-3)">t5</text><text x="120" y="200" font-family="var(--font-prose)" font-size="11" fill="var(--dg-ink)">Scrivi <tspan font-family="var(--font-diagram-mono)" font-size="10" fill="var(--dg-accent)">1</tspan> -&gt; contatore</text><text x="600" y="200" font-family="var(--font-diagram-mono)" font-size="11" fill="var(--dg-ok)" font-weight="700">1</text><text x="50" y="230" font-family="var(--font-diagram-mono)" font-size="10" fill="var(--dg-ink-3)">t6</text><text x="350" y="230" font-family="var(--font-prose)" font-size="11" fill="var(--dg-ink)">Scrivi <tspan font-family="var(--font-diagram-mono)" font-size="10" fill="var(--dg-info)">1</tspan> -&gt; contatore</text><text x="600" y="230" font-family="var(--font-diagram-mono)" font-size="11" fill="var(--dg-accent)" font-weight="700">1</text><line x1="40" y1="245" x2="660" y2="245" stroke="var(--dg-line)"></line><text x="120" y="268" font-family="var(--font-prose)" font-size="12" fill="var(--dg-ink)">Previsto: <tspan font-weight="700" fill="var(--dg-ok)">2</tspan></text><text x="350" y="268" font-family="var(--font-prose)" font-size="12" fill="var(--dg-ink)">Effettivo: <tspan font-weight="700" fill="var(--dg-accent)">1</tspan>, L'incremento del thread B è andato perso!</text></svg>
+</Diagram>
+
+### Anche le condizioni di gara sono in asincrono/attendono
+
+Potresti pensare: "Uso JavaScript/Python con async/await, c'è solo un thread, quindi nessuna condizione di competizione". **Sbagliato.** Possono ancora verificarsi condizioni di gara tra `await` punti. Lo stesso bug, in tutte e cinque le lingue:
+
+Vai a Python JavaScript TypeScript Java
+
+controllare, cedere, agire: lo spazio nel mezzo è dove entra il secondo chiamante
+
+```go
+var balance = 100
+
+// Go has no await, but it has the same gap: every channel receive,
+// mutex acquire and network call is a yield point at which the
+// scheduler can run the other goroutine.
+func withdraw(amount int) {
+    if balance >= amount {            // Check at time T1
+        processWithdrawal(amount)     // <- blocks here, scheduler switches
+        balance -= amount             // Deduct at time T2
+    }
+}
+
+// Both goroutines see balance=100, both pass the check,
+// both deduct 100 -> balance = -100 (invalid!)
+go withdraw(100)
+go withdraw(100)
+
+// Go will actually TELL you about this one, which none of the others
+// will:  go run -race .  reports the conflicting access and the two
+// stacks that caused it. Run your tests with -race in CI.
+```
+
+```python
+balance = 100
+
+async def withdraw(amount: int):
+    global balance
+    if balance >= amount:               # Check at time T1
+        await process_withdrawal(amount)  # <- yields control here!
+        balance -= amount                 # Deduct at time T2
+
+# Both coroutines see balance=100, both pass the check,
+# both deduct 100 -> balance = -100 (invalid!)
+await asyncio.gather(
+    withdraw(100),
+    withdraw(100),
+)
+```
+
+```js
+let balance = 100
+
+async function withdraw(amount) {
+  if (balance >= amount) {              // Check at time T1
+    await processWithdrawal(amount)     // <- yields control here!
+    balance -= amount                   // Deduct at time T2
+  }
+}
+
+// Both promises see balance=100, both pass the check,
+// both deduct 100 -> balance = -100 (invalid!)
+await Promise.all([withdraw(100), withdraw(100)])
+
+// This is the one that surprises people most, because "JavaScript is
+// single-threaded" is usually taught as if it meant "safe". It means
+// only that no two lines run AT THE SAME INSTANT. Everything between
+// one await and the next is still interleaved with other work.
+```
+
+```ts
+let balance = 100
+
+async function withdraw(amount: number): Promise<void> {
+  if (balance >= amount) {          // Check at time T1
+    await processWithdrawal(amount) // <- yields control here!
+    balance -= amount               // Deduct at time T2
+  }
+}
+
+await Promise.all([withdraw(100), withdraw(100)]) // balance = -100
+
+// Types cannot catch this, and it is worth being honest about why: the
+// bug is not in any single line, it is in the ORDER two correct lines
+// run in. No type system in production use models that.
+//
+// What you can do is make the dangerous shape rarer. Keep the mutable
+// state out of module scope and behind an object that owns its own
+// lock, so "read it, await, write it" is not something a caller can
+// spell by accident:
+class Account {
+  #balance = 100
+  #lock = new Mutex()
+
+  async withdraw(amount: number): Promise<void> {
+    await this.#lock.runExclusive(async () => {
+      if (this.#balance < amount) throw new Error('insufficient funds')
+      await processWithdrawal(amount)
+      this.#balance -= amount
+    })
+  }
+}
+```
+
+```java
+// Java 21 virtual threads make this bug easy to hit for the same reason
+// goroutines do: blocking calls are cheap, so people write many more of
+// them, and every blocking call is a scheduling point.
+static int balance = 100;
+
+static void withdraw(int amount) {
+    if (balance >= amount) {        // Check at time T1
+        processWithdrawal(amount);  // <- blocks; the carrier thread is reused
+        balance -= amount;          // Deduct at time T2
+    }
+}
+
+try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
+    executor.submit(() -> withdraw(100));
+    executor.submit(() -> withdraw(100));
+}
+// balance = -100 (invalid!)
+
+// On the JVM there is a second, nastier layer: without synchronization
+// there is no guarantee thread B ever SEES thread A's write at all. The
+// value can sit in a core's cache or be reordered by the compiler. A
+// race here is not just interleaving, it is a visibility problem, which
+// is why `volatile` and the Java Memory Model exist.
+```
+
+Il problema: il `if` l'assegno e la detrazione sono separati da un `await`. Tra questi due punti, il ciclo degli eventi esegue il secondo `withdraw` chiamata, che vede anche `balance == 100` e supera il controllo. Entrambi detraggono e il saldo va a **-100**.
+
+<Callout type="info" title="Chiave da asporto">
+Le condizioni di competizione si verificano ogni volta che è presente uno schema **controlla-poi-agisci** separato da un punto di snervamento (`await`) o un cambio di contesto. Il codice asincrono a thread singolo _non_ è immune alle race conditions.
+</Callout>
+
+---
+
+12
+
+## Blocchi, mutex e canali
+
+Le soluzioni alle condizioni di gara sono state studiate per decenni. Ecco gli approcci principali.
+
+### Mutex (Mutua esclusione)
+
+Un mutex garantisce che solo **un thread/goroutine** possa eseguire una sezione critica alla volta. Tutti gli altri devono attendere finché il blocco non viene rilasciato. Questa è la primitiva di sincronizzazione più comune in tutti i linguaggi.
+
+Vai a Python JavaScript TypeScript Java
+
+un titolare alla volta e lo svincolo dovrà essere garantito
+
+```go
+package main
+
+import (
+    "fmt"
+    "sync"
+)
+
+func main() {
+    var counter int
+    var mu sync.Mutex
+    var wg sync.WaitGroup
+
+    for i := 0; i < 1000; i++ {
+        wg.Add(1)
+        go func() {
+            defer wg.Done()
+            mu.Lock()         // Acquire, other goroutines wait here
+            counter++
+            mu.Unlock()       // Release, next goroutine can proceed
+        }()
+    }
+
+    wg.Wait()
+    fmt.Println(counter) // Always 1000
+}
+```
+
+```python
+import threading
+
+counter = 0
+lock = threading.Lock()
+
+def increment():
+    global counter
+    with lock:          # Acquire lock, blocks other threads
+        counter += 1   # Only one thread executes this at a time
+                        # Lock is released automatically at end of `with`
+
+# Create 1000 threads all incrementing the same counter
+threads = [threading.Thread(target=increment) for _ in range(1000)]
+for t in threads: t.start()
+for t in threads: t.join()
+print(counter)  # Always 1000, no lost updates
+```
+
+```js
+import { Mutex } from 'async-mutex'
+
+let counter = 0
+const mutex = new Mutex()
+
+async function increment() {
+  // runExclusive acquires, runs, and releases even if the body throws,
+  // which is the JavaScript equivalent of Go's `defer mu.Unlock()`.
+  await mutex.runExclusive(async () => {
+    counter += 1 // only one task is inside this at a time
+  })
+}
+
+await Promise.all(Array.from({ length: 1000 }, increment))
+console.log(counter) // Always 1000
+
+// Note what this is NOT protecting against: Node has no shared memory
+// between processes, so this lock is per-process. Two instances behind
+// a load balancer need a DISTRIBUTED lock in Redis, or better, an
+// atomic operation in the database. See chapters 08 and 09.
+```
+
+```ts
+import { Mutex } from 'async-mutex'
+
+// Wrapping the state and its lock in one object is the point: a bare
+// `counter` plus a bare `mutex` is two things a caller has to remember
+// to use together, and the whole class of bug here is somebody
+// forgetting one of them.
+class Counter {
+  #value = 0
+  readonly #mutex = new Mutex()
+
+  async increment(): Promise<void> {
+    await this.#mutex.runExclusive(() => {
+      this.#value += 1
+    })
+  }
+
+  // No lock needed to read a single number, but it would be for any
+  // multi-field invariant: reading two fields that must agree is itself
+  // a critical section.
+  get value(): number {
+    return this.#value
+  }
+}
+
+const counter = new Counter()
+await Promise.all(Array.from({ length: 1000 }, () => counter.increment()))
+console.log(counter.value) // Always 1000
+```
+
+```java
+// Three ways, in increasing order of how much you should reach for them.
+
+// 1. An atomic. For a single variable this is the right answer: it is
+//    lock-free, so there is no contention and nothing to forget.
+AtomicInteger counter = new AtomicInteger();
+
+try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
+    for (int i = 0; i < 1000; i++) {
+        executor.submit(counter::incrementAndGet);
+    }
+}
+System.out.println(counter.get()); // Always 1000
+
+// 2. An explicit lock, for a critical section spanning several lines.
+//    The unlock MUST be in a finally block: an exception between lock
+//    and unlock otherwise deadlocks every other thread forever.
+private final ReentrantLock lock = new ReentrantLock();
+
+void increment() {
+    lock.lock();
+    try {
+        counter++;
+    } finally {
+        lock.unlock(); // this is Java's `defer mu.Unlock()`
+    }
+}
+
+// 3. `synchronized`, the oldest form. Avoid it with VIRTUAL threads on
+//    Java 21: a synchronized block PINS the virtual thread to its
+//    carrier, so a blocking call inside one blocks a real OS thread and
+//    quietly undoes the reason you used virtual threads at all.
+//    (Fixed in Java 24; on 21 through 23, prefer ReentrantLock.)
+```
+
+### Canali: l'approccio preferito di Go
+
+Go ha un famoso proverbio: _"Non comunicare condividendo la memoria; condividi la memoria comunicando."_ Invece di più goroutine che scrivono su una variabile condivisa (che necessita di un mutex), puoi usare **canali**: pipe tipizzate attraverso le quali le goroutine inviano e ricevono valori. Solo la goroutine che _possiede_ i dati li modifica; altri inviano messaggi per richiedere modifiche.
+
+```go
+package main
+
+import "fmt"
+
+func counterService(ch chan int, done chan bool) {
+    counter := 0
+    for {
+        select {
+        case delta := <-ch:
+            counter += delta   // Only this goroutine modifies counter
+        case done <- counter:
+            return
+        }
+    }
+}
+
+func main() {
+    ch := make(chan int, 100)     // Buffered channel
+    done := make(chan bool)
+
+    go counterService(ch, done)
+
+    // 1000 goroutines send +1 through the channel
+    for i := 0; i < 1000; i++ {
+        ch <- 1
+    }
+
+    result := <-done
+    fmt.Println(result) // 1000, no race condition, no mutex needed
+}
+```
+
+### Il blocco asincrono: un blocco diverso per un punto di snervamento diverso
+
+Un blocco del threading BLOCCA il thread in attesa, che nel codice asincrono significa bloccare l'intero ciclo di eventi e tutto il resto era in esecuzione. I runtime asincroni forniscono pertanto un secondo blocco che sospende solo l'attività in attesa. Usare quello sbagliato è un classico deadlock: `threading.Lock` all'interno di una coroutine fermerà il ciclo che avrebbe dovuto rilasciarla.
+
+```python
+import asyncio
+
+balance = 100
+lock = asyncio.Lock()
+
+async def withdraw(amount: int):
+    global balance
+    async with lock:                     # Only one coroutine at a time
+        if balance >= amount:
+            await process_withdrawal(amount)
+            balance -= amount
+
+# Now safe, second withdraw waits for the lock
+await asyncio.gather(
+    withdraw(100),
+    withdraw(100),
+)
+print(balance)  # 0, not -100
+```
+
+<Callout type="info" title="Riferimento">
+[Python, threading.Lock](https://docs.python.org/3/library/threading.html#lock-objects) [Python, asyncio.Lock](https://docs.python.org/3/library/asyncio-sync.html#asyncio.Lock) [Vai, il modello di memoria Go](https://go.dev/ref/mem) [Vai, Vai effettivo: Canali](https://go.dev/doc/effective_go#channels) [Vai sul blog, condividi la memoria comunicando](https://go.dev/blog/codelab-share)
+</Callout>
+
+---
+
+13
+
+## Scegliere il modello giusto
+
+Ecco il riassunto pratico, quando usare cosa e perché.
+
+| Carico di lavoro | Miglior modello | Perché | Esempi |
+| ------------------------------ | --------------------------------------------------- | ------------------------------------------------------------------- | ------------------------------------------------------------- |
+| **Limitato a IO, concorrenza elevata** | Ciclo di eventi / attesa asincrona / goroutine | Overhead minimo, nessun cambio di contesto, gestisce oltre 100.000 connessioni | Server Web, gateway API, proxy di microservizi, server di chat |
+| **CPU-Bound, parallelizzabile** | Thread del sistema operativo con parallelismo (core multipli) | Vera esecuzione simultanea; più core = proporzionalmente più veloce | Elaborazione di immagini, codifica video, inferenza ML, crittografia |
+| **IO misto + CPU** | Goroutine (Go) o pool di lavoratori + asincrono (Python/JS) | IO gestito contemporaneamente; Lavoro della CPU scaricato su pool di thread/processi | La maggior parte dei backend del mondo reale, chiamate API + alcuni calcoli |
+
+<Callout type="info" title="La linea di fondo">
+La **concorrenza** mantiene il tuo programma produttivo, impedisce alla CPU di rimanere inattiva mentre attende l'I/O. Utilizzare `async/await`, goroutine o thread virtuali per questo.
+
+Il **Parallelismo** ti consente di utilizzare più core della CPU per eseguire più calcoli _nello stesso istante_. Utilizzare thread del sistema operativo o pool di processi per questo.
+
+La maggior parte delle applicazioni backend sono **in larga misura legate all'IO**: il collo di bottiglia è quasi sempre la rete, non la CPU. Ma quando si affronta il lavoro legato alla CPU, il parallelismo è lo strumento che sblocca più throughput.
+</Callout>
+
+### Primitive di concorrenza specifiche del linguaggio
+
+| Lingua | Concorrenza IO | Parallelismo della CPU | Meccanismo sottostante |
+| -------------- | -------------------------------------- | ---------------------------------------- | ---------------------------------------------- |
+| **Vai** | `go func()` (goroutine) | Goroutine tra core (automatiche) | M:N programmatore + `epoll`/`kqueue`               |
+| **Pitone** | `asyncio` + `async/await`              | `multiprocessing` / `concurrent.futures` | Loop di eventi + pool di processi (thread limiti GIL) |
+| **JavaScript** | `async/await` / Promises               | `worker_threads` / `cluster`             | Ciclo eventi libuv |
+| **Java (21+)** | Discussioni virtuali (`Thread.ofVirtual()`) | Discussioni sulla piattaforma + ForkJoinPool | Schedulazione M:N basata sulla continuazione |
+| **Ruggine** | `async/await` + Tempo di esecuzione di Tokyo | `std::thread` / Rayon                    | Multi-threaded work-stealing async runtime     |
+
+---
+
+14
+
+## Ulteriori letture
+
+### Libri
+
+- **Sistemi operativi: tre pezzi facili** di Remzi e Andrea Arpaci-Dusseau, lo standard di riferimento per comprendere thread, pianificazione e concorrenza a livello di sistema operativo. [Gratuito on-line](https://pages.cs.wisc.edu/~remzi/OSTEP/).
+- **Concurrency in Go** di Katherine Cox-Buday, approfondimento su goroutine, canali, modelli e insidie.
+- **Python fluente, cap. 19-21** di Luciano Ramalho, concorrenza con thread, processi e asincio.
+
+### Documentazione e articoli
+
+<Callout type="info" title="Documenti Web MDN">
+[MDN, Il ciclo degli eventi](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Event_loop) [MDN, JavaScript asincrono](https://developer.mozilla.org/en-US/docs/Learn_web_development/Extensions/Async_JS) [MDN, funzione asincrona](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Statements/async_function)
+</Callout>
+
+<Callout type="info" title="Vai alla documentazione">
+[Vai effettivo, concorrenza](https://go.dev/doc/effective_go#concurrency) [Un Tour di Go, Goroutines](https://go.dev/tour/concurrency/1) [Vai al blog, modelli di concorrenza](https://go.dev/blog/pipelines)
+</Callout>
+
+<Callout type="info" title="Documentazione Python">
+[Python, libreria asincrona](https://docs.python.org/3/library/asyncio.html) [Python, modulo di threading](https://docs.python.org/3/library/threading.html) [Python, modulo multiprocessore](https://docs.python.org/3/library/multiprocessing.html)
+</Callout>
+
+<Callout type="info" title="Linux/Sistemi">
+[epoll(7), Multiplexing IO Linux](https://man7.org/linux/man-pages/man7/epoll.7.html) [pthreads(7), thread POSIX](https://man7.org/linux/man-pages/man7/pthreads.7.html) [Wikipedia, Il problema C10k](https://en.wikipedia.org/wiki/C10k_problem)
+</Callout>
+
+---
+
+Backend dai Primi Principi / Capitolo 20 / Concorrenza. Il codice è destinato a Go 1.22+, Python 3.11+, Node.js 20+, TypeScript 5+ e Java 21+.

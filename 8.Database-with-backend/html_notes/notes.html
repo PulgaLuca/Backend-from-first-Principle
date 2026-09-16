@@ -1,0 +1,1100 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="referrer" content="no-referrer">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Database / Capitolo 08 / Backend dai principi primi</title>
+  <meta name="description" content="Capitolo 08 di Backend dai primi principi: database. Note sui principi primi, diagrammi ed esempi eseguibili in Go e Python.">
+  <meta name="theme-color" content="#f3ede2">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2032%2032'%3E%3Crect%20width='32'%20height='32'%20rx='7'%20fill='%23b8402e'/%3E%3Ctext%20x='16'%20y='23'%20font-family='Georgia,serif'%20font-size='19'%20font-weight='700'%20fill='%23f3ede2'%20text-anchor='middle'%3EB%3C/text%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<style>
+:root{
+  --paper: #f3ede2;
+  --paper-2: #ece3d4;
+  --paper-3: #e6dcca;
+  --ink: #211e1a;
+  --ink-soft: #5b5347;
+  --ink-faint: #8d8475;
+  --accent: #b8402e;
+  --accent-2: #8f2f20;
+  --accent-soft: #f4ded6;
+  --accent-line: #e3c4b8;
+  --green: #3f6f4e;
+  --green-soft: #e0e9dd;
+  --green-line: #bcd3b6;
+  --blue: #37607f;
+  --blue-soft: #dee5ee;
+  --gold: #b07d2b;
+  --gold-soft: #f0e5c9;
+  --border: #d8cfbe;
+  --border-2: #c7bca6;
+  --code-bg: #232019;
+  --code-2: #1a1813;
+  --code-text: #e9e2d3;
+  --code-faint: #9c948a;
+  --c-kw: #e0896a;
+  --c-str: #a9c98a;
+  --c-com: #7d7468;
+  --c-num: #d8b66a;
+  --c-fn: #7fb0c9;
+}
+*{box-sizing:border-box;}
+html{scroll-behavior:smooth;}
+body{
+  margin:0; background:var(--paper); color:var(--ink);
+  font-family:"Spline Sans", system-ui, sans-serif; font-size: 17px; line-height: 1.7;
+  -webkit-font-smoothing:antialiased;
+}
+body::before{
+  content:""; position:fixed; inset:0; pointer-events:none; z-index:0; opacity:.5;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+}
+.kicker{font-family:"JetBrains Mono", ui-monospace, monospace; font-size:.66rem; letter-spacing:.24em; text-transform:uppercase; color:var(--accent); font-weight:600;}
+.page-title{font-family:"Fraunces", Georgia, serif; font-weight:900; font-size:3rem; line-height:1.02; letter-spacing:-.02em; margin:.32em 0 .25em;}
+.lede{font-size: 19px; color:var(--ink-soft); line-height: 1.6; max-width:43em; font-weight:300;}
+.divider{height:1px; background:var(--border); border:0; margin:42px 0;}
+section{scroll-margin-top:24px;}
+.sec-head{display:flex; align-items:center; gap:16px; margin:62px 0 22px;}
+.sec-num{font-family:"JetBrains Mono", ui-monospace, monospace; font-weight:600; font-size:.82rem; color:#fff; background:var(--accent); border-radius:8px; padding:7px 11px; line-height:1; flex-shrink:0; box-shadow:0 2px 0 #8f2f20;}
+.sec-head h2{font-family:"Fraunces", Georgia, serif; font-weight:700; font-size:1.88rem; letter-spacing:-.01em; margin:0; line-height:1.1;}
+h3{font-family:"Fraunces", Georgia, serif; font-weight:600; font-size:1.26rem; margin:38px 0 12px; letter-spacing:-.01em;}
+h4{font-family:"Fraunces", Georgia, serif; font-weight:600; font-size:1.04rem; margin:26px 0 8px;}
+p{margin:0 0 16px;}
+strong{font-weight:600; color:var(--ink);}
+a.ext{color:var(--accent); text-decoration:none; border-bottom:1px solid var(--accent-line);}
+code{font-family:"JetBrains Mono", ui-monospace, monospace; font-size:.82em; background:var(--paper-3); border:1px solid var(--border); border-radius:5px; padding:1px 6px; color:#8f2f20; white-space:nowrap;}
+ul,ol{margin:0 0 18px; padding-left:0; list-style:none;}
+ul li,ol li{position:relative; padding-left:26px; margin:9px 0;}
+ul li::before{content:">"; position:absolute; left:6px; color:var(--accent); font-weight:700; font-size:1.05em;}
+ol{counter-reset:ol;}
+ol li{counter-increment:ol;}
+ol li::before{content:counter(ol); position:absolute; left:0; top:2px; font-family:"JetBrains Mono", ui-monospace, monospace; font-size:.62rem; font-weight:600; color:var(--accent); background:var(--accent-soft); width:18px; height:18px; border-radius:50%; display:flex; align-items:center; justify-content:center;}
+.code{background:var(--code-bg); border-radius:11px; margin:22px 0; overflow:hidden; box-shadow:0 14px 30px -16px rgba(40,30,20,.55); border:1px solid #35302a;}
+.code-top{display:flex; align-items:center; gap:14px; padding:10px 15px; background:var(--code-2); border-bottom:1px solid #35302a;}
+.dots{display:flex; gap:7px;}
+.dots i{width:11px; height:11px; border-radius:50%; display:block;}
+.dots i:nth-child(1){background:#d05a47;} .dots i:nth-child(2){background:#cf9f4b;} .dots i:nth-child(3){background:#5a9a5f;}
+.tabs{display:flex; gap:4px; margin-left:6px;}
+.tab{font-family:"JetBrains Mono", ui-monospace, monospace; font-size:.72rem; color:var(--code-faint); background:transparent; border:0; padding:4px 12px; border-radius:6px; cursor:pointer; font-weight:500; transition:all .15s;}
+.tab:hover{color:var(--code-text);}
+.tab.active{background:#1a1813; color:#d8b66a;}
+.code-cap{margin-left:auto; font-family:"JetBrains Mono", ui-monospace, monospace; font-size:.66rem; color:var(--code-faint);}
+.code-body{margin:0; padding:17px 19px; overflow-x:auto; font-family:"JetBrains Mono", ui-monospace, monospace; font-size:.79rem; line-height:1.7; color:var(--code-text); white-space:pre; tab-size:2;}
+.code-body.hidden{display:none;}
+.code-body::-webkit-scrollbar{height:8px;}
+.code-body::-webkit-scrollbar-thumb{background:#4a443b; border-radius:4px;}
+.c-kw{color:var(--c-kw);} .c-str{color:var(--c-str);} .c-com{color:var(--c-com); font-style:italic;} .c-num{color:var(--c-num);} .c-fn{color:var(--c-fn);}
+.wire{background:var(--code-bg); color:var(--code-text); font-family:"JetBrains Mono", ui-monospace, monospace; font-size:.79rem; line-height:1.7; border-radius:11px; padding:17px 19px; margin:20px 0; overflow-x:auto; white-space:pre; border:1px solid #35302a;}
+.wire .m{color:#e0896a;} .wire .h{color:#7fb0c9;} .wire .v{color:#a9c98a;} .wire .cm{color:#7d7468; font-style:italic;}
+.diagram{background:var(--paper-3); border:1px solid var(--border); border-radius:13px; padding:26px 26px 22px; margin:26px 0; position:relative;}
+.diagram-label{font-family:"JetBrains Mono", ui-monospace, monospace; font-size:.62rem; letter-spacing:.18em; text-transform:uppercase; color:var(--accent); font-weight:600; margin-bottom:18px; display:flex; align-items:center; gap:8px;}
+.diagram-label::before{content:""; width:22px; height:1px; background:var(--accent); display:inline-block;}
+.diagram svg{display:block; width:100%; height:auto;}
+.dg-note{font-size:.84rem; color:var(--ink-faint); margin-top:14px; font-style:italic; line-height:1.5;}
+.tbl-wrap{margin:22px 0; overflow-x:auto; border:1px solid var(--border); border-radius:11px;}
+table{width:100%; border-collapse:collapse; font-size:.87rem; background:var(--paper-3);}
+thead th{font-family:"JetBrains Mono", ui-monospace, monospace; font-size:.63rem; letter-spacing:.1em; text-transform:uppercase; color:var(--accent); font-weight:600; text-align:left; padding:13px 16px; border-bottom:1.5px solid var(--border-2); white-space:nowrap;}
+tbody td{padding:12px 16px; border-bottom:1px solid var(--border); vertical-align:top; line-height:1.5;}
+tbody tr:last-child td{border-bottom:0;}
+tbody tr:hover{background:var(--paper-2);}
+td code, th code{white-space:nowrap;}
+.callout{border-radius:11px; padding:18px 20px 16px; margin:24px 0; border:1px solid; position:relative;}
+.callout .clabel{font-family:"JetBrains Mono", ui-monospace, monospace; font-size:.62rem; letter-spacing:.16em; text-transform:uppercase; font-weight:600; margin-bottom:9px; display:block;}
+.callout p:last-child{margin-bottom:0;}
+.callout.trap{background:var(--accent-soft); border-color:var(--accent-line);} .callout.trap .clabel{color:var(--accent);}
+.callout.model{background:var(--gold-soft); border-color:#ddc79a;} .callout.model .clabel{color:var(--gold);}
+.callout.tip{background:var(--green-soft); border-color:var(--green-line);} .callout.tip .clabel{color:var(--green);}
+.callout.note{background:var(--blue-soft); border-color:#b9c8da;} .callout.note .clabel{color:var(--blue);}
+.steps{margin:20px 0;}
+.step{display:flex; gap:15px; margin:14px 0; align-items:flex-start;}
+.step .sn{flex-shrink:0; width:27px; height:27px; border-radius:50%; background:var(--accent); color:#fff; font-family:"JetBrains Mono", ui-monospace, monospace; font-size:.78rem; font-weight:600; display:flex; align-items:center; justify-content:center; margin-top:2px;}
+.step.g .sn{background:var(--green);}
+.step .sb{flex:1;}
+.pill{font-family:"JetBrains Mono", ui-monospace, monospace; font-size:.66rem; padding:3px 9px; border-radius:20px; font-weight:600; letter-spacing:.04em;}
+.pill.a{background:var(--green-soft); color:var(--green); border:1px solid var(--green-line);}
+.pill.b{background:var(--accent-soft); color:var(--accent); border:1px solid var(--accent-line);}
+.pill.c{background:var(--blue-soft); color:var(--blue); border:1px solid #b9c8da;}
+.footer{margin-top:80px; padding-top:26px; border-top:1px solid var(--border); font-size:.82rem; color:var(--ink-faint); font-family:"JetBrains Mono", ui-monospace, monospace;}
+.footer a{color:var(--accent); text-decoration:none;}
+@media(max-width:980px){ .page-title{font-size:2.2rem;}}</style>
+<style>
+.chapter-nav{position:fixed;bottom:0;left:0;right:0;z-index:9998;display:flex;align-items:center;justify-content:space-between;padding:14px clamp(16px,4vw,48px);background:rgba(243,237,226,.88);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border-top:1.5px solid #c7bca6;box-shadow:0 -8px 32px -16px rgba(40,30,20,.18);font-family:"JetBrains Mono", ui-monospace, monospace;}
+.nav-chapter-link{display:flex;align-items:center;gap:12px;text-decoration:none;color:#5b5347;padding:10px 18px;border-radius:10px;transition:all .2s ease;max-width:38%;}
+.nav-chapter-link:hover{background:rgba(184,64,46,.08);color:#b8402e;transform:translateY(-1px);}
+.nav-chapter-link.nav-next{text-align:right;flex-direction:row;}
+.nav-arrow{font-size:22px;color:#b8402e;font-weight:700;flex:none;}
+.nav-label{display:flex;flex-direction:column;gap:2px;font-size:13.5px;line-height:1.3;}
+.nav-small{font-size:10px;letter-spacing:.22em;text-transform:uppercase;color:#8d8475;font-weight:600;}
+.nav-indicator{font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:#b8402e;font-weight:700;text-decoration:none;padding:8px 16px;border:1.5px solid #c7bca6;border-radius:40px;background:rgba(255,255,255,.5);transition:all .2s;white-space:nowrap;}
+.nav-indicator:hover{background:#b8402e;color:#fff;border-color:#b8402e;}
+.nav-dot{display:inline-block;width:7px;height:7px;background:#b8402e;border-radius:50%;margin-right:4px;vertical-align:middle;}
+.nav-sep{color:#c7bca6;margin:0 2px;}
+.nav-disabled{visibility:hidden;pointer-events:none;}
+@media(max-width:700px){.nav-label{font-size:11.5px;}.nav-chapter-link{padding:8px 10px;max-width:38%;}.chapter-nav{padding:10px 12px;}.nav-small{font-size:9px;letter-spacing:.16em;}}
+@media(max-width:520px){.nav-label{display:none;}.nav-chapter-link{max-width:none;padding:8px 12px;}.nav-arrow{font-size:20px;}.nav-indicator{font-size:11px;padding:7px 13px;letter-spacing:.12em;}}
+body{padding-bottom:80px;}
+</style>
+  <link rel="stylesheet" href="../../assets/copy-button.css">
+  <link rel="stylesheet" href="../../assets/enhancements.css">
+  <link rel="stylesheet" href="../../assets/shell.css">
+  <link rel="stylesheet" href="../../assets/theme.css">
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;0,9..144,900;1,9..144,400;1,9..144,600&family=Spline+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="../../assets/theme.js"></script>
+</head>
+<body>
+<button class="bfp-toc-toggle" id="bfpTocToggle" aria-controls="bfpToc" aria-expanded="false"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><line x1="2" y1="4" x2="14" y2="4"/><line x1="2" y1="8" x2="14" y2="8"/><line x1="2" y1="12" x2="14" y2="12"/></svg>Contenuto</button>
+<div class="bfp-toc-scrim" id="bfpTocScrim"></div>
+<div class="bfp-shell">
+    <aside class="bfp-toc" id="bfpToc">
+      <div class="bfp-brand"><span class="bfp-brand-name">Postgres</span><span class="bfp-brand-slash">/</span><span class="bfp-brand-lens">l'obiettivo del back-end</span></div>
+      <div class="bfp-brand-sub">Capitolo 08 / Manuale da campo</div>
+      <div class="bfp-toc-rule"></div>
+      <nav class="bfp-toc-nav">
+        <a class="bfp-toc-link" href="#s1"><span class="bfp-toc-num">01</span><span class="bfp-toc-text">Perché esistono i database</span></a>
+        <a class="bfp-toc-link" href="#s2"><span class="bfp-toc-num">02</span><span class="bfp-toc-text">Disco contro RAM</span></a>
+        <a class="bfp-toc-link" href="#s3"><span class="bfp-toc-num">03</span><span class="bfp-toc-text">DBMS e perché no file di testo</span></a>
+        <a class="bfp-toc-link" href="#s4"><span class="bfp-toc-num">04</span><span class="bfp-toc-text">Relazionale vs NoSQL</span></a>
+        <a class="bfp-toc-link" href="#s5"><span class="bfp-toc-num">05</span><span class="bfp-toc-text">Perché Postgres</span></a>
+        <a class="bfp-toc-link" href="#s6"><span class="bfp-toc-num">06</span><span class="bfp-toc-text">Tipi di dati</span></a>
+        <a class="bfp-toc-link" href="#s7"><span class="bfp-toc-num">07</span><span class="bfp-toc-text">Migrazioni</span></a>
+        <a class="bfp-toc-link" href="#s8"><span class="bfp-toc-num">08</span><span class="bfp-toc-text">Relazioni di modellazione</span></a>
+        <a class="bfp-toc-link" href="#s9"><span class="bfp-toc-num">09</span><span class="bfp-toc-text">Vincoli e integrità</span></a>
+        <a class="bfp-toc-link" href="#s10"><span class="bfp-toc-num">10</span><span class="bfp-toc-text">Interrogazione e join</span></a>
+        <a class="bfp-toc-link" href="#s11"><span class="bfp-toc-num">11</span><span class="bfp-toc-text">Indici</span></a>
+        <a class="bfp-toc-link" href="#s12"><span class="bfp-toc-num">12</span><span class="bfp-toc-text">Trigger</span></a>
+        <a class="bfp-toc-link" href="#s13"><span class="bfp-toc-num">13</span><span class="bfp-toc-text">Transazioni e ACID</span></a>
+        <a class="bfp-toc-link" href="#s14"><span class="bfp-toc-num">14</span><span class="bfp-toc-text">Elementi essenziali della produzione</span></a>
+      </nav>
+    </aside>
+    <main class="bfp-content">
+  <div class="kicker">Un riferimento dettagliato al backend</div>
+  <h1 class="page-title">Padroneggiare i database<br>con Postgres</h1>
+  <p class="lede">Interagire con un database è la cosa più frequente che fa un ingegnere di backend. Questo capitolo ricostruisce l'intero quadro da zero, spiegando perché esistono i database, perché vivono su disco, come modellare relazioni reali, come interrogarle in modo sicuro e veloce e le due leve prestazionali (indici e trigger) che separano un giocattolo dalla produzione. Tutto si basa su un esempio concreto: una piattaforma di gestione dei progetti.</p>
+  <hr class="divider">
+
+  <!-- 01 -->
+  <section id="s1">
+    <div class="sec-head"><span class="sec-num">01</span><h2>Perché esistono i database</h2></div>
+    <p>Fondamentalmente un database è semplicemente un modo per farlo <strong>mantenere le informazioni tra le sessioni</strong>. Persistenza significa archiviare i dati in modo che sopravvivano anche dopo l'arresto del programma che li ha creati. Pensa a un'app da fare: aggiungi elementi, ne selezioni alcuni, chiudi l'app e quando la riapri, tutto è esattamente come l'avevi lasciato. Senza perseveranza inizieresti da un elenco vuoto ogni volta e perderesti tutti i tuoi progressi. Questa continuità, nel tempo e tra le macchine, è il punto centrale.</p>
+
+    <h3>&quot;Database&quot; è una parola sorprendentemente ampia</h3>
+    <p>Nel senso più semplice, <em>qualsiasi archiviazione strutturata</em> è una banca dati. L'elenco dei contatti del tuo telefono è un database. Quello del browser <code>localStorage</code>, <code>sessionStorage</code>e i cookie, tutti gli archivi di valori-chiave che puoi controllare in DevTools -&gt; Applicazione, sono database. Anche un file di testo semplice in cui annoti le note è un database molto semplice. Il filo conduttore: un sistema persistente che ti permette <strong>creare, leggere, aggiornare ed eliminare</strong> dati, CRUD.</p>
+
+    <h3>Cosa significa &quot;database&quot; in un contesto backend</h3>
+    <p>Quella definizione generica non è ciò che di solito intendono gli ingegneri. Nel contesto dei server e dei sistemi backend, &quot;database&quot; significa quasi sempre a <strong>database basato su disco</strong>: dati memorizzati su un disco rigido (HDD) o un'unità a stato solido (SSD). <em>Perchè disco?</em> Questa è la sezione successiva, ed è l'idea fondamentale più importante qui.</p>
+
+    <div class="callout model">
+      <span class="clabel">Modello mentale</span>
+      <p>Un database è un livello di persistenza che offre CRUD. Nello specifico nel lavoro di backend, è a <strong>basato su disco</strong> strato di persistenza, scelto deliberatamente per la capacità rispetto alla velocità pura. Tutto il resto di questo capitolo deriva da questo compromesso.</p>
+    </div>
+  </section>
+
+  <!-- 02 -->
+  <section id="s2">
+    <div class="sec-head"><span class="sec-num">02</span><h2>Disco contro RAM</h2></div>
+    <p>La tua CPU può raggiungere due tipi di memoria. <strong>RAM (memoria primaria)</strong> è estremamente veloce ma costoso e con disponibilità limitata, la maggior parte delle macchine ha 8, 16, 32, forse 64-128 GB. <strong>Disco (memoria secondaria)</strong>: HDD o SSD, è molto più economico e molto più abbondante, in genere da 512 GB a diversi TB, ma è più lento da leggere e scrivere.</p>
+
+    <div class="diagram">
+      <div class="diagram-label">Il compromesso fondamentale</div>
+      <svg viewBox="0 0 720 210" xmlns="http://www.w3.org/2000/svg" font-family="JetBrains Mono, monospace" font-size="11">
+        <!-- RAM -->
+        <rect x="30" y="24" width="300" height="160" rx="11" fill="#dee5ee" stroke="#b9c8da"/>
+        <text x="180" y="52" text-anchor="middle" fill="#37607f" font-size="14" font-weight="600">RAM/primaria</text>
+        <text x="180" y="80" text-anchor="middle" fill="#211e1a" font-size="11">molto veloce</text>
+        <text x="180" y="102" text-anchor="middle" fill="#211e1a" font-size="11">costoso/scarso</text>
+        <text x="180" y="124" text-anchor="middle" fill="#211e1a" font-size="11">volatile (perso allo spegnimento)</text>
+        <text x="180" y="150" text-anchor="middle" fill="#37607f" font-size="10.5" font-weight="600">utilizzato per la memorizzazione nella cache (Redis)</text>
+        <text x="180" y="170" text-anchor="middle" fill="#5b5347" font-size="9.5">~8-128GB</text>
+        <!-- DISK -->
+        <rect x="390" y="24" width="300" height="160" rx="11" fill="#f0e5c9" stroke="#ddc79a"/>
+        <text x="540" y="52" text-anchor="middle" fill="#b07d2b" font-size="14" font-weight="600">DISCO/secondario</text>
+        <text x="540" y="80" text-anchor="middle" fill="#211e1a" font-size="11">più lento</text>
+        <text x="540" y="102" text-anchor="middle" fill="#211e1a" font-size="11">economico/abbondante</text>
+        <text x="540" y="124" text-anchor="middle" fill="#211e1a" font-size="11">persistente (sopravvive allo spegnimento)</text>
+        <text x="540" y="150" text-anchor="middle" fill="#b07d2b" font-size="10.5" font-weight="600">utilizzato per DATABASE (Postgres)</text>
+        <text x="540" y="170" text-anchor="middle" fill="#5b5347" font-size="9.5">~512 GB, più TB</text>
+      </svg>
+      <p class="dg-note">Le cache (Redis, archivi in memoria) risiedono nella RAM perché il recupero dalla memoria primaria è incredibilmente veloce. I database tradizionali risiedono su disco perché ciò che conta di più per l'archiviazione è <em>capacità</em>, e possiamo scambiare un po' di velocità con molto più spazio a costi molto inferiori.</p>
+    </div>
+
+    <p>Quindi lo schema è: <strong>memorizzazione nella cache = RAM</strong> (velocità critica, piccolo), <strong>database = disco</strong> (critico in termini di capacità, di grandi dimensioni). Postgres, MySQL, MongoDB, memorizzano tutti i propri dati su disco. <em>Come</em> disporre i byte sul disco è un'area profonda e affascinante, ma come ingegnere backend a livello di applicazione il punto essenziale è proprio questo compromesso. (Ed è esattamente il motivo per cui gli indici, nella sezione 11, sono così importanti: sono il modo in cui riduciamo la velocità dalle ricerche lente del disco.)</p>
+  </section>
+
+  <!-- 03 -->
+  <section id="s3">
+    <div class="sec-head"><span class="sec-num">03</span><h2>DBMS e perché non solo file di testo</h2></div>
+    <p>Archiviare i dati su disco non è sufficiente, abbiamo bisogno di modi efficienti per recuperarli, modificarli ed eliminarli, su centinaia di gigabyte. Questo è il lavoro di a <strong>DBMS (sistema di gestione del database)</strong>: software il cui unico scopo è archiviare dati e fornire operazioni CRUD efficienti su di essi. Ad alto livello un DBMS ha due compiti, <strong>memorizzare i dati</strong> e <strong>servire le operazioni</strong> su di esso, oltre a una serie di responsabilità:</p>
+
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>Responsabilità</th><th>Cosa significa</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Organizzazione dei dati</strong></td><td>Disporre i dati in modo che il recupero/aggiornamento/inserimento sia efficiente.</td></tr>
+          <tr><td><strong>Accesso</strong></td><td>Fornire metodi per CRUD, creare, leggere, aggiornare, eliminare.</td></tr>
+          <tr><td><strong>Integrità</strong></td><td>Mantenere i dati accurati e validi, ad es. un <code>payment</code> Il campo accetta solo numeri, mai una stringa vagante.</td></tr>
+          <tr><td><strong>Sicurezza</strong></td><td>Proteggi i dati dall'accesso non autorizzato tramite utenti e ruoli.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>Perché un file di testo semplice va in pezzi</h3>
+    <p>Prima che esistesse il software DBMS, le persone provavano a memorizzare tutto in file di testo. Si rompe per tre ragioni concrete:</p>
+
+    <h4>1. L'analisi è lenta e soggetta a errori</h4>
+    <p>Per trovare un cliente scriveresti il codice dell'applicazione per leggere il file, dividere ogni riga e confrontare ogni campo, un'operazione lenta e ancora più lenta in linguaggi come JavaScript o Python che in qualcosa come Rust. Peggio ancora, l'analisi manuale è fragile: un errore e si corromperanno i dati o si consegnerà al cliente il record sbagliato.</p>
+
+    <h4>2. Non c'è struttura</h4>
+    <p>I file di testo non hanno uno schema formale. Puoi scaricare qualsiasi testo in qualsiasi forma, quindi non puoi imporre &quot;questo campo deve sempre essere un numero&quot;. Non c'è modo di garantire la coerenza, sono solo stringhe.</p>
+
+    <h4>3. Nessun controllo della concorrenza</h4>
+    <p>Questo è l'assassino. Cosa succede quando due persone aggiornano lo stesso valore contemporaneamente?</p>
+
+    <div class="diagram">
+      <div class="diagram-label">La corsa/importo persi-aggiornamento parte da 40</div>
+      <svg viewBox="0 0 720 230" xmlns="http://www.w3.org/2000/svg" font-family="JetBrains Mono, monospace" font-size="11">
+        <line x1="360" y1="14" x2="360" y2="216" stroke="#d8cfbe" stroke-width="1" stroke-dasharray="3 4"/>
+        <text x="360" y="206" text-anchor="middle" fill="#8d8475" font-size="9">stesso momento</text>
+        <!-- A -->
+        <text x="20" y="44" fill="#37607f" font-weight="600">Utente A (+20)</text>
+        <rect x="150" y="28" width="120" height="30" rx="6" fill="#dee5ee" stroke="#b9c8da"/><text x="210" y="48" text-anchor="middle">legge 40</text>
+        <rect x="400" y="28" width="150" height="30" rx="6" fill="#dee5ee" stroke="#b9c8da"/><text x="475" y="48" text-anchor="middle">scrive 60</text>
+        <!-- B -->
+        <text x="20" y="104" fill="#b8402e" font-weight="600">Utente B (-20)</text>
+        <rect x="150" y="88" width="120" height="30" rx="6" fill="#f4ded6" stroke="#e3c4b8"/><text x="210" y="108" text-anchor="middle">legge 40</text>
+        <rect x="400" y="88" width="150" height="30" rx="6" fill="#f4ded6" stroke="#e3c4b8"/><text x="475" y="108" text-anchor="middle">scrive 20</text>
+        <!-- result -->
+        <rect x="150" y="150" width="400" height="52" rx="9" fill="#232019"/>
+        <text x="350" y="172" text-anchor="middle" fill="#e9e2d3" font-size="11">valore finale = 60 O 20, vince chi ha salvato per ultimo</text>
+        <text x="350" y="190" text-anchor="middle" fill="#e0896a" font-size="11" font-weight="600">un aggiornamento perso silenziosamente/nessuna coerenza</text>
+      </svg>
+      <p class="dg-note">Entrambi ne leggono 40 contemporaneamente. A calcola 60, B calcola 20 e qualunque cosa scriva per ultima distrugge l'altra, non puoi prevedere quale. Un file di testo semplicemente non può arbitrare questo. Un vero DBMS utilizza transazioni e blocchi per rendere coerenti le scritture simultanee.</p>
+    </div>
+
+    <p>Questi tre errori, analisi lenta, assenza di struttura e controllo della concorrenza, sono esattamente il motivo per cui esiste il software DBMS. Prova a far crescere un &quot;database&quot; di file di testo oggi e ne troverai tutti.</p>
+  </section>
+
+  <!-- 04 -->
+  <section id="s4">
+    <div class="sec-head"><span class="sec-num">04</span><h2>Relazionale vs non relazionale</h2></div>
+    <p>Ad alto livello ci sono due principali famiglie di DBMS.</p>
+
+    <div class="diagram">
+      <div class="diagram-label">Due modi per modellare i dati</div>
+      <svg viewBox="0 0 720 220" xmlns="http://www.w3.org/2000/svg" font-family="JetBrains Mono, monospace" font-size="10.5">
+        <!-- relational -->
+        <text x="30" y="26" fill="#3f6f4e" font-size="12" font-weight="600">RELAZIONALE / righe in una tabella rigorosa</text>
+        <g>
+          <rect x="30" y="38" width="300" height="26" fill="#e0e9dd" stroke="#bcd3b6"/><text x="44" y="55" fill="#3f6f4e" font-weight="600">stato del nome identificativo</text>
+          <rect x="30" y="64" width="300" height="24" fill="#e6dcca" stroke="#e2dccf"/><text x="44" y="80">1 Alice attiva</text>
+          <rect x="30" y="88" width="300" height="24" fill="#e6dcca" stroke="#e2dccf"/><text x="44" y="104">2 Bob attivo</text>
+          <rect x="30" y="112" width="300" height="24" fill="#e6dcca" stroke="#e2dccf"/><text x="44" y="128">3 Carol archiviata</text>
+        </g>
+        <text x="30" y="160" fill="#5b5347" font-size="9.5">ogni riga ha le stesse colonne/schema fissate in primo piano</text>
+        <text x="30" y="176" fill="#5b5347" font-size="9.5">interrogato con SQL/collegato da chiavi esterne</text>
+        <!-- nosql -->
+        <text x="390" y="26" fill="#b07d2b" font-size="12" font-weight="600">NON RELAZIONALI/documenti</text>
+        <rect x="390" y="38" width="300" height="46" rx="7" fill="#f0e5c9" stroke="#ddc79a"/>
+        <text x="404" y="56">{ id:1, nome:&quot;Alice&quot;,</text><text x="404" y="72">  tag:[&quot;x&quot;], attivo:true }</text>
+        <rect x="390" y="90" width="300" height="46" rx="7" fill="#f0e5c9" stroke="#ddc79a"/>
+        <text x="404" y="108">{ id:2, nome:&quot;Bob&quot;,</text><text x="404" y="124">  indirizzo:{ città:&quot;BLR&quot; } }</text>
+        <text x="390" y="160" fill="#5b5347" font-size="9.5">ogni documento può differire/schema flessibile</text>
+        <text x="390" y="176" fill="#5b5347" font-size="9.5">&quot;tabella&quot;-&gt;raccolta / &quot;riga&quot;-&gt;documento</text>
+      </svg>
+    </div>
+
+    <h3>Relazionale (SQL)</h3>
+    <p>Un database relazionale organizza i dati in <strong>tavoli</strong> di righe e colonne, con relazioni tra tabelle definite da <strong>chiavi straniere</strong>. La sua caratteristica distintiva è a <strong>schema rigoroso e predefinito</strong>: prima di inserire qualsiasi cosa devi dichiarare la tabella, le sue colonne e il tipo di dati di ciascuna colonna. Non succede nulla &quot;al volo&quot;. Questa severità porta con sé un grande profitto, <strong>integrità dei dati</strong>: in ogni momento puoi scommettere sulla forma e sulla tipologia dei tuoi dati. Interagisci con esso utilizzando <strong>SQL</strong> (Linguaggio di query strutturato). Esempi: PostgreSQL, MySQL, SQL Server.</p>
+
+    <h3>Non relazionale (NoSQL)</h3>
+    <p>I database NoSQL come MongoDB non impongono uno schema. Nel vocabolario di Mongo un tavolo è un <strong>raccolta</strong> e una riga è a <strong>documento</strong>e due documenti nella stessa raccolta possono avere forme completamente diverse. Il vantaggio è <strong>flessibilità</strong>: ottimo quando si crea un prototipo velocemente o quando non si conosce veramente la forma dei dati in anticipo. Il costo è un’integrità più debole: senza uno schema applicato a livello di database, è necessario imporre la correttezza nel codice dell’applicazione, il che aggiunge complessità ed è più soggetto a errori (il codice dell’applicazione cambia costantemente e si insinuano bug).</p>
+
+    <h3>Scegliere con due esempi</h3>
+    <ul>
+      <li><strong>CRM (gestione delle relazioni con i clienti)</strong> -&gt; <strong>relazionale</strong>. I contatti, le opportunità di vendita e le relative relazioni sono dati critici e strutturati che richiedono una forte integrità e query complesse. Postgres è un'ottima soluzione.</li>
+      <li><strong>CMS (sistema di gestione dei contenuti)</strong> -&gt; <strong>non relazionale</strong> (o JSON in Postgres). Un articolo può contenere un'immagine, un blocco di codice, un incorporamento di YouTube, contenuti estremamente vari che non è possibile inserire in uno schema fisso. &quot;Prendi tutto e buttalo via&quot; si addice a un negozio di documenti.</li>
+    </ul>
+  </section>
+
+  <!-- 05 -->
+  <section id="s5">
+    <div class="sec-head"><span class="sec-num">05</span><h2>Perché Postgres</h2></div>
+    <p>Tra tutte le opzioni, Postgres è l'impostazione predefinita sensata per la maggior parte dei progetti, per cinque motivi:</p>
+    <ol>
+      <li><strong>Open source e gratuito.</strong> Non è proprietario, le aziende possono ospitarlo autonomamente sui propri server e ispezionarne la fonte.</li>
+      <li><strong>Conforme allo standard SQL.</strong> SQL standard funziona allo stesso modo di MySQL o SQL Server, quindi la migrazione successiva a un altro motore implica molte meno rielaborazioni.</li>
+      <li><strong>Estensibile.</strong> I documenti contengono circa 1400 pagine; copre quasi tutti i casi d'uso tipici di un SaaS e dispone di un potente sistema di estensione per personalizzarlo.</li>
+      <li><strong>Affidabile e scalabile.</strong> Una comprovata esperienza su vasta scala.</li>
+      <li><strong>Eccellente supporto JSON, la caratteristica decisiva.</strong> Il motivo principale per cui le persone utilizzano MongoDB è &quot;memorizza qualsiasi JSON&quot;. Ma Postgres offre a <code>JSON</code>/<code>JSONB</code> digitare con funzionalità di indicizzazione e query avanzate, in modo da poter archiviare dati dinamici e senza schema <em>dentro</em> un database relazionale. Ciò elimina il solito motivo per lasciare Postgres per un archivio NoSQL.</li>
+    </ol>
+    <div class="callout tip">
+      <span class="clabel">La chiamata pragmatica</span>
+      <p>Troverai articoli che affermano che MySQL ha vantaggi in termini di prestazioni, ma finché non servirai milioni di utenti e inseguirai uno specifico collo di bottiglia, quella differenza non avrà importanza. Il ricco set di funzionalità e JSON di prima classe rendono Postgres una prima scelta per quasi tutti i progetti. Questo è ciò che utilizza il resto di questo capitolo.</p>
+    </div>
+    <div class="callout note">
+      <span class="clabel">SQL vs Postgres / la distinzione</span>
+      <p><strong>SQL</strong> è il <em>lingua</em> in cui scrivi le query. <strong>Postgres</strong> è il <em>sistema di banche dati</em>, il software che esegue tali query. Questo capitolo presuppone che tu abbia imparato le nozioni di base di SQL (SELECT, CREATE TABLE, ORDER BY, GROUP BY) altrove e si concentra sui concetti che contano effettivamente giorno per giorno nel lavoro di backend.</p>
+    </div>
+  </section>
+
+  <!-- 06 -->
+  <section id="s6">
+    <div class="sec-head"><span class="sec-num">06</span><h2>Tipi di dati</h2></div>
+    <p>Ogni colonna in una tabella relazionale ha un tipo fisso. Ecco quelli che utilizzerai effettivamente, con le decisioni che contano.</p>
+
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>Digitare</th><th>Cosa conserva/quando usarlo</th></tr></thead>
+        <tbody>
+          <tr><td><code>serial</code> / <code>bigserial</code></td><td>Intero con incremento automatico (1, 2, 3...) quando lo ometti durante l'inserimento. Utilizzare <code>bigserial</code> nella produzione per una capacità maggiore. Comune per ID interi/chiavi primarie.</td></tr>
+          <tr><td><code>smallint</code> / <code>integer</code> / <code>bigint</code></td><td>Numeri interi di capacità crescente. Scegli in base al numero più grande che devi memorizzare.</td></tr>
+          <tr><td><code>decimal(10,2)</code> / <code>numeric</code></td><td>Numero con precisione esatta, qui, fino a 10 cifre totali, 2 dopo la virgola. <strong>Utilizzare sempre per denaro/prezzo.</strong></td></tr>
+          <tr><td><code>real</code> / <code>double precision</code></td><td>Virgola mobile. Veloce, ma i valori possono differire leggermente da un sistema all'altro. Utilizzare per dati scientifici/di misurazione in cui piccole discrepanze non contano.</td></tr>
+          <tr><td><code>char(n)</code></td><td>Testo a lunghezza fissa, <strong>imbottito di spazi</strong> a <code>n</code>. Evita, eredità.</td></tr>
+          <tr><td><code>varchar(n)</code></td><td>Testo di lunghezza variabile con un massimo di <code>n</code>. Il famoso <code>255</code> è solo un'abitudine di MySQL, priva di significato in Postgres.</td></tr>
+          <tr><td><code>text</code></td><td>Lunghezza variabile, nessun limite. <strong>Preferisco questo</strong> in Postgres (vedi sotto).</td></tr>
+          <tr><td><code>boolean</code></td><td><code>true</code> / <code>false</code>.</td></tr>
+          <tr><td><code>date</code> / <code>time</code> / <code>timestamp</code></td><td>Una data, un'ora o entrambe insieme.</td></tr>
+          <tr><td><code>timestamptz</code></td><td>Timestamp <em>con fuso orario</em>, memorizza anche la zona. Preferisci colonne create/aggiornate.</td></tr>
+          <tr><td><code>interval</code></td><td>Un intervallo come &quot;10 giorni&quot; o &quot;1 settimana&quot;.</td></tr>
+          <tr><td><code>uuid</code></td><td>Identificatore univoco universale. Ottimo per le chiavi primarie, soprattutto nei sistemi distribuiti. Postgres ce l'ha nativamente.</td></tr>
+          <tr><td><code>json</code> / <code>jsonb</code></td><td>Dati JSON. <strong>Preferisco <code>jsonb</code></strong> (binario), Postgres lo serializza nel proprio formato in modo che possa indicizzarlo ed interrogarlo velocemente. Semplice <code>json</code> viene memorizzato come testo.</td></tr>
+          <tr><td><code>type[]</code> (matrice)</td><td>Un array di qualsiasi tipo, <code>integer[]</code>, <code>text[]</code>, ecc.</td></tr>
+          <tr><td>inet/macaddr/punto/xml</td><td>Indirizzi di rete, indirizzi MAC, punti geometrici, XML. Raramente necessario nella quotidianità.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>Decimale vs flottante: la regola del denaro</h3>
+    <p>Per prima cosa decodifica i parametri: <code>decimal(10,2)</code> significa <strong>10 cifre totali, con 2 dopo la virgola decimale</strong>. Quindi puoi conservare <code>12345678.90</code>, contali, sono 10 cifre in tutto il numero, due delle quali a destra del punto. Prova a memorizzare un numero che richiede 11 cifre e il database lo rifiuta.</p>
+    <p>I numeri in virgola mobile sono <em>veloce</em> ma rappresentato in un modo che può differire leggermente da un sistema all'altro, quindi può essere visualizzato lo stesso valore <code>89.87</code> qui e <code>89.9</code> lì. Per un <strong>prezzo</strong>, dove il numero alimenta i calcoli e la precisione è fondamentale, ciò è inaccettabile, <strong>utilizzare sempre <code>decimal</code>/<code>numeric</code></strong>. Per qualcosa come una misurazione dell'area (<code>567.8987</code>) dove una piccola differenza di arrotondamento è innocua, utilizzare <code>float</code> per la velocità.</p>
+    <p>E il naturale seguito: <em>se i decimali sono sempre precisi, perché non usarli ovunque?</em> Poiché questa precisione costa in termini di prestazioni, i float vengono archiviati e calcolati più velocemente, ed è esattamente il motivo per cui i domini scientifici e di misurazione li preferiscono. Regola pratica: <strong>la precisione conta -&gt; decimale; la velocità conta e piccole discrepanze vanno bene -&gt; float.</strong></p>
+
+    <h3>char vs varchar vs testo: preferisci il testo</h3>
+    <p>Tutti e tre memorizzano il testo; la differenza sta nel modo in cui gestiscono la lunghezza. <code>char(10)</code> sempre <strong>cuscinetti su tutta la lunghezza con spazi</strong>: negozio <code>"ab"</code> e il database aggiunge 8 spazi finali prima del salvataggio, perché a <code>char</code> il campo occupa sempre la sua lunghezza dichiarata. <code>varchar(255)</code> memorizza solo ciò che dai (storing <code>"ab"</code> utilizza la lunghezza 2, <code>"abcd"</code> usa 4) fino a un massimo di 255, superalo e ottieni un errore a livello di database. <code>text</code> è <code>varchar</code> senza alcun limite di lunghezza (tecnicamente un limite molto alto, ~1 GB, a cui non ti avvicinerai mai).</p>
+
+    <div class="diagram">
+      <div class="diagram-label">Memorizzazione di &quot;ab&quot; in ogni tipo di stringa</div>
+      <svg viewBox="0 0 720 130" xmlns="http://www.w3.org/2000/svg" font-family="JetBrains Mono, monospace" font-size="10.5">
+        <text x="20" y="30" fill="#b8402e" font-weight="600">carattere(10)</text>
+        <rect x="120" y="16" width="200" height="22" fill="#f4ded6" stroke="#e3c4b8"/><text x="130" y="31">ab________</text>
+        <text x="335" y="31" fill="#5b5347" font-size="9">imbottito a 10/spreca spazio/evita</text>
+        <text x="20" y="66" fill="#37607f" font-weight="600">varchar(255)</text>
+        <rect x="120" y="52" width="44" height="22" fill="#dee5ee" stroke="#b9c8da"/><text x="130" y="67">ab</text>
+        <text x="180" y="67" fill="#5b5347" font-size="9">lunghezza 2 / max 255 / il &quot;255&quot; è un'abitudine MySQL priva di significato</text>
+        <text x="20" y="102" fill="#3f6f4e" font-weight="600">testo</text>
+        <rect x="120" y="88" width="44" height="22" fill="#e0e9dd" stroke="#bcd3b6"/><text x="130" y="103">ab</text>
+        <text x="180" y="103" fill="#5b5347" font-size="9">lunghezza 2 / nessun limite / &lt;- preferisco questo in Postgres</text>
+      </svg>
+    </div>
+
+    <p>I documenti di Postgres lo consigliano <code>text</code>, c'è essenzialmente <strong>nessuna differenza di prestazioni</strong> tra di loro e puoi indicizzare <code>text</code> va bene (un malinteso comune preso in prestito da altri motori come MySQL/SQL Server, che si comportano diversamente e confondono le persone che cambiano). Due ragioni pratiche per impostare l'impostazione predefinita <code>text</code>:</p>
+    <ul>
+      <li><strong>Nessun grattacapo legato alla migrazione.</strong> Se imposti <code>varchar(255)</code> e successivamente necessitano di valori più lunghi, è necessario eseguire una migrazione dello schema che tocchi molti dati, più rischiosa rispetto alla semplice applicazione della lunghezza nel codice dell'applicazione. Come ingegneri di backend interagiamo con il DB tramite un driver e disponiamo comunque del codice dell'applicazione, quindi applica la lunghezza lì e mantieni la migrazione semplice.</li>
+      <li><strong>Autodocumentarsi.</strong> Un numero come <code>varchar(255)</code> <em>sembra</em> significativo, quindi un nuovo compagno di squadra perde tempo a cercare il motivo per cui è 255 (risposta: non è significativo, è un'abitudine MySQL copiata). <code>text</code> si legge in modo chiaro come &quot;un campo di testo&quot;, senza alcun numero fantasma da spiegare.</li>
+    </ul>
+    <p>Utilizzare solo <code>char(n)</code> quando la lunghezza è veramente <em>sempre</em> identico, ad es. codici giornalieri di due lettere <code>Mo</code>, <code>Tu</code>, <code>We</code>, dove il riempimento non avviene mai e si risparmia spazio rispetto alle spese generali di lunghezza variabile.</p>
+
+    <h3>json vs jsonb: preferisci jsonb</h3>
+    <p><code>json</code> viene memorizzato come testo normale; <code>jsonb</code> è serializzato nel formato binario di Postgres. Scegli quasi sempre <strong><code>jsonb</code></strong>: interroga e indicizza molto più velocemente. (È una funzionalità di Postgres, non SQL standard.)</p>
+  </section>
+
+  <!-- 07 -->
+  <section id="s7">
+    <div class="sec-head"><span class="sec-num">07</span><h2>Migrazioni</h2></div>
+    <p>In produzione non basta aprire una GUI come TablePlus e iniziare a eseguire query, non ce ne sarebbe traccia <em>cosa</em> cambiato, <em>quando</em>, o <em>chi</em> lo ha fatto e non c'è modo di controllare lo stato del database nel tempo. Invece, i database utilizzano <strong>migrazioni</strong>: controllo della versione per il tuo schema.</p>
+
+    <h3>Come funziona il flusso di lavoro</h3>
+    <p>Mantieni una cartella di file SQL con nomi in sequenza. Uno strumento da riga di comando (<strong>dbmate</strong>, <strong>golang-migrare</strong>, ecc.) li percorre in ordine e applica l'SQL all'interno di ciascuno al database configurato.</p>
+    <div class="diagram">
+      <div class="diagram-label">I file di migrazione vengono eseguiti in sequenza; una tabella di tracciamento ricorda dove ti trovi</div>
+      <svg viewBox="0 0 720 170" xmlns="http://www.w3.org/2000/svg" font-family="JetBrains Mono, monospace" font-size="10.5">
+        <rect x="20" y="40" width="120" height="60" rx="8" fill="#e0e9dd" stroke="#bcd3b6"/><text x="80" y="66" text-anchor="middle" font-weight="600">001.sql</text><text x="80" y="84" text-anchor="middle" fill="#5b5347" font-size="9">creare utenti</text>
+        <rect x="170" y="40" width="120" height="60" rx="8" fill="#e0e9dd" stroke="#bcd3b6"/><text x="230" y="66" text-anchor="middle" font-weight="600">002.sql</text><text x="230" y="84" text-anchor="middle" fill="#5b5347" font-size="9">dati del seme</text>
+        <rect x="320" y="40" width="120" height="60" rx="8" fill="#e0e9dd" stroke="#bcd3b6"/><text x="380" y="66" text-anchor="middle" font-weight="600">003.sql</text><text x="380" y="84" text-anchor="middle" fill="#5b5347" font-size="9">indici + trigger</text>
+        <line x1="140" y1="70" x2="170" y2="70" stroke="#c7bca6" stroke-width="1.5"/>
+        <line x1="290" y1="70" x2="320" y2="70" stroke="#c7bca6" stroke-width="1.5"/>
+        <line x1="440" y1="70" x2="500" y2="70" stroke="#c7bca6" stroke-width="1.5"/>
+        <rect x="500" y="34" width="200" height="72" rx="9" fill="#232019"/>
+        <text x="600" y="60" text-anchor="middle" fill="#e9e2d3" font-size="10">schema_migrations</text>
+        <text x="600" y="80" text-anchor="middle" fill="#d8b66a" font-size="10">versione = 003</text>
+        <text x="600" y="96" text-anchor="middle" fill="#7d7468" font-size="9">lo strumento sa cosa applicare dopo</text>
+      </svg>
+    </div>
+
+    <p>Ogni file ha due metà: an <strong>verso l'alto la migrazione</strong> (il cambiamento, <code>CREATE TABLE</code>, <code>CREATE INDEX</code>...) e a <strong>migrazione verso il basso</strong> (l'esatto contrario, <code>DROP TABLE</code>...). La metà inferiore esiste in modo che se un cambiamento interrompe la produzione puoi farlo <strong>tornare indietro</strong> allo stato precedente in modo pulito. Lo strumento mantiene a <code>schema_migrations</code> table che contiene la versione corrente, quindi non riesegue mai un file già applicato (che genererebbe un errore con &quot;tabella già esistente&quot;).</p>
+
+    <div class="code">
+      <div class="code-top"><span class="dots"><i></i><i></i><i></i></span>
+        <div class="tabs"><button class="tab active" data-lang="sql">SQL</button></div>
+        <span class="code-cap">un file di migrazione dbmate, metà su e giù</span>
+      </div>
+      <pre class="code-body" data-lang="sql">-- migrate:up
+CREATE TABLE users (
+  id    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  email TEXT NOT NULL UNIQUE
+);
+
+-- migrate:down
+DROP TABLE users;</pre>
+    </div>
+
+    <h3>Perché le migrazioni contano</h3>
+    <ul>
+      <li><strong>Cronologia monitorata.</strong> I file risiedono in git insieme al tuo codice, quindi ogni modifica dello schema nel corso di mesi o anni viene registrata, rivedibile e riproducibile su qualsiasi macchina o server.</li>
+      <li><strong>Rollback.</strong> Le migrazioni verso il basso consentono di ripristinare una modifica errata in una versione sicuramente valida.</li>
+    </ul>
+
+    <h3>Semina</h3>
+    <p>Per i test locali/di sviluppo su cui vuoi che i dati di esempio funzionino prima della distribuzione. Questo è <strong>semina</strong>: una migrazione separata che inserisce righe di test (utenti campione, progetti, ecc.). La procedura consigliata mantiene i dati iniziali nel proprio file di migrazione in modo che siano chiaramente distinti dalle modifiche dello schema.</p>
+  </section>
+
+  <!-- 08 -->
+  <section id="s8">
+    <div class="sec-head"><span class="sec-num">08</span><h2>Relazioni di modellazione</h2></div>
+    <p>Modelleremo una piattaforma di gestione dei progetti (si pensi a Jira/Linear). Dai requisiti tiriamo fuori il <strong>sostantivi</strong> -&gt; tabelle: <code>users</code>, <code>user_profiles</code>, <code>projects</code>, <code>tasks</code>, <code>project_members</code>.</p>
+
+    <div class="callout note">
+      <span class="clabel">Convenzioni di denominazione</span>
+      <p><strong>Plurale</strong> nomi delle tabelle (<code>users</code>, <code>projects</code>) secondo gli standard del settore e <strong>serpente_case</strong> colonne (<code>full_name</code>, <code>password_hash</code>). Perché serpente_case? Postgres lo è <em>senza distinzione tra maiuscole e minuscole</em> per natura, scrivi <code>fullName</code> e lo legge come <code>fullname</code> a meno che non lo si racchiuda ovunque tra virgolette doppie, il che rende brutto il codice dell'applicazione. Snake_case minuscolo elude l'intero problema.</p>
+    </div>
+
+    <p>Le tre forme di relazione sono il cuore della modellazione dei dati. Ecco come viene implementato ciascuno:</p>
+
+    <div class="diagram">
+      <div class="diagram-label">Le tre forme di relazione</div>
+      <svg viewBox="0 0 720 250" xmlns="http://www.w3.org/2000/svg" font-family="JetBrains Mono, monospace" font-size="10">
+        <!-- one to one -->
+        <text x="20" y="22" fill="#3f6f4e" font-weight="600" font-size="11">UNO A UNO</text>
+        <rect x="20" y="32" width="90" height="34" rx="6" fill="#e0e9dd" stroke="#bcd3b6"/><text x="65" y="53" text-anchor="middle">utenti</text>
+        <line x1="110" y1="49" x2="170" y2="49" stroke="#3f6f4e" stroke-width="2"/>
+        <rect x="170" y="32" width="110" height="34" rx="6" fill="#e0e9dd" stroke="#bcd3b6"/><text x="225" y="53" text-anchor="middle">profili_utente</text>
+        <text x="20" y="84" fill="#5b5347" font-size="9">user_id del profilo è SIA la chiave primaria che quella esterna</text>
+        <!-- one to many -->
+        <text x="20" y="120" fill="#37607f" font-weight="600" font-size="11">UNO A MOLTI</text>
+        <rect x="20" y="130" width="90" height="34" rx="6" fill="#dee5ee" stroke="#b9c8da"/><text x="65" y="151" text-anchor="middle">progetti</text>
+        <line x1="110" y1="147" x2="175" y2="135" stroke="#37607f" stroke-width="1.6"/>
+        <line x1="110" y1="147" x2="175" y2="147" stroke="#37607f" stroke-width="1.6"/>
+        <line x1="110" y1="147" x2="175" y2="159" stroke="#37607f" stroke-width="1.6"/>
+        <rect x="175" y="124" width="80" height="20" rx="4" fill="#e6dcca" stroke="#e2dccf"/><text x="215" y="138" text-anchor="middle">compito</text>
+        <rect x="175" y="148" width="80" height="20" rx="4" fill="#e6dcca" stroke="#e2dccf"/><text x="215" y="162" text-anchor="middle">compito</text>
+        <text x="20" y="186" fill="#5b5347" font-size="9">ogni attività contiene una chiave esterna project_id</text>
+        <!-- many to many -->
+        <text x="400" y="120" fill="#b07d2b" font-weight="600" font-size="11">MOLTI A MOLTI</text>
+        <rect x="400" y="130" width="80" height="34" rx="6" fill="#f0e5c9" stroke="#ddc79a"/><text x="440" y="151" text-anchor="middle">utenti</text>
+        <rect x="500" y="124" width="110" height="46" rx="6" fill="#232019"/><text x="555" y="143" text-anchor="middle" fill="#e9e2d3" font-size="9">project_members</text><text x="555" y="158" text-anchor="middle" fill="#7d7468" font-size="8">tabella di collegamento</text>
+        <rect x="630" y="130" width="80" height="34" rx="6" fill="#f0e5c9" stroke="#ddc79a"/><text x="670" y="151" text-anchor="middle">progetti</text>
+        <line x1="480" y1="147" x2="500" y2="147" stroke="#b07d2b" stroke-width="1.6"/>
+        <line x1="610" y1="147" x2="630" y2="147" stroke="#b07d2b" stroke-width="1.6"/>
+        <text x="400" y="190" fill="#5b5347" font-size="9">tabella di collegamento con una chiave primaria COMPOSITA (user_id + project_id)</text>
+      </svg>
+    </div>
+
+    <h3>Uno a uno: utenti &lt;-&gt; profili_utente</h3>
+    <p>Perché dividere i dati del profilo in una tabella invece di accumularli <code>users</code>? Perché un profilo cresce nel tempo (bio, telefono, avatar, link social, siti web...) e costringerebbe a migrazioni costanti sul core <code>users</code> tavolo. Astraendolo in una tabella separata che può evolversi in modo indipendente mantiene leggera la tabella primaria. Poiché ogni utente ha esattamente un profilo, non è nemmeno necessario un ID separato, crea quello del profilo <code>user_id</code> servire come <strong>sia la sua chiave primaria che la sua chiave esterna</strong>.</p>
+
+    <h3>Uno-a-molti: progetti &lt;-&gt; compiti</h3>
+    <p>Un progetto ha molti compiti; ogni attività appartiene a un progetto. Implementalo inserendo a <code>project_id</code> <strong>chiave esterna</strong> sul <code>tasks</code> tabella (non una chiave primaria). Molte righe di attività possono condividere la stessa cosa <code>project_id</code>, questo è il lato &quot;molti&quot;.</p>
+
+    <h3>Molti-a-molti: utenti &lt;-&gt; progetti</h3>
+    <p>Un utente può trovarsi in molti progetti e un progetto può avere molti utenti e si desidera eseguire query in entrambe le direzioni. Quando la stessa relazione ha senso da entrambe le parti, è molti-a-molti. Non puoi esprimerlo con una singola chiave esterna, quindi crei un file <strong>tabella di collegamento</strong> (<code>project_members</code>) con in mano due chiavi esterne, <code>user_id</code> e <code>project_id</code>e crea la coppia a <strong>chiave primaria composita</strong>. Questa combinazione è implicitamente univoca e non nulla, quindi &quot;l'utente 1 è nel progetto 2&quot; può esistere esattamente una volta.</p>
+
+    <div class="code">
+      <div class="code-top"><span class="dots"><i></i><i></i><i></i></span>
+        <div class="tabs"><button class="tab active" data-lang="sql">SQL</button></div>
+        <span class="code-cap">lo schema completo, le enumerazioni, quindi le cinque tabelle</span>
+      </div>
+      <pre class="code-body" data-lang="sql">-- custom enum types: a fixed set of allowed values
+CREATE TYPE project_status AS ENUM ('active', 'completed', 'archived');
+CREATE TYPE task_status    AS ENUM ('pending', 'in_progress', 'completed', 'cancelled');
+CREATE TYPE member_role    AS ENUM ('owner', 'admin', 'member');
+
+CREATE TABLE users (
+  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  email         TEXT NOT NULL UNIQUE,
+  full_name     TEXT NOT NULL,
+  password_hash TEXT NOT NULL,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- ONE-TO-ONE: user_id is BOTH primary key and foreign key
+CREATE TABLE user_profiles (
+  user_id     UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  avatar_url  TEXT,             -- optional -&gt; no NOT NULL
+  bio         TEXT,
+  phone       TEXT,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE projects (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name        TEXT NOT NULL,
+  description TEXT,
+  status      project_status NOT NULL DEFAULT 'active',
+  owner_id    UUID NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- ONE-TO-MANY: a project has many tasks via project_id
+CREATE TABLE tasks (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  project_id  UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  title       TEXT NOT NULL,
+  description TEXT,
+  priority    INTEGER NOT NULL DEFAULT 1 CHECK (priority BETWEEN 1 AND 5),
+  status      task_status NOT NULL DEFAULT 'pending',
+  due_date    DATE,
+  assigned_to UUID REFERENCES users(id) ON DELETE SET NULL,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- MANY-TO-MANY: linking table with a COMPOSITE primary key
+CREATE TABLE project_members (
+  project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  user_id    UUID NOT NULL REFERENCES users(id)    ON DELETE CASCADE,
+  role       member_role NOT NULL DEFAULT 'member',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (project_id, user_id)   -- the pair is unique &amp; not-null
+);</pre>
+    </div>
+    <div class="callout note">
+      <span class="clabel">Nota sulla versione / gen_random_uuid()</span>
+      <p>Questo schema viene verificato rispetto a <strong>PostgreSQL16</strong>. <code>gen_random_uuid()</code> è integrato nel core Postgres da <strong>13 in poi</strong>. Nelle versioni precedenti (&lt;=12) devi prima abilitare l'estensione crypto: <code>CREATE EXTENSION IF NOT EXISTS pgcrypto;</code>, allora la stessa chiamata funziona.</p>
+    </div>
+  </section>
+
+  <!-- 09 -->
+  <section id="s9">
+    <div class="sec-head"><span class="sec-num">09</span><h2>Vincoli e integrità</h2></div>
+    <p>I vincoli sono condizioni allegate a una colonna in modo che il database stesso protegga i dati dalla corruzione. L'intera filosofia: spingere i controlli di integrità <em>fino al database</em> piuttosto che fidarsi solo del codice dell'applicazione. Il codice dell'app rappresenta un livello di difesa; un vincolo del database è la garanzia.</p>
+
+    <h3>Chiave primaria</h3>
+    <p>Un campo univoco che identifica una riga. Implica implicitamente due vincoli, <strong>non nullo</strong> e <strong>unico</strong>: più il comportamento di riferimento a chiave esterna. Per convenzione ogni tavolo ha un <code>id</code>, spesso <code>UUID PRIMARY KEY DEFAULT gen_random_uuid()</code> quindi Postgres genera un ID casuale quando lo ometti durante l'inserimento.</p>
+
+    <h3>Non nulla: la regola del 70%.</h3>
+    <p>Per impostazione predefinita ogni colonna Postgres <em>permette</em> null a meno che tu non dica diversamente. <strong>Dovrebbe esserlo più del 70% delle tue colonne <code>NOT NULL</code></strong>, perché i null si insinuano silenziosamente, soprattutto tramite script automatizzati con bug, e ti lasciano con una tabella disordinata e incoerente. Aggiungi <code>NOT NULL</code> a meno che un campo non sia veramente facoltativo (come la biografia o il telefono di un utente).</p>
+
+    <h3>Unico</h3>
+    <p>Non esistono due righe che possano condividere quel valore, ad es. <code>email TEXT NOT NULL UNIQUE</code> significa che l'inserimento di un'e-mail duplicata genera un errore a livello di database.</p>
+
+    <h3>Vincolo di chiave esterna</h3>
+    <p><code>REFERENCES users(id)</code> garantisce che qualunque cosa tu inserisca <code>assigned_to</code> o <code>owner_id</code> deve essere un ID utente reale ed esistente. Passa un UUID casuale (anche dall'aspetto valido) senza un utente corrispondente e l'inserimento fallisce. Non puoi fare riferimento a qualcosa che non esiste.</p>
+
+    <h3>Verifica vincolo</h3>
+    <p>Una regola personalizzata che la riga deve soddisfare, la transazione viene eseguita solo finché la condizione è valida. <code>CHECK (priority BETWEEN 1 AND 5)</code> impedisce a chiunque di inserirsi <code>priority = 55</code>.</p>
+
+    <h3>Enumerazioni: integrità + documentazione</h3>
+    <p>Un'enumerazione è un tipo personalizzato limitato a un insieme fisso di valori (ad es. <code>project_status</code>  in {attivo, completato, archiviato}). Due vittorie:</p>
+    <ul>
+      <li><strong>Integrità dei dati</strong>: inserisci qualsiasi altra stringa in a <code>project_status</code> colonna e viene visualizzato un errore a livello di database; non devi fare affidamento esclusivamente sulla convalida del codice dell'app.</li>
+      <li><strong>Autodocumentazione</strong>: probabilmente la vittoria più grande. Un futuro compagno di squadra che legge la migrazione vede immediatamente i valori consentiti. Se la colonna fosse semplice <code>text</code>, dovrebbero eseguire il grep dell'intero codice dell'applicazione per scoprire quali stringhe sono effettivamente valide.</li>
+    </ul>
+
+    <h3>Integrità referenziale: comportamento ON DELETE</h3>
+    <p>Quando elimini una riga a cui puntano altre tabelle, cosa succede a quei riferimenti? Lo dichiari per chiave esterna:</p>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>Clausola</th><th>Quando si elimina la riga di riferimento...</th><th>Usato qui per</th></tr></thead>
+        <tbody>
+          <tr><td><code>ON DELETE RESTRICT</code></td><td>Blocca l'eliminazione se eventuali righe secondarie fanno ancora riferimento ad essa.</td><td><code>projects.owner_id</code>, non è possibile eliminare un utente che possiede ancora progetti.</td></tr>
+          <tr><td><code>ON DELETE CASCADE</code></td><td>Elimina anche i bambini.</td><td><code>tasks.project_id</code>, l'eliminazione di un progetto elimina le sue attività.</td></tr>
+          <tr><td><code>ON DELETE SET NULL</code></td><td>Imposta il riferimento del figlio su null (la colonna deve consentire null).</td><td><code>tasks.assigned_to</code>, l'eliminazione di un utente annulla l'assegnazione delle sue attività.</td></tr>
+          <tr><td><code>ON DELETE SET DEFAULT</code></td><td>Imposta il riferimento del bambino al valore predefinito dichiarato.</td><td>-</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="callout model">
+      <span class="clabel">La mentalità dell’integrità</span>
+      <p>Ogni vincolo, chiave primaria, non null, univoca, chiave esterna, assegno, enum, ON DELETE, esiste quindi <em>banca dati</em> garantisce la correttezza, non solo il codice applicativo speranzoso. Più codifichi a questo livello, più difficile sarà per un bug futuro corrompere i tuoi dati.</p>
+    </div>
+  </section>
+
+  <!-- 10 -->
+  <section id="s10">
+    <div class="sec-head"><span class="sec-num">10</span><h2>Interrogazione e join</h2></div>
+
+    <h3>Crea query da FROM, non SELECT</h3>
+    <p>Un'abitudine che vale la pena adottare: quando si scrive una query SQL, <strong>iniziare con il <code>FROM</code> clausola</strong>, no <code>SELECT</code>. Decidi <em>dove</em> i tuoi dati provengono prima, da quali tabelle, come si uniscono e solo dopo decidi <em>cosa</em> tirare fuori. Ti mantiene orientato: conosci sempre la fonte prima di raggiungere le colonne. Costruiremo la query &quot;elenco utenti con profilo&quot; esattamente in questo ordine, prima l'origine, poi la forma e infine l'ordine.</p>
+
+    <div class="steps">
+      <div class="step"><span class="sn">1</span><div class="sb"><b>Fonte.</b> <code>FROM users u</code>, e dillo in breve <em>alias</em> (<code>u</code>) in modo da potervi fare riferimento in modo conciso durante tutta la query.</div></div>
+      <div class="step"><span class="sn">2</span><div class="sb"><b>Partecipa alla tabella correlata.</b> Il profilo vive altrove, collegato dalla chiave esterna, quindi <code>LEFT JOIN user_profiles up ON u.id = up.user_id</code>.</div></div>
+      <div class="step"><span class="sn">3</span><div class="sb"><b>Forma.</b> Ora scegli le colonne: <code>u.*</code> più il profilo piegato, <code>to_jsonb(up.*) AS profile</code>.</div></div>
+      <div class="step g"><span class="sn">4</span><div class="sb"><b>Ordine.</b> Concludi con <code>ORDER BY u.created_at DESC</code> quindi i risultati sono deterministici e vengono prima i più recenti.</div></div>
+    </div>
+
+    <h3>Unione di tabelle: e perché LEFT JOIN</h3>
+    <p>Per restituire ciascun utente <em>con</em> il loro profilo in una chiamata API, ti iscrivi <code>users</code> a <code>user_profiles</code> sulla chiave esterna. Utilizzare <strong>SINISTRA UNISCITI</strong>, non INNER JOIN: un utente potrebbe non aver mai creato una riga di profilo e una INNER JOIN restituisce solo le righe in cui <em>entrambi</em> le parti hanno una corrispondenza, quindi gli utenti senza profilo scomparirebbero silenziosamente dal risultato, restituendo meno utenti di quelli esistenti. Un LEFT JOIN continua <em>ogni</em> riga dalla tabella sinistra (principale) indipendentemente, riempiendo il lato del profilo con null quando non c'è corrispondenza. Dal momento che vogliamo sempre indietro l'utente, profilo o meno, LEFT JOIN è corretto qui. (I join INNER e LEFT coprono la stragrande maggioranza delle query reali; gli altri sono rari.)</p>
+    <p>Altri due dettagli in quella query. Il corto <strong>alias</strong> (<code>u</code>, <code>up</code>) basta rendere leggibile una query lunga, assegnarle una volta dentro <code>FROM</code>/<code>JOIN</code> e riutilizzarli ovunque. E <code>to_jsonb(up.*)</code> è una funzione Postgres integrata che converte la riga del profilo corrispondente in un oggetto JSON, incorporato come singolo <code>profile</code> campo su ogni utente, quindi il frontend ottiene <code>user.profile</code> nidificati, in un viaggio di andata e ritorno, invece di effettuare una seconda chiamata. Termina sempre una query di elenco con un <code>ORDER BY</code> (qui <code>created_at DESC</code>): vengono restituiti i risultati della query <em>arbitrario</em> ordina altrimenti e tale ordine può cambiare tra le chiamate, quindi ordini in modo esplicito, di solito prima il più recente in base all'ora di creazione.</p>
+
+    <div class="code">
+      <div class="code-top"><span class="dots"><i></i><i></i><i></i></span>
+        <div class="tabs"><button class="tab active" data-lang="sql">SQL</button></div>
+        <span class="code-cap">GET /v1/users, elenca gli utenti con profilo incorporato</span>
+      </div>
+      <pre class="code-body" data-lang="sql">SELECT
+  u.*,
+  to_jsonb(up.*) AS profile          -- fold the profile row into one JSON field
+FROM users u
+LEFT JOIN user_profiles up           -- LEFT so users without a profile still appear
+  ON u.id = up.user_id               -- the foreign-key join condition
+ORDER BY u.created_at DESC;          -- newest first; never rely on default order</pre>
+    </div>
+
+    <h3>Query con parametri: non concatenare mai</h3>
+    <p>Questa è l'abitudine di sicurezza più importante con i database. A <strong>query parametrizzata</strong> lascia uno slot segnaposto e fornisce il valore separatamente; il database tratta qualunque cosa tu passi come <strong>dati puri (una stringa), SQL mai eseguibile</strong>. Se passa un attaccante <code>'; DELETE FROM users; --</code> in un parametro, viene memorizzato/confrontato come una stringa letterale innocua, non eseguito come comando.</p>
+    <div class="callout trap">
+      <span class="clabel">SQL injection/il peccato capitale</span>
+      <p>La vulnerabilità viene visualizzata quando crei query tramite <strong>concatenare stringhe</strong> con l'input dell'utente. Quindi un input predisposto può scoppiare ed eseguire il proprio SQL, leggendo, alterando o cancellando i tuoi dati. <strong>Mai</strong> concatenare i valori utente tramite stringhe in una query. Utilizza sempre i segnaposto dei parametri; il tuo autista/ORM si occupa della sostituzione in sicurezza. Questo non è facoltativo.</p>
+    </div>
+
+    <div class="code">
+      <div class="code-top"><span class="dots"><i></i><i></i><i></i></span>
+        <div class="tabs"><button class="tab active" data-lang="sql">SQL</button><button class="tab" data-lang="go">Vai</button><button class="tab" data-lang="python">Pitone</button></div>
+        <span class="code-cap">GET /v1/users/:id, stessa query, parametrica in ogni livello</span>
+      </div>
+      <pre class="code-body" data-lang="sql">SELECT u.*, to_jsonb(up.*) AS profile
+FROM users u
+LEFT JOIN user_profiles up ON u.id = up.user_id
+WHERE u.id = $1;        -- $1 is a parameter slot; the value is sent separately</pre>
+      <pre class="code-body hidden" data-lang="go">// database/sql, the driver substitutes the parameter safely
+row := db.QueryRow(`
+  SELECT u.*, to_jsonb(up.*) AS profile
+  FROM users u
+  LEFT JOIN user_profiles up ON u.id = up.user_id
+  WHERE u.id = $1`, userID) // userID is treated strictly as data, never SQL</pre>
+      <pre class="code-body hidden" data-lang="python"># psycopg, pass params as a tuple; NEVER use f-strings to build SQL
+cur.execute(
+    """
+    SELECT u.*, to_jsonb(up.*) AS profile
+    FROM users u
+    LEFT JOIN user_profiles up ON u.id = up.user_id
+    WHERE u.id = %s
+    """,
+    (user_id,),  # the driver escapes it; injection is impossible
+)</pre>
+    </div>
+
+    <h3>Inserisci e aggiorna</h3>
+    <div class="code">
+      <div class="code-top"><span class="dots"><i></i><i></i><i></i></span>
+        <div class="tabs"><button class="tab active" data-lang="sql">SQL</button></div>
+        <span class="code-cap">POST crea/PATCH aggiornamento parziale</span>
+      </div>
+      <pre class="code-body" data-lang="sql">-- POST /v1/users  -&gt; returning the new row back to the client
+INSERT INTO users (email, full_name, password_hash)
+VALUES ($1, $2, $3)
+RETURNING *;
+
+-- PATCH /v1/users/:id  -&gt; only the fields the client actually sent
+UPDATE user_profiles
+SET bio = $1, phone = $2
+WHERE user_id = $3
+RETURNING *;</pre>
+    </div>
+
+    <h3>Filtro dinamico, ordinamento e impaginazione</h3>
+    <p>Gli endpoint dell'elenco supportano il filtraggio, l'ordinamento e l'impaginazione, integrati dinamicamente nel codice dell'app dai parametri di query, con valori predefiniti sensati (nessun <code>page</code> -&gt; 1, n <code>limit</code> -&gt; 10, nessun ordinamento -&gt; <code>created_at DESC</code>). A livello SQL:</p>
+    <ul>
+      <li><strong>Filtra</strong> con <code>ILIKE</code>, corrispondenza del modello senza distinzione tra maiuscole e minuscole. <code>WHERE u.full_name ILIKE $1 || '%'</code> corrisponde ai nomi che iniziano con una lettera indipendentemente dal caso.</li>
+      <li><strong>Ordina</strong> da un <em>lista consentita</em> di colonne in base alle quali il client può ordinare (<code>full_name</code>, <code>email</code>, <code>created_at</code>) più una direzione.</li>
+      <li><strong>Paginare</strong> con <code>LIMIT</code> + <code>OFFSET</code>. Nota: la pagina 1 dell'API è mappata al database <code>OFFSET 0</code>, l'offset è in base zero.</li>
+    </ul>
+    <div class="code">
+      <div class="code-top"><span class="dots"><i></i><i></i><i></i></span>
+        <div class="tabs"><button class="tab active" data-lang="sql">SQL</button></div>
+        <span class="code-cap">elenco con filtro + ordinamento + impaginazione</span>
+      </div>
+      <pre class="code-body" data-lang="sql">SELECT u.*, to_jsonb(up.*) AS profile
+FROM users u
+LEFT JOIN user_profiles up ON u.id = up.user_id
+WHERE u.full_name ILIKE $1 || '%'   -- filter: names starting with $1 (case-insensitive)
+ORDER BY u.created_at DESC           -- sort (column from an allow-list, direction chosen)
+LIMIT $2 OFFSET $3;                  -- page 1 -&gt; OFFSET 0, page 2 -&gt; OFFSET (limit), ...</pre>
+    </div>
+  </section>
+
+  <!-- 11 -->
+  <section id="s11">
+    <div class="sec-head"><span class="sec-num">11</span><h2>Indici</h2></div>
+    <p>Gli indici sono la più grande leva prestazionale di cui disponi e sono meglio compresi attraverso l'analogia del libro. L'indice di un libro elenca ogni capitolo e il suo numero di pagina, quindi per arrivare al capitolo 4 non sfogli 50 pagine una per una, le guardi e salti direttamente lì.</p>
+
+    <h3>Il problema: scansione sequenziale</h3>
+    <p>Ricorda che i database memorizzano righe sparse sul disco, non in ordine ordinato. Senza un indice, trovare un'attività tramite ID significa a <strong>scansione sequenziale</strong>: il database controlla riga dopo riga, posizione dopo posizione, finché non trova una corrispondenza. Con sei file è immediato; con un milione o un miliardo di righe è dolorosamente lento.</p>
+
+    <div class="diagram">
+      <div class="diagram-label">Scansione sequenziale e ricerca nell'indice</div>
+      <svg viewBox="0 0 720 250" xmlns="http://www.w3.org/2000/svg" font-family="JetBrains Mono, monospace" font-size="10">
+        <!-- left: scan -->
+        <text x="20" y="22" fill="#b8402e" font-weight="600" font-size="11">SENZA INDICE / scansiona ogni riga</text>
+        <g fill="#e6dcca" stroke="#e2dccf">
+          <rect x="20" y="34" width="150" height="22"/><rect x="20" y="58" width="150" height="22"/>
+          <rect x="20" y="82" width="150" height="22"/><rect x="20" y="106" width="150" height="22"/>
+          <rect x="20" y="130" width="150" height="22"/>
+        </g>
+        <text x="30" y="49">compito / controllo...</text><text x="30" y="73">compito / controllo...</text>
+        <text x="30" y="97">compito / controllo...</text><text x="30" y="121">compito / controllo...</text>
+        <text x="30" y="145" fill="#3f6f4e">compito / ABBINAMENTO </text>
+        <text x="20" y="172" fill="#5b5347" font-size="9">sparsi su disco / O(n), brutali su un milione di righe</text>
+        <!-- right: index -->
+        <text x="400" y="22" fill="#3f6f4e" font-weight="600" font-size="11">CON INDICE / tabella di ricerca -&gt; salta</text>
+        <rect x="400" y="34" width="150" height="118" rx="6" fill="#e0e9dd" stroke="#bcd3b6"/>
+        <text x="412" y="52" fill="#3f6f4e" font-weight="600">ID -&gt; posizione</text>
+        <text x="412" y="72">a1 -&gt; 0x4F</text><text x="412" y="90">a2 -&gt; 0x1C</text>
+        <text x="412" y="108">a3 -&gt; 0x9B &lt; trovato</text><text x="412" y="126">a4 -&gt; 0x22</text>
+        <line x1="550" y1="104" x2="640" y2="104" stroke="#3f6f4e" stroke-width="1.6" marker-end="url(#ar)"/>
+        <rect x="610" y="92" width="90" height="24" rx="5" fill="#232019"/><text x="655" y="108" text-anchor="middle" fill="#e9e2d3" font-size="9">0x9B -&gt; riga</text>
+        <text x="400" y="172" fill="#5b5347" font-size="9">ricerca ordinata -&gt; passaggio diretto alla posizione del disco</text>
+        <defs><marker id="ar" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto"><path d="M0,0 L7,3.5 L0,7 z" fill="#3f6f4e"/></marker></defs>
+      </svg>
+    </div>
+
+    <h3>La soluzione: una tabella di ricerca</h3>
+    <p>Un indice è essenzialmente separato, ordinato <strong>tabella di ricerca</strong> mappare ciascun valore indicizzato sul disco <strong>posizione</strong> della sua fila. Effettua una query tramite un campo indicizzato e il database esegue la scansione di questa struttura compatta e ordinata (internamente un albero B), trova rapidamente la voce, legge la posizione e salta direttamente alla riga, senza scansione completa. Due proprietà contano:</p>
+    <ul>
+      <li><strong>Ricerca diretta</strong>: valore -&gt; posizione, invece di controllare ogni riga.</li>
+      <li><strong>Ordine</strong>: un indice può essere ascendente o discendente. Se corri spesso <code>ORDER BY created_at DESC</code>, crea l'indice <em>discendente</em> quindi le righe tornano già in ordine, senza alcun passaggio di ordinamento aggiuntivo.</li>
+    </ul>
+
+    <h3>Quando creare un indice</h3>
+    <p>La regola pratica è indicizzare una colonna quando viene utilizzata in a <strong><code>WHERE</code> clausola</strong>, a <strong><code>JOIN</code> condizione</strong>, o un <strong><code>ORDER BY</code></strong>. Un dettaglio importante: <strong>le chiavi primarie vengono indicizzate automaticamente</strong>, ma <strong>le chiavi esterne no</strong>: quindi le chiavi esterne a cui ti unisci (come <code>tasks.project_id</code>, <code>tasks.assigned_to</code>) sono candidati all'indice primario.</p>
+
+    <p>Percorrere il ragionamento reale dietro ogni indice nel nostro schema rende la regola concreta:</p>
+    <ul>
+      <li><code>users.email</code> -&gt; c'è una ricerca &quot;trova utente tramite e-mail&quot; e si unisce all'e-mail, quindi appare in <code>WHERE</code>/<code>JOIN</code> -&gt; indicizzalo.</li>
+      <li><code>users.created_at DESC</code> -&gt; l'API list-users ordina per impostazione predefinita il più recente e viene chiamata costantemente, quindi indicizzala <em>discendente</em> per abbinare il <code>ORDER BY</code> esattamente.</li>
+      <li><code>tasks.project_id</code> -&gt; &quot;recupera tutte le attività di un progetto&quot; si unisce <code>projects</code> a <code>tasks</code> su questa chiave esterna. Il <code>projects.id</code> side è la chiave primaria (già indicizzata), ma <code>project_id</code> ecco una chiave esterna e <em>non lo è</em>, quindi indicizzalo.</li>
+      <li><code>tasks.assigned_to</code> -&gt; &quot;recupera tutte le attività per un utente&quot; si unisce a questa chiave esterna. Stessa logica, chiave esterna, non indicizzata automaticamente, utilizzata in un join -&gt; indicizzalo.</li>
+      <li><code>tasks.status</code> -&gt; Filtri &quot;recupera tutte le attività in sospeso&quot; sullo stato in a <code>WHERE</code> clausola -&gt; indicizzalo.</li>
+      <li><code>tasks.created_at DESC</code> -&gt; l'API list-task ordina il più recente per primo -&gt; indice discendente.</li>
+    </ul>
+    <p>Internamente un albero B mantiene queste voci ordinate, il che è ciò che rende veloci sia la ricerca diretta che la scansione ordinata, ma non sono necessari gli interni per applicare la regola; i tre trigger (DOVE / ISCRIVITI / ORDINA PER) sono sufficienti per decidere.</p>
+
+    <div class="code">
+      <div class="code-top"><span class="dots"><i></i><i></i><i></i></span>
+        <div class="tabs"><button class="tab active" data-lang="sql">SQL</button></div>
+        <span class="code-cap">indici scelti dall'utilizzo reale di DOVE / ISCRIVITI / ORDINA PER</span>
+      </div>
+      <pre class="code-body" data-lang="sql">CREATE INDEX idx_users_email        ON users (email);              -- WHERE / JOIN on email
+CREATE INDEX idx_users_created_at    ON users (created_at DESC);    -- ORDER BY newest first
+CREATE INDEX idx_tasks_project_id    ON tasks (project_id);         -- FK join (not auto-indexed)
+CREATE INDEX idx_tasks_assigned_to   ON tasks (assigned_to);        -- FK join (not auto-indexed)
+CREATE INDEX idx_tasks_status        ON tasks (status);             -- WHERE status = ...
+CREATE INDEX idx_tasks_created_at    ON tasks (created_at DESC);    -- ORDER BY newest first</pre>
+    </div>
+
+    <div class="callout trap">
+      <span class="clabel">Il compromesso in termini di scrittura delle spese generali</span>
+      <p>Gli indici accelerano <strong>legge</strong> ma leggermente rallentato <strong>scrive</strong>: ogni <code>INSERT</code>/<code>UPDATE</code> deve anche mantenere aggiornato l'indice. Quindi non indicizzare tutto alla cieca. Valutare come <em>frequentemente</em> viene eseguita la query e se la vincita in lettura vale il costo di scrittura. Mossa pratica: creare indici per le colonne WHERE/JOIN/ORDER BY più attive, quindi monitorare ed eliminare quelle le cui query risultano rare.</p>
+    </div>
+  </section>
+
+  <!-- 12 -->
+  <section id="s12">
+    <div class="sec-head"><span class="sec-num">12</span><h2>Trigger</h2></div>
+    <p>Ogni tavolo qui ha un <code>updated_at</code> colonna che deve essere aggiornata su &quot;adesso&quot; ogni volta che la riga cambia. Potresti impostarlo manualmente in ogni AGGIORNAMENTO, oppure puoi <strong>automatizzare</strong> con un trigger in modo che l'applicazione non debba mai pensarci.</p>
+    <p>A <strong>grilletto</strong> esegue automaticamente una funzione quando viene soddisfatta una condizione. Qui: definisci una funzione che imposta <code>NEW.updated_at = now()</code> e restituisce la riga, quindi allega a <code>BEFORE UPDATE</code> trigger su ogni tabella che lo chiama.</p>
+
+    <div class="diagram">
+      <div class="diagram-label">UPDATE attiva automaticamente il trigger</div>
+      <svg viewBox="0 0 720 100" xmlns="http://www.w3.org/2000/svg" font-family="JetBrains Mono, monospace" font-size="10.5">
+        <rect x="20" y="34" width="170" height="34" rx="7" fill="#dee5ee" stroke="#b9c8da"/><text x="105" y="55" text-anchor="middle">riga AGGIORNAMENTO</text>
+        <line x1="190" y1="51" x2="250" y2="51" stroke="#c7bca6" stroke-width="1.5" marker-end="url(#a2)"/>
+        <rect x="250" y="34" width="200" height="34" rx="7" fill="#b8402e"/><text x="350" y="55" text-anchor="middle" fill="#fff">PRIMA dell'AGGIORNAMENTO trigger</text>
+        <line x1="450" y1="51" x2="510" y2="51" stroke="#c7bca6" stroke-width="1.5" marker-end="url(#a2)"/>
+        <rect x="510" y="34" width="190" height="34" rx="7" fill="#e0e9dd" stroke="#bcd3b6"/><text x="605" y="55" text-anchor="middle" fill="#3f6f4e">aggiornato_a = adesso()</text>
+        <defs><marker id="a2" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto"><path d="M0,0 L7,3.5 L0,7 z" fill="#c7bca6"/></marker></defs>
+      </svg>
+    </div>
+
+    <div class="code">
+      <div class="code-top"><span class="dots"><i></i><i></i><i></i></span>
+        <div class="tabs"><button class="tab active" data-lang="sql">SQL</button></div>
+        <span class="code-cap">una funzione, riutilizzata come trigger su ogni tavolo</span>
+      </div>
+      <pre class="code-body" data-lang="sql">-- the function: stamp updated_at, return the modified row
+CREATE FUNCTION set_updated_at() RETURNS TRIGGER AS $$
+BEGIN
+  NEW.updated_at = now();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- attach it before every UPDATE on each table
+CREATE TRIGGER trg_users_updated
+  BEFORE UPDATE ON users
+  FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
+CREATE TRIGGER trg_projects_updated
+  BEFORE UPDATE ON projects
+  FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+-- ...and likewise for user_profiles, tasks, project_members</pre>
+    </div>
+
+    <p>Ora qualsiasi AGGIORNAMENTO, da qualsiasi luogo, codice app o query manuale, si aggiorna automaticamente <code>updated_at</code>. Nessuna colonna viene dimenticata e la logica risiede in un unico posto.</p>
+
+    <div class="callout model">
+      <span class="clabel">Il capitolo in un fiato</span>
+      <p>I database conservano i dati in modo economico e spazioso <strong>disco</strong>; a <strong>DBMS</strong> ti offre CRUD efficienti e sicuri che i file di testo non possono fare. Predefinito a <strong>Postgres</strong> per la sua integrità più JSONB. Modello con la destra <strong>relazioni</strong> (uno-a-uno, uno-a-molti, molti-a-molti tramite una tabella di collegamento), imporre la correttezza con <strong>vincoli ed enumerazioni</strong>, evolversi in sicurezza attraverso <strong>migrazioni</strong>, interroga con <strong>si unisce</strong> e sempre-<strong>parametrizzato</strong> SQL e raggiungere le due leve prestazionali, <strong>indici</strong> (nelle colonne WHERE/JOIN/ORDER BY) e <strong>trigger</strong> (per automatizzare il noioso). Questo rappresenta circa l'80% del lavoro di database come ingegnere backend.</p>
+    </div>
+  </section>
+
+  <!-- 13 -->
+  <section id="s13">
+    <div class="sec-head"><span class="sec-num">13</span><h2>Transazioni e ACID</h2></div>
+    <p>Nella sezione 3 abbiamo visto perché un file di testo non è in grado di gestire due persone che modificano lo stesso valore contemporaneamente, la corsa all'aggiornamento perduto. Un vero DBMS lo risolve con <strong>transazioni</strong>: un gruppo di operazioni che neanche <em>tutto</em> riuscire insieme o <em>nessuno</em> fare. Questo è il meccanismo che rende sicura la concorrenza e vale la pena comprenderlo perché il denaro, l'inventario e qualsiasi logica &quot;leggi e poi scrivi&quot; dipendono da esso.</p>
+
+    <h3>L'esempio classico: un trasferimento di denaro</h3>
+    <p>Sposta 500 INR dal conto A al conto B. Sono due scritture: sottrai da A, aggiungi a B. Se il server si blocca <em>tra</em> loro, A ha perso 500 INR che non sono mai arrivati a B, i soldi sono svaniti. Una transazione rende la coppia atomica: avvolgili <code>BEGIN ... COMMIT</code>, e si verificano entrambi oppure, in caso di fallimento, <code>ROLLBACK</code> disfa tutto come se nulla fosse accaduto.</p>
+
+    <div class="code">
+      <div class="code-top"><span class="dots"><i></i><i></i><i></i></span>
+        <div class="tabs"><button class="tab active" data-lang="sql">SQL</button><button class="tab" data-lang="go">Vai</button><button class="tab" data-lang="python">Pitone</button></div>
+        <span class="code-cap">entrambe le scritture si impegnano insieme, oppure nessuna delle due lo fa</span>
+      </div>
+      <pre class="code-body" data-lang="sql">BEGIN;                                              -- start the transaction
+  UPDATE accounts SET balance = balance - 500 WHERE id = $1;  -- debit A
+  UPDATE accounts SET balance = balance + 500 WHERE id = $2;  -- credit B
+COMMIT;                                             -- both are now permanent
+-- if anything fails between BEGIN and COMMIT -&gt; ROLLBACK undoes it all</pre>
+      <pre class="code-body hidden" data-lang="go">tx, err := db.Begin()
+if err != nil { return err }
+defer tx.Rollback() // safety net: a no-op if we already committed
+
+if _, err = tx.Exec(`UPDATE accounts SET balance = balance - 500 WHERE id = $1`, a); err != nil {
+	return err // deferred Rollback fires -&gt; A is untouched
+}
+if _, err = tx.Exec(`UPDATE accounts SET balance = balance + 500 WHERE id = $1`, b); err != nil {
+	return err // deferred Rollback fires -&gt; both reverted
+}
+return tx.Commit() // only here do both writes become permanent</pre>
+      <pre class="code-body hidden" data-lang="python">conn = pool.getconn()
+try:
+    with conn:                       # commits on success, ROLLBACKs on any exception
+        with conn.cursor() as cur:
+            cur.execute("UPDATE accounts SET balance = balance - 500 WHERE id = %s", (a,))
+            cur.execute("UPDATE accounts SET balance = balance + 500 WHERE id = %s", (b,))
+    # reaching here means both writes committed atomically
+finally:
+    pool.putconn(conn)</pre>
+    </div>
+
+    <h3>ACIDO: le quattro garanzie</h3>
+    <p>Le transazioni ti danno quattro proprietà, abbreviate ACID:</p>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>Proprietà</th><th>Garanzia</th><th>Nell'esempio di trasferimento</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Atomicità</strong></td><td>Tutte le operazioni hanno esito positivo oppure nessuna.</td><td>Non addebiti mai A senza accreditare B.</td></tr>
+          <tr><td><strong>Coerenza</strong></td><td>Il DB passa da uno stato valido all'altro; i vincoli valgono sempre.</td><td>Il denaro totale sui conti rimane corretto.</td></tr>
+          <tr><td><strong>Isolamento</strong></td><td>Le transazioni simultanee non si sovrappongono; ognuno corre come se fosse solo.</td><td>Due trasferimenti contemporaneamente non possono corrompere un saldo.</td></tr>
+          <tr><td><strong>Durabilità</strong></td><td>Una volta impegnato, sopravvive a arresti anomali/perdita di potenza.</td><td>Dopo COMMIT, il trasferimento è permanente.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>Questo è uno dei motivi principali per ricorrere a un database relazionale come Postgres quando i dati sono fondamentali, le transazioni ACID sono una garanzia di prima classe, esattamente ciò che il file di testo della sezione 3 non potrebbe mai fornire.</p>
+
+    <h3>Isolamento e corsa agli aggiornamenti perduti, rivisitati</h3>
+    <p><strong>Isolamento</strong> è la proprietà che effettivamente risolve il nostro problema di due scrittori su 40. Sotto il cofano utilizza il database <strong>bloccaggio</strong> e <strong>MVCC (controllo della concorrenza multiversione)</strong> in modo che le transazioni simultanee vedano un'istantanea coerente e serializzino le loro scritture in conflitto, anziché sovrascriversi ciecamente a vicenda.</p>
+    <p>Per la logica di lettura e scrittura specificatamente, esistono due strumenti standard:</p>
+    <ul>
+      <li><strong>Scrittura atomica</strong>: spinge il calcolo nell'SQL stesso: <code>UPDATE accounts SET balance = balance - 500 ...</code> legge e scrive in un unico passaggio bloccato, quindi non c'è spazio in cui possa scivolare un altro scrittore. (Molto più sicuro che leggere il saldo nel codice dell'app, elaborarlo e riscriverlo.)</li>
+      <li><strong>Blocco delle righe</strong>: <code>SELECT ... FOR UPDATE</code> blocca le righe che leggi fino al termine della transazione, quindi una transazione simultanea deve attendere il suo turno invece di gareggiare con te.</li>
+    </ul>
+
+    <div class="code">
+      <div class="code-top"><span class="dots"><i></i><i></i><i></i></span>
+        <div class="tabs"><button class="tab active" data-lang="sql">SQL</button></div>
+        <span class="code-cap">SELECT... PER AGGIORNAMENTO, blocca la riga, quindi modifica in sicurezza</span>
+      </div>
+      <pre class="code-body" data-lang="sql">BEGIN;
+  -- lock this account's row so no other transaction can change it until we're done
+  SELECT balance FROM accounts WHERE id = $1 FOR UPDATE;
+  -- ... compute safely in app code ...
+  UPDATE accounts SET balance = $2 WHERE id = $1;
+COMMIT;</pre>
+    </div>
+
+    <div class="callout trap">
+      <span class="clabel">Non leggere e poi scrivere nel codice dell'app senza protezione</span>
+      <p>Il modello ingenuo, <code>SELECT balance</code> nel tuo programma, aggiungi il codice, <code>UPDATE</code> indietro, è precisamente la condizione di gara della sezione 3, appena spostata nel tuo backend. Due richieste leggono entrambe il vecchio saldo e una sovrascrive l'altra. Usa un <strong>aggiornamento SQL atomico</strong> (<code>balance = balance - 500</code>) o <strong><code>FOR UPDATE</code></strong> blocco delle righe all'interno di una transazione. Questo è uno dei bug di concorrenza più comuni nel mondo reale.</p>
+    </div>
+
+    <div class="callout model">
+      <span class="clabel">Dove si adattano le transazioni</span>
+      <p>Ogni volta che una singola operazione logica si estende <strong>scritture multiple</strong> che devono tenere insieme, trasferimenti, &quot;crea ordine + decrementa stock&quot;, &quot;archivia organizzazione + pulizia a cascata&quot;, avvolgerlo in una transazione. ACID è ciò che ti consente di trattare quel gruppo come un'unità indivisibile, a prova di crash e di concorrenza. È il database che mantiene la promessa che un file di testo non potrebbe mai fare.</p>
+    </div>
+  </section>
+
+  <!-- 14 -->
+  <section id="s14">
+    <div class="sec-head"><span class="sec-num">14</span><h2>Elementi essenziali della produzione</h2></div>
+    <p>La trascrizione si ferma ai fondamenti. Questi quattro argomenti non sono presenti, ma li affronterai tutti nel momento in cui il tuo database servirà traffico reale. Costituiscono la differenza tra &quot;funziona sulla mia macchina con sei file&quot; e &quot;funziona su larga scala&quot;.</p>
+
+    <h3>Il problema delle query N+1: il bug di prestazioni del DB più comune</h3>
+    <p>Recuperi un elenco di N progetti, quindi esegui il loop su di essi e esegui il fuoco <em>un'altra query per progetto</em> per caricare i suoi compiti. Questo è <strong>1 + N query</strong>: per 100 progetti, 101 viaggi di andata e ritorno al database. Ogni viaggio di andata e ritorno ha un sovraccarico di rete + pianificazione, quindi questa è la morte per mille tagli. È particolarmente insidioso con gli ORM, dove il caricamento lento di una relazione all'interno di un ciclo nasconde le query extra dietro un codice dall'aspetto innocente.</p>
+
+    <div class="diagram">
+      <div class="diagram-label">N+1 rispetto a un singolo join</div>
+      <svg viewBox="0 0 720 150" xmlns="http://www.w3.org/2000/svg" font-family="JetBrains Mono, monospace" font-size="10">
+        <text x="20" y="22" fill="#b8402e" font-weight="600" font-size="11">N+1/1 query di elenco, quindi una per riga</text>
+        <rect x="20" y="32" width="120" height="22" rx="5" fill="#f4ded6" stroke="#e3c4b8"/><text x="80" y="47" text-anchor="middle">elencare i progetti</text>
+        <rect x="160" y="32" width="64" height="22" rx="5" fill="#f6e4de" stroke="#e3c4b8"/><text x="192" y="47" text-anchor="middle">compiti?</text>
+        <rect x="230" y="32" width="64" height="22" rx="5" fill="#f6e4de" stroke="#e3c4b8"/><text x="262" y="47" text-anchor="middle">compiti?</text>
+        <rect x="300" y="32" width="64" height="22" rx="5" fill="#f6e4de" stroke="#e3c4b8"/><text x="332" y="47" text-anchor="middle">compiti?</text>
+        <text x="374" y="47" fill="#b8402e">...xN</text>
+        <text x="20" y="78" fill="#5b5347" font-size="9">100 progetti -&gt; 101 viaggi di andata e ritorno</text>
+        <text x="20" y="108" fill="#3f6f4e" font-weight="600" font-size="11">Risolto / UNA query con un join</text>
+        <rect x="20" y="118" width="280" height="22" rx="5" fill="#e0e9dd" stroke="#bcd3b6"/><text x="160" y="133" text-anchor="middle">progetti SINISTRA UNISCITI alle attività, 1 viaggio di andata e ritorno</text>
+      </svg>
+    </div>
+
+    <p>La soluzione consiste nel recuperare i dati correlati <strong>uno</strong> query, un JOIN o un batch <code>WHERE project_id = ANY($1)</code>o un aggregato che crea lato server JSON nidificato. Con un ORM, l'equivalente è &quot;caricamento impaziente&quot; (ad es. <code>JOIN</code>/<code>preload</code>/<code>include</code>) invece del caricamento lento all'interno di un ciclo.</p>
+
+    <div class="code">
+      <div class="code-top"><span class="dots"><i></i><i></i><i></i></span>
+        <div class="tabs"><button class="tab active" data-lang="sql">SQL</button></div>
+        <span class="code-cap">N+1 compresso in un'unica query con attività aggregate</span>
+      </div>
+      <pre class="code-body" data-lang="sql">-- instead of: SELECT * FROM projects;  then per row: SELECT * FROM tasks WHERE project_id = ?
+SELECT
+  p.*,
+  COALESCE(jsonb_agg(t.*) FILTER (WHERE t.id IS NOT NULL), '[]') AS tasks
+FROM projects p
+LEFT JOIN tasks t ON t.project_id = p.id
+GROUP BY p.id;        -- one round trip, every project with its tasks nested</pre>
+    </div>
+
+    <h3>Raggruppamento delle connessioni</h3>
+    <p>Aprire una connessione Postgres è <strong>costoso</strong>: Postgres genera un processo per connessione e c'è un limite rigido (predefinito ~100 <code>max_connections</code>). Se ogni richiesta web apre la propria connessione, esaurisci il server e paghi costantemente il costo di installazione. La soluzione è a <strong>pool di connessione</strong>: un piccolo insieme di connessioni di lunga durata che richiedono prestito e restituzione.</p>
+    <div class="diagram">
+      <div class="diagram-label">Tante richieste, poche connessioni riutilizzate</div>
+      <svg viewBox="0 0 720 120" xmlns="http://www.w3.org/2000/svg" font-family="JetBrains Mono, monospace" font-size="10">
+        <text x="20" y="20" fill="#5b5347" font-size="9">centinaia di richieste</text>
+        <rect x="20" y="28" width="40" height="16" rx="3" fill="#dee5ee" stroke="#b9c8da"/>
+        <rect x="20" y="48" width="40" height="16" rx="3" fill="#dee5ee" stroke="#b9c8da"/>
+        <rect x="20" y="68" width="40" height="16" rx="3" fill="#dee5ee" stroke="#b9c8da"/>
+        <rect x="20" y="88" width="40" height="16" rx="3" fill="#dee5ee" stroke="#b9c8da"/>
+        <line x1="60" y1="66" x2="150" y2="66" stroke="#c7bca6" stroke-width="1.4"/>
+        <rect x="150" y="40" width="150" height="52" rx="8" fill="#b8402e"/><text x="225" y="62" text-anchor="middle" fill="#fff">piscina / ~10-20 conn</text><text x="225" y="78" text-anchor="middle" fill="#f4ded6" font-size="9">prendere in prestito -&gt; utilizzare -&gt; restituire</text>
+        <line x1="300" y1="66" x2="390" y2="66" stroke="#c7bca6" stroke-width="1.4"/>
+        <rect x="390" y="44" width="110" height="44" rx="8" fill="#f0e5c9" stroke="#ddc79a"/><text x="445" y="70" text-anchor="middle" fill="#b07d2b">Postgres</text>
+      </svg>
+    </div>
+    <p>Due strati, spesso combinati: il <strong>piscina integrata del conducente</strong> (Vai <code>database/sql</code> piscine automaticamente; Python utilizza <code>psycopg_pool</code>/SQLAlchemy's pool) for a single app instance, and an <strong>pooler esterno come PgBouncer</strong> quando molte istanze dell'app manterrebbero altrimenti ciascuna il proprio pool e travolgerebbero Postgres. Adatta le dimensioni del pool al tuo carico di lavoro, più grande non è migliore; troppe connessioni degradano Postgres.</p>
+
+    <h3>SPIEGARE ANALISI: verificare che l'indice sia effettivamente utilizzato</h3>
+    <p>La creazione di un indice non garantisce che il pianificatore lo utilizzi. <code>EXPLAIN</code> mostra il piano di interrogazione; <code>EXPLAIN ANALYZE</code> in realtà <em>corre</em> la query e riporta i tempi reali. Lo leggi cercando <strong>&quot;Scansione indice&quot;</strong> (bene, il tuo indice funziona) rispetto a <strong>&quot;Scansione sequenziale&quot;</strong> (il pianificatore legge ogni riga).</p>
+    <div class="callout tip">
+      <span class="clabel">Verificato dal vivo/questo è un risultato reale</span>
+      <p>Correre <code>EXPLAIN SELECT * FROM tasks WHERE status = 'pending'</code> rispetto allo schema effettivo del capitolo su Postgres 16 prodotto: <code>Bitmap Index Scan on idx_tasks_status</code>, confermando che l'indice di stato della sezione 11 viene effettivamente utilizzato per quel filtro, non solo creato e ignorato.</p>
+    </div>
+    <p>Un avvertimento che confonde le persone: su a <em>minuscolo</em> table il pianificatore può comunque scegliere correttamente una Seq Scan (leggere 6 righe direttamente è più veloce del viaggio di andata e ritorno dell'indice). Non è un bug, i vantaggi dell'indice si manifestano su larga scala. <code>EXPLAIN ANALYZE</code> sui dati di dimensioni di produzione è il modo in cui confermi che un indice guadagna il suo mantenimento e il modo in cui esegui il debug di una query lenta <em>dovrebbe</em> ne sto usando uno ma non lo è.</p>
+
+    <h3>Eliminazioni soft</h3>
+    <p>Spesso non si vuole che una riga scompaia davvero, si vuole che venga conservata per controllo, ripristino o integrità storica, ma nascosta alle normali query. Questo è un <strong>eliminazione temporanea</strong>: aggiunge un nullable <code>deleted_at TIMESTAMPTZ</code> colonna (null = live, un timestamp = eliminato). &quot;Eliminazione&quot; diventa un AGGIORNAMENTO; ogni lettura filtra le righe cancellate.</p>
+    <div class="code">
+      <div class="code-top"><span class="dots"><i></i><i></i><i></i></span>
+        <div class="tabs"><button class="tab active" data-lang="sql">SQL</button></div>
+        <span class="code-cap">eliminazione temporanea / la colonna, &quot;eliminazione&quot;, le letture e l'indice univoco ottenuto</span>
+      </div>
+      <pre class="code-body" data-lang="sql">ALTER TABLE users ADD COLUMN deleted_at TIMESTAMPTZ;   -- null = alive
+
+-- "delete" = mark, don't remove
+UPDATE users SET deleted_at = now() WHERE id = $1;
+
+-- every read must exclude the dead rows
+SELECT * FROM users WHERE deleted_at IS NULL ORDER BY created_at DESC;
+
+-- gotcha: a plain UNIQUE now blocks reusing a soft-deleted email.
+-- a PARTIAL unique index fixes it, uniqueness only among LIVE rows:
+CREATE UNIQUE INDEX uniq_active_email
+  ON users (email) WHERE deleted_at IS NULL;</pre>
+    </div>
+    <p>I compromessi sono reali: ogni query deve ricordare il <code>WHERE deleted_at IS NULL</code> filtro (facile da dimenticare, una perdita), i vincoli univoci richiedono il trattamento dell'indice parziale mostrato sopra e la tabella cresce sempre e solo. Utilizzare eliminazioni temporanee laddove la cronologia è importante (ordini, account utente, qualsiasi cosa verificabile); usare duro <code>DELETE</code> per dati veramente usa e getta.</p>
+
+    <div class="callout model">
+      <span class="clabel">Mentalità produttiva</span>
+      <p>I fondamenti ti forniscono un database corretto; questi ti danno un <em>veloce, sicuro, operativo</em> uno. Comprimi N+1 in join, raggruppa le tue connessioni, dimostra i tuoi indici <code>EXPLAIN ANALYZE</code>e ricorrere alle eliminazioni temporanee quando i dati devono sopravvivere alla propria eliminazione. Niente di tutto ciò è esotico, è la realtà del secondo giorno di gestione di un database in produzione.</p>
+    </div>
+  </section>
+
+  <div class="footer">
+    <p>Il backend lens/manuale sul campo v2, capitolo 12.<br>
+    Schema, vincoli, trigger, join e utilizzo dell'indice in questo capitolo sono stati eseguiti e verificati rispetto a PostgreSQL 16.<br>
+    Capitolo complementare: 11 / Progettazione completa dell'API REST (stesso esempio di gestione del progetto).</p>
+  </div>
+
+      <footer class="bfp-footer">Backend da Primi Principi / Capitolo 08 / Postgres. Il codice è destinato a Go 1.22+ e Python 3.11+.</footer>
+</main>
+</div>
+<script>
+document.querySelectorAll('.code').forEach(block=>{
+  const tabs=block.querySelectorAll('.tab');
+  const bodies=block.querySelectorAll('.code-body');
+  tabs.forEach(tab=>tab.addEventListener('click',()=>{
+    const lang=tab.dataset.lang;
+    tabs.forEach(t=>t.classList.toggle('active',t===tab));
+    bodies.forEach(b=>b.classList.toggle('hidden',b.dataset.lang!==lang));
+  }));
+});
+
+function highlight(text,lang){
+  const KW={
+    go:['func','package','import','var','const','type','struct','interface','map','return','if','else','for','range','switch','case','default','go','defer','chan','select','break','continue','nil','true','false','string','int','int64','bool','float64','error','make','append','len','any'],
+    python:['def','class','import','from','as','return','if','elif','else','for','while','in','is','not','and','or','None','True','False','try','except','finally','with','lambda','yield','pass','raise','self','async','await','int','str','bool','float','list','dict'],
+    sql:['SELECT','FROM','WHERE','JOIN','LEFT','RIGHT','INNER','OUTER','FULL','ON','AND','OR','NOT','NULL','AS','ORDER','GROUP','BY','LIMIT','OFFSET','INSERT','INTO','VALUES','UPDATE','SET','DELETE','RETURNING','CREATE','TABLE','TYPE','ENUM','PRIMARY','KEY','FOREIGN','REFERENCES','UNIQUE','DEFAULT','CHECK','BETWEEN','CASCADE','RESTRICT','DROP','INDEX','FUNCTION','RETURNS','TRIGGER','BEFORE','AFTER','EACH','ROW','EXECUTE','BEGIN','END','NEW','OLD','LANGUAGE','ILIKE','LIKE','DESC','ASC','WITH','DISTINCT','IN','IS','EXISTS','UUID','TEXT','INTEGER','BIGINT','SMALLINT','SERIAL','BIGSERIAL','BOOLEAN','TIMESTAMPTZ','TIMESTAMP','DATE','TIME','NUMERIC','DECIMAL','REAL','JSONB','JSON','VARCHAR','CHAR','INTERVAL']
+  };
+  const kw=KW[lang]||[];
+  const isWord=c=>/[A-Za-z0-9_]/.test(c);
+  let out='',i=0;const n=text.length;
+  const esc=s=>s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  while(i<n){
+    const c=text[i];
+    if((lang==='python'&&c==='#')||(lang==='go'&&c==='/'&&text[i+1]==='/')||(lang==='sql'&&c==='-'&&text[i+1]==='-')){
+      let j=i;while(j<n&&text[j]!=='\n')j++;
+      out+='<span class="c-com">'+esc(text.slice(i,j))+'</span>';i=j;continue;
+    }
+    if(c==='"'||c==='\''||c==='`'){
+      const q=c;let j=i+1;while(j<n&&text[j]!==q){if(text[j]==='\\')j++;j++;}
+      j=Math.min(j+1,n);
+      out+='<span class="c-str">'+esc(text.slice(i,j))+'</span>';i=j;continue;
+    }
+    if(/[A-Za-z_]/.test(c)){
+      let j=i;while(j<n&&isWord(text[j]))j++;
+      const w=text.slice(i,j);
+      const match = lang==='sql' ? kw.includes(w.toUpperCase()) : kw.includes(w);
+      if(match)out+='<span class="c-kw">'+esc(w)+'</span>';
+      else if(text[j]==='(')out+='<span class="c-fn">'+esc(w)+'</span>';
+      else out+=esc(w);
+      i=j;continue;
+    }
+    if(/[0-9]/.test(c)){
+      let j=i;while(j<n&&/[0-9._]/.test(text[j]))j++;
+      out+='<span class="c-num">'+esc(text.slice(i,j))+'</span>';i=j;continue;
+    }
+    out+=esc(c);i++;
+  }
+  return out;
+}
+document.querySelectorAll('.code-body').forEach(el=>{ el.innerHTML=highlight(el.textContent,el.dataset.lang); });
+
+</script>
+<!-- CHAPTER NAVIGATION -->
+<nav class="chapter-nav" id="chapterNav">
+  <a href="../../7.API-DESIGN-RestAPI/html_notes/notes.html" class="nav-chapter-link"><span class="nav-arrow"><svg class="ico-arrow" width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="13.5" y1="8" x2="3.5" y2="8"/><polyline points="7.5,4 3.5,8 7.5,12"/></svg></span><span class="nav-label"><span class="nav-small">Capitolo 7</span>Progettazione API (REST)</span></a>
+  <a href="../../index.html" class="nav-indicator"><span class="nav-dot"></span> Capitolo 8 <span class="nav-sep">/</span> 24</a>
+  <a href="../../9.Caching, the secret behind it all/html_notes/notes.html" class="nav-chapter-link nav-next"><span class="nav-label"><span class="nav-small">Capitolo 9</span>Memorizzazione nella cache</span><span class="nav-arrow"><svg class="ico-arrow" width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="2.5" y1="8" x2="12.5" y2="8"/><polyline points="8.5,4 12.5,8 8.5,12"/></svg></span></a>
+</nav>
+  <script src="../../assets/copy-button.js"></script>
+  <script src="../../assets/enhancements.js"></script>
+<script src="../../assets/shell.js"></script>
+</body>
+
+</html>

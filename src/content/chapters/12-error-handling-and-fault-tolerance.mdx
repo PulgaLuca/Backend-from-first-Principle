@@ -1,0 +1,1595 @@
+---
+order: 12
+title: "Gestione degli errori e sistemi tolleranti ai guasti"
+navTitle: "Gestione degli errori e tolleranza agli errori"
+summary: "Ogni backend fallisce; la differenza è se fallisce rumorosamente e in modo recuperabile o silenziosamente e in modo costoso. Le cinque classi di errore, errore rapido all'avvio, controlli approfonditi dello stato, tentativi con backoff e jitter, un gestore globale all'edge e ciò che non deve mai essere detto a un client. Implementazioni funzionate in Go, Python, JavaScript, TypeScript e Java."
+readingTime: "2-3 ore"
+keywords:
+  - "error"
+  - "handling"
+  - "retry"
+  - "circuit"
+  - "breaker"
+  - "fault"
+  - "tolerance"
+  - "resilience"
+  - "fallback"
+---
+Un riferimento dettagliato al backend
+
+Gli errori non sono eccezionali, sono _inevitabili_. Le query del database falliscono, le API esterne scadono, gli utenti inviano dati errati e la logica applicativa colpisce casi limite che nessuno aveva previsto. Questo capitolo definisce la mentalità e gli strumenti concreti per rilevare, gestire e recuperare ogni tipo di errore di backend, prima che ti costi silenziosamente denaro o fiducia.
+
+01
+
+## La mentalità tollerante agli errori
+
+> "La domanda non è se gli errori si verificheranno, ma come li gestirai quando si verificheranno."
+
+Ogni ingegnere di backend deve interiorizzare una semplice verità: **il tuo sistema fallirà**. Non potrebbe. Volere. Le fonti sono ovunque:
+
+- Le query del database occasionalmente falliscono o scadono.
+- Le API esterne (pagamenti, email, autenticazione) verranno disattivate.
+- Gli utenti invieranno dati non corretti, mancanti o dannosi.
+- La logica applicativa colpirà casi limite a cui nessuno aveva pensato durante la progettazione.
+
+Un sistema tollerante ai guasti non è un sistema che non si rompe mai. È uno che **si rompe in modo prevedibile, si riprende con grazia e ti dice esattamente cosa è successo**. Per raggiungere questo obiettivo è necessario un deliberato cambiamento di mentalità da "gestirò gli errori in seguito" a "progetterò per il fallimento fin dal primo giorno".
+
+<Callout type="info">
+La migliore gestione degli errori inizia _prima_ che si verifichi l'errore. Il rilevamento proattivo, i controlli dello stato e la convalida prevengono la maggior parte delle sorprese in fase di runtime.
+</Callout>
+
+02
+
+## Le cinque classi di errori di backend
+
+Gli errori di backend possono essere raggruppati in cinque grandi categorie. Ognuno ha un'origine, una strategia di rilevamento e una correzione diversa.
+
+(1) Errori logici
+
+L'app viene eseguita ma produce risultati errati. Più difficile da rilevare. Può drenare silenziosamente denaro per settimane.
+
+(2) Errori del database
+
+Errori di connessione, deadlock, violazioni di vincoli, SQL non valido. Può disattivare l'intera app.
+
+(3) Errori di servizio esterni
+
+Le API di terze parti (pagamento, e-mail, autenticazione) scadono, limitano la velocità o vanno offline. Non hai alcun controllo.
+
+(4) Errori di convalida dell'input
+
+Gli utenti inviano dati errati, mancanti o fuori portata. Più facile da gestire, se il livello di convalida è robusto.
+
+(5) Errori di configurazione
+
+Variabili di ambiente mancanti, credenziali errate durante la distribuzione. Surface all'avvio, non in fase di esecuzione, se lo fai bene.
+
+03
+
+## Errori logici: i killer silenziosi
+
+Gli errori logici sono la classe più **pericolosa** perché la tua applicazione continua a funzionare, semplicemente fa la cosa sbagliata. Nessun arresto anomalo, nessuna traccia dello stack, nessuna risposta 500. Solo risultati silenziosamente sbagliati che si accumulano nel tempo.
+
+### Esempio classico
+
+Una piattaforma di e-commerce applica uno sconto due volte a causa di un bug nel motore delle promozioni. Il risultato: **costi di spedizione negativi**. L'app funziona perfettamente. Ogni ordine viene spedito. L'azienda perde denaro su ogni transazione. Ciò passa inosservato per settimane perché nessun avviso di monitoraggio si attiva sul "costo di spedizione negativo".
+
+### Cause principali comuni
+
+- **Requisiti fraintesi**: gli appunti di uno sprint meeting erano ambigui; hai implementato ciò che _pensavi_ fosse stato chiesto, non ciò che era previsto.
+- **Algoritmi errati**: una formula di sconto o di determinazione del prezzo complessa presenta un errore sfalsato o un operatore sbagliato (`*` invece di `+`).
+- **Casi limite non gestiti**: un utente che non ha mai effettuato acquisti prima attiva un percorso di sconti "basato sugli acquisti precedenti" che non è stato progettato per gli utenti che non effettuano acquisti.
+
+<Callout type="info">
+Errori logici che coinvolgono denaro, autorizzazioni o sicurezza possono corrompere i dati e produrre risultati aziendali errati per mesi senza una singola voce nel registro degli errori. Vengono rilevati solo attraverso test accurati, monitoraggio delle metriche aziendali e revisione del codice.
+</Callout>
+
+### Strategie di prevenzione
+
+- Scrivi **test unitari per ogni regola aziendale**, in particolare la logica di sconti, prezzi e autorizzazioni.
+- Aggiungi il **monitoraggio delle metriche aziendali** (ad esempio, avvisa se il valore medio dell'ordine scende di &gt;20% in un'ora).
+- Utilizza **test basati sulle proprietà** (vai: `gopter`, Pitone: `hypothesis`) per generare automaticamente input di casi limite.
+- Richiedi una **revisione tra pari** per tutte le modifiche al codice relative al pagamento e all'autenticazione.
+
+04
+
+## Errori del database
+
+La maggior parte delle applicazioni backend non hanno senso senza il loro database. Un errore del database di qualsiasi tipo significa che la tua app non può fornire dati reali, il che di solito significa un'interfaccia utente interrotta o errori a catena tra i servizi.
+
+### (1) Errori di connessione
+
+Il tuo backend non può raggiungere il server del database. Possibili cause:
+
+- Partizione di rete o errore DNS tra il server app e il server DB.
+- Il server del database è sovraccarico o inattivo.
+- **Pool di connessioni esaurito**: tutte le connessioni TCP del pool sono in uso; le nuove richieste si mettono in coda o falliscono immediatamente.
+
+<Callout type="info">
+**Il pool di connessioni** mantiene un numero fisso di connessioni TCP aperte al database, evitando il sovraccarico di un handshake TCP completo + negoziazione TLS su ogni query. Strumenti: `pgxpool` (Vai), `psycopg2` piscina o `SQLAlchemy` (Pitone), `pg` Piscina (nodo). Dimensiona attentamente la tua piscina: troppo piccola -&gt; collo di bottiglia; troppo grande -&gt; sovraccarico DB.
+</Callout>
+
+### (2) Errori di violazione dei vincoli
+
+Stai tentando di eseguire un'operazione che viola una regola a livello di database:
+
+| Tipo di vincolo | Trigger | Risposta appropriata |
+| --------------- | ------------------------------------------ | ------------------------------------------------ |
+| **Unico** | Inserisci un'e-mail / nome utente duplicato | HTTP 409 Conflitto o 400, "E-mail già in uso" |
+| **Chiave esterna** | Fare riferimento a una riga che non esiste | HTTP 404, "ID autore non trovato" / 400 |
+| **Non nullo** | Valore della colonna obbligatorio mancante | HTTP 400, "Il campo X è obbligatorio" |
+| **Controlla** | Il valore non soddisfa una regola personalizzata (ad esempio prezzo &gt; 0) | HTTP 400, messaggio specifico del dominio |
+
+### (3) Errori di query/sintassi
+
+SQL non valido, errore di battitura nel nome della tabella, riferimento a una colonna rinominata o condizione di unione mancante. Questi di solito vengono catturati durante lo sviluppo ma possono sfuggire se le stringhe SQL grezze vengono create dinamicamente.
+
+<Callout type="info">
+Non costruire mai SQL mediante concatenazione di stringhe con l'input dell'utente. Utilizzare sempre query con parametri/istruzioni preparate. Ciò previene sia gli errori di query che gli attacchi SQL injection.
+</Callout>
+
+### (4) Deadlock
+
+Un deadlock si verifica quando due (o più) transazioni detengono ciascuna un blocco di cui l'altra ha bisogno:
+
+<Diagram caption="Fig 1: Deadlock: two transactions waiting on each other's locks indefinitely. The DB detects and aborts one.">
+<svg viewBox="0 0 580 180" xmlns="http://www.w3.org/2000/svg" width="100%"><rect width="580" height="180" fill="var(--dg-paper)"></rect><defs><marker id="da" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="var(--dg-accent)"></path></marker><marker id="db" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="var(--dg-info)"></path></marker></defs><rect x="30" y="60" width="120" height="50" rx="8" fill="var(--dg-accent-surface)" stroke="var(--dg-accent)"></rect><text x="90" y="82" text-anchor="middle" fill="var(--dg-accent)" font-family="var(--font-ui)" font-size="13" font-weight="700">Transazione A</text><text x="90" y="100" text-anchor="middle" fill="var(--dg-ink-2)" font-family="var(--font-diagram-mono)" font-size="11">tiene BLOCCATO sulla riga 1</text><rect x="430" y="60" width="120" height="50" rx="8" fill="var(--dg-info-surface)" stroke="var(--dg-info)"></rect><text x="490" y="82" text-anchor="middle" fill="var(--dg-info)" font-family="var(--font-ui)" font-size="13" font-weight="700">Transazione B</text><text x="490" y="100" text-anchor="middle" fill="var(--dg-ink-2)" font-family="var(--font-diagram-mono)" font-size="11">tiene BLOCCATO sulla riga 2</text><path d="M 152,75 C 260,40 320,40 428,75" fill="none" stroke="var(--dg-accent)" stroke-width="1.8" stroke-dasharray="5 3" marker-end="url(#da)"></path><text x="290" y="36" text-anchor="middle" fill="var(--dg-accent)" font-family="var(--font-ui)" font-size="11">A vuole la riga 2 -&gt;</text><path d="M 428,100 C 320,140 260,140 152,100" fill="none" stroke="var(--dg-info)" stroke-width="1.8" stroke-dasharray="5 3" marker-end="url(#db)"></path><text x="290" y="158" text-anchor="middle" fill="var(--dg-info)" font-family="var(--font-ui)" font-size="11">&lt;- B vuole la riga 1</text><rect x="230" y="68" width="120" height="36" rx="8" fill="var(--dg-inverse)"></rect><text x="290" y="82" text-anchor="middle" fill="var(--dg-on-inverse)" font-family="var(--font-prose)" font-size="13" font-weight="700">STALLO</text><text x="290" y="97" text-anchor="middle" fill="var(--dg-on-inverse-accent)" font-family="var(--font-ui)" font-size="10">attesa circolare, DB uccide un Tx</text></svg>
+</Diagram>
+
+Postgres rileva automaticamente i deadlock e interrompe una transazione con un codice di errore `40P01`. La tua richiesta deve **riprovare la transazione**. Prevenzione: acquisisci sempre i lock in un _ordine coerente_ in tutti i percorsi del codice.
+
+05
+
+## Errori di servizio esterni
+
+I moderni backend SaaS dipendono da una costellazione di servizi di terze parti, processori di pagamento (Stripe), e-mail (Resend, SendGrid), archiviazione di oggetti (S3), autenticazione (Clerk, Auth0), AI (OpenAI). Ognuno di questi è un **punto di errore fuori dal tuo controllo**.
+
+<Diagram caption="Fig 2: Each external dependency is an independent failure point your app must handle gracefully.">
+<svg viewBox="0 0 660 200" xmlns="http://www.w3.org/2000/svg" width="100%"><rect width="660" height="200" fill="var(--dg-paper)"></rect><defs><marker id="ea" markerWidth="7" markerHeight="7" refX="5" refY="3" orient="auto"><path d="M0,0 L5,3 L0,6 Z" fill="var(--dg-ink-2)"></path></marker></defs><rect x="260" y="70" width="140" height="60" rx="10" fill="var(--dg-inverse)"></rect><text x="330" y="97" text-anchor="middle" fill="var(--dg-on-inverse)" font-family="var(--font-prose)" font-size="14" font-weight="700">Il tuo back-end</text><text x="330" y="116" text-anchor="middle" fill="var(--dg-on-inverse)" font-family="var(--font-ui)" font-size="11">HTTP/TCP/WS</text><rect x="20" y="30" width="110" height="36" rx="6" fill="var(--dg-surface)" stroke="var(--dg-line)"></rect><text x="75" y="53" text-anchor="middle" fill="var(--dg-ink)" font-family="var(--font-ui)" font-size="12">Striscia</text><line x1="130" y1="48" x2="258" y2="88" stroke="var(--dg-ink-2)" stroke-width="1.2" marker-end="url(#ea)"></line><rect x="20" y="82" width="110" height="36" rx="6" fill="var(--dg-surface)" stroke="var(--dg-line)"></rect><text x="75" y="105" text-anchor="middle" fill="var(--dg-ink)" font-family="var(--font-ui)" font-size="12">Invia nuovamente</text><line x1="130" y1="100" x2="258" y2="100" stroke="var(--dg-ink-2)" stroke-width="1.2" marker-end="url(#ea)"></line><rect x="20" y="134" width="110" height="36" rx="6" fill="var(--dg-surface)" stroke="var(--dg-line)"></rect><text x="75" y="157" text-anchor="middle" fill="var(--dg-ink)" font-family="var(--font-ui)" font-size="12">Impiegato/Aut0</text><line x1="130" y1="152" x2="258" y2="115" stroke="var(--dg-ink-2)" stroke-width="1.2" marker-end="url(#ea)"></line><rect x="530" y="30" width="110" height="36" rx="6" fill="var(--dg-surface)" stroke="var(--dg-line)"></rect><text x="585" y="53" text-anchor="middle" fill="var(--dg-ink)" font-family="var(--font-ui)" font-size="12">Archiviazione S3</text><line x1="402" y1="88" x2="528" y2="48" stroke="var(--dg-ink-2)" stroke-width="1.2" marker-end="url(#ea)"></line><rect x="530" y="82" width="110" height="36" rx="6" fill="var(--dg-surface)" stroke="var(--dg-line)"></rect><text x="585" y="105" text-anchor="middle" fill="var(--dg-ink)" font-family="var(--font-ui)" font-size="12">OpenAI</text><line x1="402" y1="100" x2="528" y2="100" stroke="var(--dg-ink-2)" stroke-width="1.2" marker-end="url(#ea)"></line><rect x="530" y="134" width="110" height="36" rx="6" fill="var(--dg-surface)" stroke="var(--dg-line)"></rect><text x="585" y="157" text-anchor="middle" fill="var(--dg-ink)" font-family="var(--font-ui)" font-size="12">Analitica</text><line x1="402" y1="115" x2="528" y2="152" stroke="var(--dg-ink-2)" stroke-width="1.2" marker-end="url(#ea)"></line><text x="330" y="175" text-anchor="middle" fill="var(--dg-accent)" font-family="var(--font-ui)" font-size="11" font-weight="700">Uno qualsiasi di questi problemi = il tuo problema</text></svg>
+</Diagram>
+
+### (1) Guasti di rete
+
+La connessione Internet tra il tuo server e l'API esterna non è affidabile. Incontrerai: timeout della connessione, errori di risoluzione DNS, partizioni di rete ed errori di handshake TLS. Imposta **timeout espliciti** su ogni chiamata HTTP in uscita, non lasciare mai che un'API lenta di terze parti blocchi la tua goroutine/thread a tempo indeterminato.
+
+### (2) Limitazione della velocità: HTTP 429
+
+Ogni API esterna seria applica limiti di velocità per prevenire abusi. Se la tua app blocca un'API (a causa di un bug, un picco di traffico o un errore di loop), riceverai `HTTP 429 Too Many Requests`.
+
+La mitigazione standard è **Backoff esponenziale con jitter**:
+
+<Diagram caption="Fig 3: Exponential Backoff: each retry waits 2x longer. Jitter spreads retries to avoid thundering herd.">
+<svg viewBox="0 0 620 130" xmlns="http://www.w3.org/2000/svg" width="100%"><rect width="620" height="130" fill="var(--dg-paper)"></rect><defs><marker id="fa" markerWidth="7" markerHeight="7" refX="5" refY="3" orient="auto"><path d="M0,0 L5,3 L0,6 Z" fill="var(--dg-accent)"></path></marker></defs><rect x="20" y="40" width="70" height="40" rx="6" fill="var(--dg-accent-surface)" stroke="var(--dg-accent)"></rect><text x="55" y="58" text-anchor="middle" fill="var(--dg-accent)" font-family="var(--font-ui)" font-size="11" font-weight="700">Prova il numero 1</text><text x="55" y="72" text-anchor="middle" fill="var(--dg-ink-2)" font-family="var(--font-ui)" font-size="10">-&gt; 429</text><line x1="92" y1="60" x2="118" y2="60" stroke="var(--dg-accent)" stroke-width="1.5" marker-end="url(#fa)"></line><text x="104" y="52" text-anchor="middle" fill="var(--dg-ink-2)" font-family="var(--font-ui)" font-size="10">1 s</text><rect x="120" y="40" width="70" height="40" rx="6" fill="var(--dg-accent-surface)" stroke="var(--dg-accent)"></rect><text x="155" y="58" text-anchor="middle" fill="var(--dg-accent)" font-family="var(--font-ui)" font-size="11" font-weight="700">Prova il numero 2</text><text x="155" y="72" text-anchor="middle" fill="var(--dg-ink-2)" font-family="var(--font-ui)" font-size="10">-&gt; 429</text><line x1="192" y1="60" x2="218" y2="60" stroke="var(--dg-accent)" stroke-width="1.5" marker-end="url(#fa)"></line><text x="204" y="52" text-anchor="middle" fill="var(--dg-ink-2)" font-family="var(--font-ui)" font-size="10">2 s</text><rect x="220" y="40" width="70" height="40" rx="6" fill="var(--dg-accent-surface)" stroke="var(--dg-accent)"></rect><text x="255" y="58" text-anchor="middle" fill="var(--dg-accent)" font-family="var(--font-ui)" font-size="11" font-weight="700">Prova il numero 3</text><text x="255" y="72" text-anchor="middle" fill="var(--dg-ink-2)" font-family="var(--font-ui)" font-size="10">-&gt; 429</text><line x1="292" y1="60" x2="318" y2="60" stroke="var(--dg-accent)" stroke-width="1.5" marker-end="url(#fa)"></line><text x="304" y="52" text-anchor="middle" fill="var(--dg-ink-2)" font-family="var(--font-ui)" font-size="10">4 s</text><rect x="320" y="40" width="70" height="40" rx="6" fill="var(--dg-accent-surface)" stroke="var(--dg-accent)"></rect><text x="355" y="58" text-anchor="middle" fill="var(--dg-accent)" font-family="var(--font-ui)" font-size="11" font-weight="700">Prova il punto 4</text><text x="355" y="72" text-anchor="middle" fill="var(--dg-ink-2)" font-family="var(--font-ui)" font-size="10">-&gt; 429</text><line x1="392" y1="60" x2="418" y2="60" stroke="var(--dg-accent)" stroke-width="1.5" marker-end="url(#fa)"></line><text x="404" y="52" text-anchor="middle" fill="var(--dg-ink-2)" font-family="var(--font-ui)" font-size="10">8 s</text><rect x="420" y="40" width="80" height="40" rx="6" fill="var(--dg-ok-surface)" stroke="var(--dg-ok)"></rect><text x="460" y="58" text-anchor="middle" fill="var(--dg-ok)" font-family="var(--font-ui)" font-size="11" font-weight="700">Prova il punto 5</text><text x="460" y="72" text-anchor="middle" fill="var(--dg-ok)" font-family="var(--font-ui)" font-size="10">-&gt; 200 </text><text x="310" y="110" text-anchor="middle" fill="var(--dg-ink-2)" font-family="var(--font-ui)" font-size="11">Aspetta = base x 2^n + random_jitter, raddoppia ogni tentativo, il jitter previene il tuono tuonante</text></svg>
+</Diagram>
+
+### (3) Interruzione del servizio/Tempi di inattività
+
+I principali fornitori di servizi cloud (AWS, GCP) e i più diffusi servizi SaaS si interrompono occasionalmente. La tua app necessita di una strategia per quando una dipendenza critica non è completamente disponibile:
+
+- **Fallback**: se la cache Redis è inattiva, esegui il fallback alle letture DB dirette per i dati non critici.
+- **Degradamento graduale**: disattiva la funzionalità interessata (ad esempio "Suggerimenti AI temporaneamente non disponibili") anziché bloccare l'intera app.
+- **Modello interruttore automatico**: dopo N errori consecutivi, interrompe l'invio di richieste al servizio interrotto e restituisce immediatamente una risposta memorizzata nella cache/predefinita. Riprovare il servizio dopo un periodo di raffreddamento.
+
+06
+
+## Errori di convalida dell'input
+
+Questi sono gli **errori più facili da gestire** perché _sei tu a definire le regole_. Il livello di convalida è la prima linea di difesa: rileva i dati errati nel punto di ingresso, prima che raggiungano il database o la logica applicativa.
+
+### Tipi di convalida
+
+| Digitare | Cosa controlla | Esempio |
+| ----------------- | ----------------------------------------- | --------------------------------------- |
+| **Formato** | Forma/modello del valore | Regex email, data ISO, telefono E.164 |
+| **Gamma** | Limiti numerici, lunghezza della stringa, dimensione dell'array | Prezzo: 0-99999, nome: 2-100 caratteri |
+| **Obbligatorio** | Campo obbligatorio presente | user\_id non deve essere null |
+| **Regola aziendale** | Vincolo specifico del dominio | Fine\_data prenotazione &gt; inizio\_data |
+| **Referenziale** | L'entità correlata esiste effettivamente | categoria\_id esiste nella tabella delle categorie |
+
+Convalida sempre a **entrambi i livelli**: frontend (UX) _e_ backend (sicurezza). Non fidarti mai solo della convalida lato client. Il backend è il cancello autorevole.
+
+<Callout type="info">
+Restituisce HTTP `400 Bad Request` con un corpo dell'errore strutturato che elenca tutti i campi non riusciti e il motivo. Non restituire un singolo messaggio generico, aiuta l'utente a correggere tutti i propri errori in un unico viaggio di andata e ritorno.
+</Callout>
+
+07
+
+## Errori di configurazione
+
+Gli errori di configurazione si verificano al confine tra ambienti, sviluppo -&gt; staging -&gt; produzione. Una scomparsa `OPENAI_API_KEY`, un URL di database errato o un segreto dimenticato possono interrompere silenziosamente funzionalità specifiche mentre il resto dell'app appare integro.
+
+### Errore rapido all'avvio: non in fase di runtime
+
+La regola d'oro: **convalidare tutte le variabili di ambiente richieste prima che il server inizi ad accettare il traffico**. Se qualcuno manca o è danneggiato, si blocca immediatamente con un messaggio di errore chiaro.
+
+#### Difetto: errore di runtime
+
+- L'app si avvia correttamente
+- Il primo utente raggiunge l'endpoint dell'immagine AI
+- La chiamata OpenAI fallisce, manca la chiave
+- L'utente riceve un misterioso errore 500
+- La vecchia distribuzione è già stata interrotta
+- Il sito è inattivo finché non viene risolto manualmente
+
+#### Buono: errore di avvio
+
+- Inizia la nuova distribuzione
+- La convalida della configurazione viene eseguita immediatamente
+- Rilevata chiave mancante -&gt; il processo esce con un messaggio chiaro
+- Blu-verde: vecchia distribuzione ancora in esecuzione
+- Zero tempi di inattività, correzioni e ridistribuzioni da parte del team operativo
+
+<Callout type="info">
+Le implementazioni blu-verdi rendono sicuri i crash all'avvio: la nuova versione deve superare i controlli di integrità prima che la vecchia versione venga terminata. Se la nuova versione si blocca all'avvio, la vecchia versione continua a servire il traffico.
+</Callout>
+
+### Convalida della configurazione all'avvio
+
+Vai a Python JavaScript TypeScript Java
+
+controlla ogni variabile richiesta prima che la porta venga associata
+
+```go title="config.go / Go"
+package config
+
+import (
+    "fmt"
+    "os"
+    "strings"
+)
+
+type Config struct {
+    DatabaseURL    string
+    OpenAIKey      string
+    JWTSecret      string
+    ResendAPIKey   string
+}
+
+// MustLoad panics if any required variable is missing.
+// Call this once in main() before http.ListenAndServe.
+func MustLoad() Config {
+    required := []string{
+        "DATABASE_URL",
+        "OPENAI_API_KEY",
+        "JWT_SECRET",
+        "RESEND_API_KEY",
+    }
+
+    var missing []string
+    for _, key := range required {
+        if os.Getenv(key) == "" {
+            missing = append(missing, key)
+        }
+    }
+    if len(missing) > 0 {
+        // Crash immediately, loud and clear
+        panic(fmt.Sprintf("[FATAL] missing required env vars: %s",
+            strings.Join(missing, ", ")))
+    }
+
+    return Config{
+        DatabaseURL:  os.Getenv("DATABASE_URL"),
+        OpenAIKey:    os.Getenv("OPENAI_API_KEY"),
+        JWTSecret:    os.Getenv("JWT_SECRET"),
+        ResendAPIKey: os.Getenv("RESEND_API_KEY"),
+    }
+}
+
+// main.go
+func main() {
+    cfg := config.MustLoad()  // panics here if config invalid
+    server := newServer(cfg)
+    log.Fatal(server.ListenAndServe())
+}
+```
+
+```python title="config.py / Python"
+import os
+import sys
+from dataclasses import dataclass
+
+REQUIRED = [
+    "DATABASE_URL",
+    "OPENAI_API_KEY",
+    "JWT_SECRET",
+    "RESEND_API_KEY",
+]
+
+
+@dataclass(frozen=True)
+class Config:
+    database_url: str
+    openai_key: str
+    jwt_secret: str
+    resend_api_key: str
+
+
+def must_load() -> Config:
+    """Exit if any required variable is missing.
+
+    Call this once at startup, before the server binds a port.
+    """
+    missing = [key for key in REQUIRED if not os.getenv(key)]
+    if missing:
+        # Crash immediately, loud and clear
+        sys.exit(f"[FATAL] missing required env vars: {', '.join(missing)}")
+
+    return Config(
+        database_url=os.environ["DATABASE_URL"],
+        openai_key=os.environ["OPENAI_API_KEY"],
+        jwt_secret=os.environ["JWT_SECRET"],
+        resend_api_key=os.environ["RESEND_API_KEY"],
+    )
+
+
+# main.py
+config = must_load()  # exits here if config invalid
+```
+
+```js title="config.js / Node 20+"
+const REQUIRED = [
+  'DATABASE_URL',
+  'OPENAI_API_KEY',
+  'JWT_SECRET',
+  'RESEND_API_KEY',
+]
+
+// Exits if any required variable is missing.
+// Call this once at startup, before app.listen().
+export function mustLoad() {
+  const missing = REQUIRED.filter((key) => !process.env[key])
+
+  if (missing.length > 0) {
+    // Crash immediately, loud and clear
+    console.error(`[FATAL] missing required env vars: ${missing.join(', ')}`)
+    process.exit(1)
+  }
+
+  return {
+    databaseUrl: process.env.DATABASE_URL,
+    openaiKey: process.env.OPENAI_API_KEY,
+    jwtSecret: process.env.JWT_SECRET,
+    resendApiKey: process.env.RESEND_API_KEY,
+  }
+}
+
+// server.js
+const config = mustLoad() // exits here if config invalid
+app.listen(8080)
+```
+
+```ts title="config.ts / TypeScript 5+"
+const REQUIRED = ['DATABASE_URL', 'OPENAI_API_KEY', 'JWT_SECRET', 'RESEND_API_KEY'] as const
+
+type RequiredVar = (typeof REQUIRED)[number]
+
+// The return type is the real payoff: every field is `string`, never
+// `string | undefined`. Because this function has already proved the
+// variable is present, nothing downstream needs a second null check,
+// and `process.env.X!` never has to appear anywhere else in the codebase.
+export type Config = Record<RequiredVar, string>
+
+export function mustLoad(): Config {
+  const missing = REQUIRED.filter((key) => !process.env[key])
+
+  if (missing.length > 0) {
+    console.error(`[FATAL] missing required env vars: ${missing.join(', ')}`)
+    process.exit(1) // crash immediately, loud and clear
+  }
+
+  return Object.fromEntries(
+    REQUIRED.map((key) => [key, process.env[key] as string]),
+  ) as Config
+}
+
+export const config = mustLoad() // exits at import if config invalid
+```
+
+```java title="Config.java / Java 17+ + Spring Boot"
+@Component
+public class Config {
+    private static final List<String> REQUIRED = List.of(
+        "DATABASE_URL",
+        "OPENAI_API_KEY",
+        "JWT_SECRET",
+        "RESEND_API_KEY");
+
+    // @PostConstruct runs while the context is starting, so a missing
+    // variable fails the application BEFORE the port is ever bound. That
+    // is the whole point of failing fast: an app that refused to start is
+    // obvious, an app that started half-configured is not.
+    @PostConstruct
+    void validate() {
+        List<String> missing = REQUIRED.stream()
+            .filter(key -> System.getenv(key) == null || System.getenv(key).isBlank())
+            .toList();
+
+        if (!missing.isEmpty()) {
+            // Crash immediately, loud and clear
+            throw new IllegalStateException(
+                "[FATAL] missing required env vars: " + String.join(", ", missing));
+        }
+    }
+}
+
+// Spring's own spelling of the same guarantee is a placeholder with no
+// default, which fails startup and names the property:
+//   app.database-url: ${DATABASE_URL}
+// See chapter 14 for the fuller version with per-field validation.
+```
+
+08
+
+## Rilevamento proattivo degli errori: controlli dello stato
+
+> "La migliore gestione degli errori inizia prima che si verifichi l'errore."
+
+I controlli dello stato verificano continuamente che il tuo sistema funzioni, non solo che sia _in esecuzione_. C'è una differenza fondamentale:
+
+<Diagram caption="Fig 4: Liveness vs Readiness: the industry-standard split (Kubernetes uses both).">
+<svg viewBox="0 0 640 160" xmlns="http://www.w3.org/2000/svg" width="100%"><rect width="640" height="160" fill="var(--dg-paper)"></rect><rect x="30" y="30" width="260" height="100" rx="10" fill="var(--dg-accent-surface)" stroke="var(--dg-accent)"></rect><text x="160" y="56" text-anchor="middle" fill="var(--dg-accent)" font-family="var(--font-ui)" font-size="13" font-weight="700">Controllo della vivacità di base</text><text x="160" y="78" text-anchor="middle" fill="var(--dg-ink-2)" font-family="var(--font-ui)" font-size="12">GET /salute -&gt; 200 OK</text><text x="160" y="96" text-anchor="middle" fill="var(--dg-ink-2)" font-family="var(--font-ui)" font-size="12">Controlli: il processo è in corso?</text><text x="160" y="114" text-anchor="middle" fill="var(--dg-accent)" font-family="var(--font-ui)" font-size="11">NON verifica DB/cache/esterno</text><rect x="350" y="30" width="260" height="100" rx="10" fill="var(--dg-ok-surface)" stroke="var(--dg-ok)"></rect><text x="480" y="56" text-anchor="middle" fill="var(--dg-ok)" font-family="var(--font-ui)" font-size="13" font-weight="700">Controllo approfondito della preparazione </text><text x="480" y="78" text-anchor="middle" fill="var(--dg-ink-2)" font-family="var(--font-ui)" font-size="12">GET /pronto -&gt; 200 OK</text><text x="480" y="96" text-anchor="middle" fill="var(--dg-ink-2)" font-family="var(--font-ui)" font-size="12">Esegue query di prova, esegue il ping della cache,</text><text x="480" y="114" text-anchor="middle" fill="var(--dg-ok)" font-family="var(--font-ui)" font-size="11">verifica che tutti i sottosistemi siano funzionanti</text></svg>
+</Diagram>
+
+### Cosa controllare
+
+- **Database**: esegui una query rappresentativa leggera. Tieni traccia del tempo di query; se passa da 50ms a 4s, c'è qualcosa che non va prima che l'utente se ne accorga.
+- **Servizi esterni**: processori di pagamento: eseguono transazioni di test periodiche; email: inviare ad un indirizzo interno; auth: genera e convalida un token di prova.
+- **Configurazione**: verifica che tutte le variabili di ambiente richieste siano caricate e non vuote all'avvio.
+- **Riscaldamento della cache**: assicurati che le cache critiche (archivio sessioni, catalogo prodotti) siano popolate prima di servire il traffico.
+
+### Endpoint di controllo approfondito dello stato
+
+Vai a Python JavaScript TypeScript Java
+
+eseguire il ping di ogni dipendenza, segnalare lo stato per controllo, rispondere a 503 quando degradato
+
+```go title="health.go / Go"
+type HealthStatus struct {
+    Status   string            `json:"status"`
+    Checks   map[string]string `json:"checks"`
+}
+
+func healthHandler(db *pgxpool.Pool, rdb *redis.Client) http.HandlerFunc {
+    return func(w http.ResponseWriter, r *http.Request) {
+        checks := map[string]string{}
+        overall := "ok"
+
+        // DB check
+        ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
+        defer cancel()
+        if err := db.Ping(ctx); err != nil {
+            checks["database"] = "unhealthy: " + err.Error()
+            overall = "degraded"
+        } else {
+            checks["database"] = "ok"
+        }
+
+        // Redis check
+        if err := rdb.Ping(r.Context()).Err(); err != nil {
+            checks["cache"] = "unhealthy: " + err.Error()
+            overall = "degraded"
+        } else {
+            checks["cache"] = "ok"
+        }
+
+        status := http.StatusOK
+        if overall != "ok" { status = http.StatusServiceUnavailable }
+
+        w.Header().Set("Content-Type", "application/json")
+        w.WriteHeader(status)
+        json.NewEncoder(w).Encode(HealthStatus{Status: overall, Checks: checks})
+    }
+}
+```
+
+```python title="health.py / Python + FastAPI"
+import asyncio
+
+from fastapi import Response
+from sqlalchemy import text
+
+
+@app.get("/ready")
+async def health(response: Response):
+    checks: dict[str, str] = {}
+    overall = "ok"
+
+    # DB check, with its own timeout
+    try:
+        await asyncio.wait_for(db.execute(text("SELECT 1")), timeout=2.0)
+        checks["database"] = "ok"
+    except Exception as e:
+        checks["database"] = f"unhealthy: {e}"
+        overall = "degraded"
+
+    # Redis check
+    try:
+        await redis.ping()
+        checks["cache"] = "ok"
+    except Exception as e:
+        checks["cache"] = f"unhealthy: {e}"
+        overall = "degraded"
+
+    response.status_code = 200 if overall == "ok" else 503
+    return {"status": overall, "checks": checks}
+```
+
+```js title="health.js / Node 20+ + Express"
+app.get('/ready', async (req, res) => {
+  const checks = {}
+  let overall = 'ok'
+
+  // DB check, with its OWN timeout. A health check that can hang is
+  // worse than no health check: the orchestrator's probe times out, the
+  // pod is killed, and nothing in the logs explains why.
+  try {
+    await withTimeout(pool.query('SELECT 1'), 2000)
+    checks.database = 'ok'
+  } catch (err) {
+    checks.database = `unhealthy: ${err.message}`
+    overall = 'degraded'
+  }
+
+  // Redis check
+  try {
+    await redis.ping()
+    checks.cache = 'ok'
+  } catch (err) {
+    checks.cache = `unhealthy: ${err.message}`
+    overall = 'degraded'
+  }
+
+  res.status(overall === 'ok' ? 200 : 503).json({ status: overall, checks })
+})
+```
+
+```ts title="health.ts / TypeScript 5+ + Express"
+import type { Request, Response } from 'express'
+
+interface HealthStatus {
+  status: 'ok' | 'degraded'
+  checks: Record<string, string>
+}
+
+// Describing a check as DATA rather than as another try/catch block is
+// what keeps this endpoint honest as dependencies are added: one entry
+// per dependency, all of them run concurrently, and nobody can add a
+// fifth check that forgets its timeout.
+const CHECKS: Array<{ name: string; probe: () => Promise<unknown> }> = [
+  { name: 'database', probe: () => pool.query('SELECT 1') },
+  { name: 'cache', probe: () => redis.ping() },
+]
+
+export async function health(_req: Request, res: Response): Promise<void> {
+  const results = await Promise.all(
+    CHECKS.map(async ({ name, probe }) => {
+      try {
+        await withTimeout(probe(), 2000)
+        return [name, 'ok'] as const
+      } catch (err) {
+        return [name, `unhealthy: ${(err as Error).message}`] as const
+      }
+    }),
+  )
+
+  const checks = Object.fromEntries(results)
+  const overall: HealthStatus['status'] =
+    results.every(([, v]) => v === 'ok') ? 'ok' : 'degraded'
+
+  res.status(overall === 'ok' ? 200 : 503).json({ status: overall, checks })
+}
+```
+
+```java title="CacheHealthIndicator.java / Java 17+ + Spring Boot Actuator"
+// Spring Boot Actuator already exposes /actuator/health, and it already
+// aggregates a DataSource and a Redis check with no code at all:
+//   management.endpoint.health.show-details: always
+//   management.endpoint.health.probes.enabled: true
+
+// Anything it does not know about is one bean each.
+@Component
+public class CacheHealthIndicator implements HealthIndicator {
+    private final StringRedisTemplate redis;
+
+    CacheHealthIndicator(StringRedisTemplate redis) {
+        this.redis = redis;
+    }
+
+    @Override
+    public Health health() {
+        try {
+            redis.getConnectionFactory().getConnection().ping();
+            return Health.up().build();
+        } catch (Exception e) {
+            // One DOWN makes the aggregate DOWN, and /actuator/health then
+            // answers 503, which is what the orchestrator actually watches.
+            return Health.down(e).withDetail("cache", "unhealthy").build();
+        }
+    }
+}
+
+// Liveness and readiness are separate GROUPS, and conflating them is the
+// classic mistake: a database outage should fail readiness (stop routing
+// traffic here) but NOT liveness, because restarting the pod will not
+// bring the database back, it will only add a crash loop to the incident.
+//   management.endpoint.health.group.readiness.include: db,cache
+//   management.endpoint.health.group.liveness.include: ping
+```
+
+09
+
+## Monitoraggio e osservabilità
+
+I controlli sanitari ti dicono che qualcosa non funziona _proprio ora_. Il monitoraggio ti dice che qualcosa sta per rompersi e ti fornisce il contesto per capire perché qualcosa si è rotto dopo il fatto.
+
+### Cosa monitorare
+
+| Categoria | Metriche da monitorare | Perché |
+| --------------------- | ---------------------------------------------------------- | ------------------------------------------- |
+| **Livello HTTP** | Velocità 4xx/5xx, latenza p50/p95/p99 | Rivela immediatamente i problemi rivolti agli utenti |
+| **Banca dati** | Durata della query, utilizzo del pool di connessioni, conteggio dei deadlock | Rileva query lente prima del timeout |
+| **Servizi Esterni** | Tasso di successo delle chiamate, latenza, conteggio 429 | Sapere quando una dipendenza sta peggiorando |
+| **Metriche aziendali** | Transazioni riuscite/min, pagamenti falliti, tasso di iscrizione | Rileva gli errori logici invisibili ai tassi di errore |
+| **Infrastrutture** | CPU, memoria, I/O del disco, throughput di rete | L'esaurimento delle risorse precede gli arresti anomali |
+
+<Callout type="info">
+**Non tenere traccia solo dei tassi di errore.** Un calo delle transazioni riuscite da 1.000/min a 200/min è un problema critico, anche se il tasso di errore è pari allo 0%. Monitora sempre i risultati aziendali positivi, non solo i segnali di fallimento.
+</Callout>
+
+### Registrazione strutturata (JSON)
+
+È difficile eseguire query sui log in testo semplice su larga scala. Utilizza log JSON strutturati in modo che gli strumenti di aggregazione dei log (Grafana Loki, Datadog, ELK) possano analizzarli, filtrarli e inviare avvisi in modo programmatico.
+
+Vai a Python JavaScript TypeScript Java
+
+un oggetto interrogabile per evento, mai una frase interpolata
+
+```go title="logging.go / Go + log/slog"
+// Go's standard library has had structured logging since 1.21: log/slog.
+logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+
+// Good, structured, queryable, no sensitive data
+logger.Error("payment_failed",
+    "user_id", userID,
+    "order_id", orderID,
+    "amount_cents", 4999,
+    "provider", "stripe",
+    "error_code", "card_declined",
+    "correlation_id", correlationID,
+)
+
+// Bad: one opaque sentence. No aggregator can filter on "all declined
+// cards for this provider", because there are no fields to filter on.
+logger.Error(fmt.Sprintf("payment failed for %s on order %s", userID, orderID))
+```
+
+```python title="logging.py / Python + structlog"
+import structlog
+
+log = structlog.get_logger()
+
+# Good, structured, queryable, no sensitive data
+log.error(
+    "payment_failed",
+    user_id="u_9a3f",          # ID, not email
+    correlation_id="req_abc123",
+    provider="stripe",
+    error_code="card_declined",
+    amount_cents=4999,
+)
+
+# BAD, never log PII or secrets
+# log.error("payment_failed", email="alice@example.com", card="4242...")
+```
+
+```js title="logging.js / Node 20+ + pino"
+import pino from 'pino'
+
+const log = pino({
+  // Redaction belongs HERE, not at the call sites. One list, applied to
+  // every log line, is the only version of this that survives contact
+  // with a growing codebase.
+  redact: ['*.password', '*.card', 'req.headers.authorization'],
+})
+
+// Good, structured, queryable, no sensitive data.
+// pino's convention: the object first, the message second.
+log.error({
+  user_id: 'u_9a3f',            // ID, not email
+  correlation_id: 'req_abc123',
+  provider: 'stripe',
+  error_code: 'card_declined',
+  amount_cents: 4999,
+}, 'payment_failed')
+
+// BAD, never log PII or secrets
+// log.error({ email: 'alice@example.com', card: '4242...' }, 'payment_failed')
+```
+
+```ts title="logging.ts / TypeScript 5+ + pino"
+import pino from 'pino'
+
+// Naming the event shape is worth it for exactly one reason: the field
+// names become a contract. A dashboard querying `error_code` keeps
+// working because a rename now breaks the build rather than silently
+// emitting a field nothing is watching.
+interface PaymentFailed {
+  user_id: string
+  correlation_id: string
+  provider: 'stripe' | 'adyen'
+  error_code: string
+  amount_cents: number
+}
+
+const log = pino({ redact: ['*.password', '*.card', 'req.headers.authorization'] })
+
+export function logPaymentFailed(event: PaymentFailed): void {
+  log.error(event, 'payment_failed')
+}
+
+// And because `email` is not a field of PaymentFailed, the PII mistake
+// below does not compile:
+//   logPaymentFailed({ ...event, email: user.email })
+```
+
+```java title="Logging.java / Java 17+ + SLF4J + Logstash encoder"
+private static final Logger log = LoggerFactory.getLogger(PaymentService.class);
+
+// SLF4J's message is a template, not a formatted string. The two look
+// alike and are not: the placeholders are only filled in if the level is
+// enabled, and structured appenders can keep the arguments separate.
+log.atError()
+   .setMessage("payment_failed")
+   .addKeyValue("user_id", "u_9a3f")            // ID, not email
+   .addKeyValue("correlation_id", "req_abc123")
+   .addKeyValue("provider", "stripe")
+   .addKeyValue("error_code", "card_declined")
+   .addKeyValue("amount_cents", 4999)
+   .log();
+
+// With net.logstash.logback.encoder.LogstashEncoder, every addKeyValue
+// becomes a top-level JSON field that Loki or ELK can filter on.
+
+// BAD, an interpolated sentence: no fields, nothing to query, and the
+// string is built even when ERROR is disabled.
+// log.error("payment failed for " + user.getEmail() + " on " + orderId);
+```
+
+10
+
+## Strategie di recupero
+
+### Recuperabile e non recuperabile
+
+#### Errori recuperabili
+
+- Problema tecnico transitorio della rete all'API e-mail
+- Pool di connessioni al database temporaneamente esaurito
+- Limite di tariffa 429 dal servizio esterno
+
+**Strategia:** Riprova con backoff esponenziale. Metti in coda il lavoro. Non arrenderti immediatamente.
+
+#### Errori irreversibili
+
+- Cluster Redis completamente inattivo
+- Processore di pagamento offline per ore
+- Dati corrotti nel DB
+
+**Strategia:** Degradazione aggraziata. Ricaderci. Disabilita la funzione. Proteggi le funzionalità principali.
+
+### Backoff esponenziale
+
+Vai a Python JavaScript TypeScript Java
+
+raddoppia l'attesa per ogni tentativo, aggiungi jitter e non ritentare mai un errore permanente
+
+```go title="retry.go / Go"
+func sendEmailWithRetry(to, subject, body string) error {
+    maxRetries := 5
+    baseDelay  := 1 * time.Second
+
+    for attempt := 0; attempt < maxRetries; attempt++ {
+        err := emailClient.Send(to, subject, body)
+        if err == nil {
+            return nil  // success
+        }
+
+        if !isRetryable(err) {
+            return fmt.Errorf("permanent failure: %w", err)
+        }
+
+        // Exponential backoff: 1s, 2s, 4s, 8s, 16s
+        wait := baseDelay * time.Duration(1<<attempt)
+        // Add jitter (+/-20%) to prevent thundering herd
+        jitter := time.Duration(rand.Int63n(int64(wait / 5)))
+        time.Sleep(wait + jitter)
+
+        log.Warn("email send failed, retrying",
+            "attempt", attempt+1,
+            "wait_ms", wait.Milliseconds(),
+            "error", err)
+    }
+    return fmt.Errorf("all %d retries exhausted", maxRetries)
+}
+
+func isRetryable(err error) bool {
+    // Retry on 429, 503, network errors; not on 400, 401, 422
+    var httpErr *HTTPError
+    if errors.As(err, &httpErr) {
+        return httpErr.StatusCode == 429 || httpErr.StatusCode >= 500
+    }
+    return true  // network errors are always retryable
+}
+```
+
+```python title="retry.py / Python"
+import random
+import time
+
+
+def send_email_with_retry(to: str, subject: str, body: str) -> None:
+    max_retries = 5
+    base_delay = 1.0  # seconds
+
+    for attempt in range(max_retries):
+        try:
+            email_client.send(to, subject, body)
+            return  # success
+        except Exception as err:
+            if not is_retryable(err):
+                raise RuntimeError("permanent failure") from err
+
+            # Exponential backoff: 1s, 2s, 4s, 8s, 16s
+            wait = base_delay * (2 ** attempt)
+            # Add jitter (+/-20%) to prevent thundering herd
+            jitter = random.uniform(0, wait / 5)
+            time.sleep(wait + jitter)
+
+            log.warning(
+                "email_send_failed_retrying",
+                attempt=attempt + 1,
+                wait_ms=int(wait * 1000),
+                error=str(err),
+            )
+
+    raise RuntimeError(f"all {max_retries} retries exhausted")
+
+
+def is_retryable(err: Exception) -> bool:
+    # Retry on 429, 503, network errors; not on 400, 401, 422
+    if isinstance(err, HTTPError):
+        return err.status_code == 429 or err.status_code >= 500
+    return True  # network errors are always retryable
+```
+
+```js title="retry.js / Node 20+"
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+
+export async function sendEmailWithRetry(to, subject, body) {
+  const maxRetries = 5
+  const baseDelay = 1000 // ms
+
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      await emailClient.send(to, subject, body)
+      return // success
+    } catch (err) {
+      if (!isRetryable(err)) {
+        throw new Error('permanent failure', { cause: err })
+      }
+
+      // Exponential backoff: 1s, 2s, 4s, 8s, 16s
+      const wait = baseDelay * 2 ** attempt
+      // Add jitter (+/-20%) to prevent thundering herd
+      const jitter = Math.random() * (wait / 5)
+      await sleep(wait + jitter)
+
+      log.warn({ attempt: attempt + 1, wait_ms: wait, err },
+        'email send failed, retrying')
+    }
+  }
+  throw new Error(`all ${maxRetries} retries exhausted`)
+}
+
+function isRetryable(err) {
+  // Retry on 429, 503, network errors; not on 400, 401, 422
+  if (err.statusCode) return err.statusCode === 429 || err.statusCode >= 500
+  return true // network errors are always retryable
+}
+```
+
+```ts title="retry.ts / TypeScript 5+"
+// Generic, because "retry with backoff" is never needed exactly once.
+// The type parameter keeps the wrapped call's return value intact, so
+// adding retries to a call site changes nothing about how it is used.
+export async function withRetry<T>(
+  work: () => Promise<T>,
+  opts: { maxRetries?: number; baseDelayMs?: number; signal?: AbortSignal } = {},
+): Promise<T> {
+  const { maxRetries = 5, baseDelayMs = 1000, signal } = opts
+
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    // The AbortSignal matters more than it looks. Without it, a client
+    // that hung up three seconds ago still costs you thirty-one seconds
+    // of retries against an API you are paying per call for.
+    signal?.throwIfAborted()
+
+    try {
+      return await work()
+    } catch (err) {
+      if (!isRetryable(err)) {
+        throw new Error('permanent failure', { cause: err })
+      }
+
+      const wait = baseDelayMs * 2 ** attempt   // 1s, 2s, 4s, 8s, 16s
+      const jitter = Math.random() * (wait / 5) // +/-20%, no thundering herd
+      await sleep(wait + jitter, signal)
+
+      log.warn({ attempt: attempt + 1, wait_ms: wait, err }, 'retrying')
+    }
+  }
+  throw new Error(`all ${maxRetries} retries exhausted`)
+}
+
+function isRetryable(err: unknown): boolean {
+  // Retry on 429, 503, network errors; not on 400, 401, 422
+  if (err instanceof HTTPError) {
+    return err.statusCode === 429 || err.statusCode >= 500
+  }
+  return true // network errors are always retryable
+}
+
+// Usage: the result is still a Message, cache or no retries.
+const sent: Message = await withRetry(() => emailClient.send(to, subject, body))
+```
+
+```java title="EmailService.java / Java 17+ + Spring Retry"
+// Spring Retry collapses the whole loop into an annotation, and its
+// defaults are exactly the ones above: multiplier 2, plus a random
+// factor that supplies the jitter.
+@Service
+public class EmailService {
+
+    @Retryable(
+        retryFor   = RetryableException.class,  // 429, 5xx, network
+        noRetryFor = PermanentException.class,  // 400, 401, 422: never retry
+        maxAttempts = 5,
+        backoff = @Backoff(delay = 1000, multiplier = 2, random = true))
+    public void sendEmail(String to, String subject, String body) {
+        emailClient.send(to, subject, body); // 1s, 2s, 4s, 8s, 16s (+jitter)
+    }
+
+    // Called once every attempt is exhausted. Without a @Recover method
+    // the final exception simply propagates, which is often right, but
+    // that should be a decision rather than something you discover.
+    @Recover
+    void recover(RetryableException e, String to, String subject, String body) {
+        log.error("all retries exhausted to={}", to, e);
+        deadLetter.park(to, subject, body);
+    }
+}
+
+// Resilience4j is the other standard choice, and its advantage is that
+// the retry composes with a circuit breaker: a provider that is fully
+// down stops being called at all, instead of being retried five times
+// by every single request that arrives.
+```
+
+### Ripristino automatico o manuale
+
+- **Automatico**: riavvia i processi bloccati (systemd, policy di riavvio Kubernetes), pulisci le cache danneggiate, passa ai sistemi di backup. Progetta attentamente, il ripristino automatico a volte può _amplificare_ un problema.
+- **Manuale**: danneggiamento dei dati, discrepanze nei pagamenti, incidenti di sicurezza. Questi _richiedono il giudizio umano_. Documentare il runbook. Provalo. Scopri chi è di guardia.
+
+<Callout type="info">
+L'integrità dei dati è la tua priorità numero 1 durante qualsiasi incidente. Non eliminare o migrare mai automaticamente i dati come parte di una procedura di ripristino degli errori. Prima fai un backup, sempre.
+</Callout>
+
+11
+
+## Gestore globale degli errori: la rete di sicurezza finale
+
+Il gestore degli errori globale è un singolo middleware che si trova nello strato più esterno dell'applicazione, rileva ogni errore che emerge da qualsiasi livello e lo converte in una risposta HTTP adeguatamente formattata.
+
+<Diagram caption="Fig 5: All errors bubble up to one middleware. One place to define every response format.">
+<svg viewBox="0 0 680 340" xmlns="http://www.w3.org/2000/svg" width="100%"><rect width="680" height="340" fill="var(--dg-paper)"></rect><defs><marker id="ga" markerWidth="7" markerHeight="7" refX="5" refY="3" orient="auto"><path d="M0,0 L5,3 L0,6 Z" fill="var(--dg-ink-2)"></path></marker><marker id="gb" markerWidth="7" markerHeight="7" refX="5" refY="3" orient="auto"><path d="M0,0 L5,3 L0,6 Z" fill="var(--dg-accent)"></path></marker></defs><text x="20" y="26" font-family="var(--font-prose)" font-size="14" font-weight="700" fill="var(--dg-ink)">Richiedi flusso</text><rect x="20" y="36" width="160" height="40" rx="7" fill="var(--dg-surface)" stroke="var(--dg-line)"></rect><text x="100" y="62" text-anchor="middle" fill="var(--dg-ink)" font-family="var(--font-ui)" font-size="13" font-weight="600">Router</text><line x1="100" y1="78" x2="100" y2="98" stroke="var(--dg-ink-2)" stroke-width="1.5" marker-end="url(#ga)"></line><rect x="20" y="100" width="160" height="40" rx="7" fill="var(--dg-surface)" stroke="var(--dg-line)"></rect><text x="100" y="126" text-anchor="middle" fill="var(--dg-ink)" font-family="var(--font-ui)" font-size="13" font-weight="600">Gestore</text><text x="100" y="140" text-anchor="middle" fill="var(--dg-accent)" font-family="var(--font-ui)" font-size="10">-&gt; Errore di convalida (400)</text><line x1="100" y1="144" x2="100" y2="164" stroke="var(--dg-ink-2)" stroke-width="1.5" marker-end="url(#ga)"></line><rect x="20" y="166" width="160" height="40" rx="7" fill="var(--dg-surface)" stroke="var(--dg-line)"></rect><text x="100" y="192" text-anchor="middle" fill="var(--dg-ink)" font-family="var(--font-ui)" font-size="13" font-weight="600">Servizio</text><text x="100" y="206" text-anchor="middle" fill="var(--dg-accent)" font-family="var(--font-ui)" font-size="10">-&gt; Errore aziendale</text><line x1="100" y1="210" x2="100" y2="230" stroke="var(--dg-ink-2)" stroke-width="1.5" marker-end="url(#ga)"></line><rect x="20" y="232" width="160" height="40" rx="7" fill="var(--dg-surface)" stroke="var(--dg-line)"></rect><text x="100" y="258" text-anchor="middle" fill="var(--dg-ink)" font-family="var(--font-ui)" font-size="13" font-weight="600">Deposito</text><text x="100" y="272" text-anchor="middle" fill="var(--dg-accent)" font-family="var(--font-ui)" font-size="10">-&gt; DBError (unico, norows, fk)</text><path d="M 182,252 Q 240,252 240,180 Q 240,80 280,60" fill="none" stroke="var(--dg-accent)" stroke-width="2" stroke-dasharray="5 3" marker-end="url(#gb)"></path><text x="248" y="170" fill="var(--dg-accent)" font-family="var(--font-ui)" font-size="11" transform="rotate(-90,248,170)">gli errori emergono</text><rect x="286" y="30" width="200" height="280" rx="10" fill="var(--dg-inverse)"></rect><text x="386" y="58" text-anchor="middle" fill="var(--dg-on-inverse)" font-family="var(--font-prose)" font-size="14" font-weight="700">Errore globale</text><text x="386" y="75" text-anchor="middle" fill="var(--dg-on-inverse)" font-family="var(--font-prose)" font-size="14" font-weight="700">Middleware del gestore</text><rect x="300" y="90" width="172" height="40" rx="6" fill="var(--dg-accent)"></rect><text x="386" y="107" text-anchor="middle" fill="var(--dg-on-accent)" font-family="var(--font-ui)" font-size="11" font-weight="700">Errore di convalida</text><text x="386" y="122" text-anchor="middle" fill="var(--dg-on-accent)" font-family="var(--font-diagram-mono)" font-size="10">-&gt; HTTP 400 + errori di campo</text><rect x="300" y="140" width="172" height="40" rx="6" fill="var(--dg-info)"></rect><text x="386" y="157" text-anchor="middle" fill="var(--dg-on-accent)" font-family="var(--font-ui)" font-size="11" font-weight="700">Violazione unica DB</text><text x="386" y="172" text-anchor="middle" fill="var(--dg-on-accent)" font-family="var(--font-diagram-mono)" font-size="10">-&gt; Conflitto HTTP 409</text><rect x="300" y="190" width="172" height="40" rx="6" fill="var(--dg-ok)"></rect><text x="386" y="207" text-anchor="middle" fill="var(--dg-on-accent)" font-family="var(--font-ui)" font-size="11" font-weight="700">DB NoRows</text><text x="386" y="222" text-anchor="middle" fill="var(--dg-on-accent)" font-family="var(--font-diagram-mono)" font-size="10">-&gt; HTTP 404 non trovato</text><rect x="300" y="240" width="172" height="40" rx="6" fill="var(--dg-info)"></rect><text x="386" y="257" text-anchor="middle" fill="var(--dg-on-accent)" font-family="var(--font-ui)" font-size="11" font-weight="700">Errore sconosciuto</text><text x="386" y="272" text-anchor="middle" fill="var(--dg-on-accent)" font-family="var(--font-diagram-mono)" font-size="10">-&gt; HTTP 500 + msg generico</text><line x1="488" y1="170" x2="520" y2="170" stroke="var(--dg-ink-2)" stroke-width="1.5" marker-end="url(#ga)"></line><rect x="522" y="60" width="140" height="220" rx="10" fill="var(--dg-paper)" stroke="var(--dg-line)"></rect><text x="592" y="88" text-anchor="middle" fill="var(--dg-ink)" font-family="var(--font-prose)" font-size="13" font-weight="700">Risposta HTTP</text><text x="592" y="118" text-anchor="middle" fill="var(--dg-accent)" font-family="var(--font-diagram-mono)" font-size="10">400 Richiesta errata</text><text x="592" y="146" text-anchor="middle" fill="var(--dg-info)" font-family="var(--font-diagram-mono)" font-size="10">409 Conflitto</text><text x="592" y="174" text-anchor="middle" fill="var(--dg-ok)" font-family="var(--font-diagram-mono)" font-size="10">404 Non trovato</text><text x="592" y="202" text-anchor="middle" fill="var(--dg-info)" font-family="var(--font-diagram-mono)" font-size="10">500 Errore interno</text><text x="592" y="240" text-anchor="middle" fill="var(--dg-ink-2)" font-family="var(--font-ui)" font-size="10">Sicuro, facile da usare</text><text x="592" y="256" text-anchor="middle" fill="var(--dg-ink-2)" font-family="var(--font-ui)" font-size="10">solo messaggi.</text><text x="592" y="272" text-anchor="middle" fill="var(--dg-ink-2)" font-family="var(--font-ui)" font-size="10">Nessun dettaglio interno.</text></svg>
+</Diagram>
+
+### Due vantaggi principali
+
+- **Nessuna condizione di errore dimenticata**: ogni errore non gestito rientra nel caso predefinito del gestore globale (`500 + "something went wrong"`). Niente ingoiato silenziosamente.
+- **Ridondanza zero**: la logica di gestione degli errori del database risiede in _un file_, non sparsa in 40 metodi di repository. Cambia il messaggio di violazione univoco una volta, si applica ovunque.
+
+12
+
+## Implementazione del gestore errori globale
+
+La forma è la stessa in ogni lingua e si divide in due: un **errore di applicazione digitato** che riporta il codice di stato e un messaggio sicuro rivolto all'utente, e un **posto unico** sul bordo che gira qualsiasi cosa gettata o restituita nella busta. Go non ha eccezioni, quindi i suoi errori viaggiano come valori restituiti; gli altri lasciano volare un'eccezione e la catturano al confine. In ogni caso, è esattamente un luogo a decidere cosa vede il cliente.
+
+### L'errore dell'applicazione digitato
+
+Vai a Python JavaScript TypeScript Java
+
+un codice di stato, un messaggio sicuro e l'errore originale conservati solo per i registri
+
+```go title="errors/types.go / Go"
+package apperr
+
+import "net/http"
+
+// AppError is the canonical error type for this application.
+type AppError struct {
+    Code    int      // HTTP status code
+    Message string   // Safe, user-facing message
+    Details any      // Optional: field-level errors for 400s
+    Err     error    // Original error, for logging only, NEVER sent to client
+}
+
+func (e *AppError) Error() string { return e.Message }
+
+// Constructors
+func NotFound(resource string) *AppError {
+    return &AppError{Code: http.StatusNotFound, Message: resource + " not found"}
+}
+func Conflict(msg string) *AppError {
+    return &AppError{Code: http.StatusConflict, Message: msg}
+}
+func BadRequest(msg string, details any) *AppError {
+    return &AppError{Code: http.StatusBadRequest, Message: msg, Details: details}
+}
+func Internal(err error) *AppError {
+    return &AppError{
+        Code:    http.StatusInternalServerError,
+        Message: "something went wrong",  // NEVER expose err.Error() here
+        Err:     err,
+    }
+}
+```
+
+```python title="errors.py / Python"
+class AppError(Exception):
+    """The canonical error type for this application."""
+
+    def __init__(self, status: int, message: str, details=None, cause=None):
+        super().__init__(message)
+        self.status = status      # HTTP status code
+        self.message = message    # Safe, user-facing message
+        self.details = details    # Optional: field-level errors for 400s
+        self.cause = cause        # Original error, for logging only
+
+
+class NotFoundError(AppError):
+    def __init__(self, resource: str):
+        super().__init__(404, f"{resource} not found")
+
+
+class ConflictError(AppError):
+    def __init__(self, msg: str):
+        super().__init__(409, msg)
+
+
+class BadRequestError(AppError):
+    def __init__(self, msg: str, details=None):
+        super().__init__(400, msg, details)
+
+
+class InternalError(AppError):
+    def __init__(self, cause: Exception):
+        # NEVER put str(cause) in `message`, it reaches the client
+        super().__init__(500, "something went wrong", cause=cause)
+```
+
+```js title="errors.js / Node 20+"
+// The canonical error type for this application.
+export class AppError extends Error {
+  constructor(code, message, details, cause) {
+    super(message, { cause }) // `cause` is for logging only, NEVER sent out
+    this.name = 'AppError'
+    this.code = code          // HTTP status code
+    this.details = details    // Optional: field-level errors for 400s
+  }
+}
+
+// Constructors
+export const notFound = (resource) => new AppError(404, `${resource} not found`)
+export const conflict = (msg) => new AppError(409, msg)
+export const badRequest = (msg, details) => new AppError(400, msg, details)
+export const internal = (cause) =>
+  new AppError(500, 'something went wrong', undefined, cause)
+//                  ^ NEVER cause.message here: it leaks the stack, the
+//                    SQL, and often the schema straight to the client.
+```
+
+```ts title="errors.ts / TypeScript 5+"
+interface FieldError {
+  field: string
+  issue: string
+}
+
+export class AppError extends Error {
+  constructor(
+    readonly code: number,          // HTTP status code
+    override readonly message: string, // safe, user-facing
+    readonly details?: FieldError[], // field-level errors for 400s
+    override readonly cause?: unknown, // original error, LOGGING ONLY
+  ) {
+    super(message, { cause })
+    this.name = 'AppError'
+  }
+}
+
+// The separation the types are enforcing is the security one from sec 14:
+// `message` and `details` are the only fields the handler is allowed to
+// serialise, and `cause` is deliberately typed `unknown` so nobody can
+// casually interpolate it into a response without narrowing it first.
+export const notFound = (resource: string): AppError =>
+  new AppError(404, `${resource} not found`)
+
+export const conflict = (msg: string): AppError => new AppError(409, msg)
+
+export const badRequest = (msg: string, details?: FieldError[]): AppError =>
+  new AppError(400, msg, details)
+
+export const internal = (cause: unknown): AppError =>
+  new AppError(500, 'something went wrong', undefined, cause)
+```
+
+```java title="AppException.java / Java 17+"
+// The canonical error type for this application.
+public class AppException extends RuntimeException {
+    private final int code;              // HTTP status code
+    private final Object details;        // Optional: field-level errors for 400s
+
+    public AppException(int code, String message, Object details, Throwable cause) {
+        super(message, cause);           // cause is for logging only
+        this.code = code;
+        this.details = details;
+    }
+
+    public int code() { return code; }
+    public Object details() { return details; }
+
+    // Factories, so a status code is never typed as a bare int at a call site
+    public static AppException notFound(String resource) {
+        return new AppException(404, resource + " not found", null, null);
+    }
+
+    public static AppException conflict(String msg) {
+        return new AppException(409, msg, null, null);
+    }
+
+    public static AppException badRequest(String msg, Object details) {
+        return new AppException(400, msg, details, null);
+    }
+
+    public static AppException internal(Throwable cause) {
+        // NEVER cause.getMessage() as the message: it reaches the client
+        return new AppException(500, "something went wrong", null, cause);
+    }
+}
+
+// Extending RuntimeException, not Exception, is deliberate: a checked
+// exception would force every layer in between to declare or wrap it,
+// which is exactly the ceremony that makes people swallow errors.
+```
+
+### Il conduttore al limite
+
+Vai a Python JavaScript TypeScript Java
+
+un posto che mappa qualsiasi errore sulla busta e registra il resto
+
+```go title="middleware/error_handler.go / Go"
+package middleware
+import (
+    "encoding/json"
+    "errors"
+    "log/slog"
+    "net/http"
+
+    "github.com/jackc/pgx/v5/pgconn"
+    apperr "yourapp/errors"
+)
+
+type ErrorResponse struct {
+    Code    int    `json:"code"`
+    Message string `json:"message"`
+    Details any    `json:"details,omitempty"`
+}
+
+// GlobalErrorHandler wraps a handler that returns an error.
+func GlobalErrorHandler(next func(http.ResponseWriter, *http.Request) error) http.HandlerFunc {
+    return func(w http.ResponseWriter, r *http.Request) {
+        err := next(w, r)
+        if err == nil { return }
+
+        var appErr *apperr.AppError
+
+        switch {
+        // Already wrapped as AppError
+        case errors.As(err, &appErr):
+            if appErr.Err != nil {
+                slog.Error("app error", "err", appErr.Err)
+            }
+
+        // Postgres unique constraint violation -> 409
+        case isPgError(err, "23505"):
+            appErr = apperr.Conflict("resource already exists")
+
+        // Postgres foreign key violation -> 404
+        case isPgError(err, "23503"):
+            appErr = apperr.NotFound("referenced resource")
+
+        // pgx no-rows -> 404
+        case errors.Is(err, pgx.ErrNoRows):
+            appErr = apperr.NotFound("resource")
+
+        // Everything else -> 500 (never leak internal error)
+        default:
+            slog.Error("unhandled error", "err", err)
+            appErr = apperr.Internal(err)
+        }
+
+        w.Header().Set("Content-Type", "application/json")
+        w.WriteHeader(appErr.Code)
+        json.NewEncoder(w).Encode(ErrorResponse{
+            Code:    appErr.Code,
+            Message: appErr.Message,
+            Details: appErr.Details,
+        })
+    }
+}
+
+func isPgError(err error, code string) bool {
+    var pgErr *pgconn.PgError
+    return errors.As(err, &pgErr) && pgErr.Code == code
+}
+```
+
+```python title="main.py / Python + FastAPI"
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
+from psycopg2 import errors as pg_errors
+import logging
+
+app = FastAPI()
+logger = logging.getLogger("app")
+
+# --- Global exception handlers ---
+@app.exception_handler(AppError)
+async def app_error_handler(request: Request, exc: AppError):
+    return JSONResponse(
+        status_code=exc.status,
+        content={"code": exc.status, "message": exc.message, "details": exc.details}
+    )
+
+@app.exception_handler(pg_errors.UniqueViolation)
+async def unique_violation_handler(request: Request, exc):
+    logger.warning("unique_violation", extra={"path": request.url.path})
+    return JSONResponse(status_code=409,
+        content={"code": 409, "message": "resource already exists"})
+
+@app.exception_handler(pg_errors.ForeignKeyViolation)
+async def fk_violation_handler(request: Request, exc):
+    return JSONResponse(status_code=404,
+        content={"code": 404, "message": "referenced resource not found"})
+
+@app.exception_handler(Exception)
+async def unhandled_error_handler(request: Request, exc: Exception):
+    # Log the real error internally, never expose it
+    logger.error("unhandled_exception", exc_info=exc,
+        extra={"path": request.url.path})
+    return JSONResponse(status_code=500,
+        content={"code": 500, "message": "something went wrong"})
+```
+
+```js title="middleware/errorHandler.js / Node 20+ + Express"
+import { AppError, conflict, notFound, internal } from '../errors.js'
+
+// Express identifies an error handler by its FOUR parameters. Drop `next`
+// and it silently becomes an ordinary middleware that is never called on
+// an error, which is the classic way this safety net stops working.
+export function globalErrorHandler(err, req, res, next) {
+  let appErr
+
+  if (err instanceof AppError) {
+    // Already wrapped
+    if (err.cause) log.error({ err: err.cause }, 'app error')
+    appErr = err
+  } else if (err.code === '23505') {
+    // Postgres unique constraint violation -> 409
+    appErr = conflict('resource already exists')
+  } else if (err.code === '23503') {
+    // Postgres foreign key violation -> 404
+    appErr = notFound('referenced resource')
+  } else {
+    // Everything else -> 500 (never leak internal error)
+    log.error({ err, path: req.path }, 'unhandled error')
+    appErr = internal(err)
+  }
+
+  res.status(appErr.code).json({
+    code: appErr.code,
+    message: appErr.message,
+    ...(appErr.details && { details: appErr.details }),
+  })
+}
+
+// Registered LAST, after every route, because Express runs the chain in
+// order and an error handler can only catch what is upstream of it.
+app.use(globalErrorHandler)
+
+// An async handler that rejects does NOT reach here on Express 4; wrap
+// it, or use Express 5, which forwards rejected promises for you.
+```
+
+```ts title="middleware/errorHandler.ts / TypeScript 5+ + Express"
+import type { NextFunction, Request, Response } from 'express'
+import { AppError, conflict, notFound, internal } from '../errors'
+
+// Postgres surfaces its errors as a `code` string on an untyped object,
+// so narrowing it is the honest first step rather than a cast.
+function pgCode(err: unknown): string | undefined {
+  return typeof err === 'object' && err !== null && 'code' in err
+    ? String((err as { code: unknown }).code)
+    : undefined
+}
+
+export function globalErrorHandler(
+  err: unknown, // `unknown`, not `Error`: anything at all can be thrown
+  req: Request,
+  res: Response,
+  _next: NextFunction,
+): void {
+  let appErr: AppError
+
+  if (err instanceof AppError) {
+    if (err.cause) log.error({ err: err.cause }, 'app error')
+    appErr = err
+  } else {
+    switch (pgCode(err)) {
+      case '23505': appErr = conflict('resource already exists'); break  // unique violation
+      case '23503': appErr = notFound('referenced resource'); break      // FK violation
+      default:
+        log.error({ err, path: req.path }, 'unhandled error')
+        appErr = internal(err) // never leak the original message
+    }
+  }
+
+  res.status(appErr.code).json({
+    code: appErr.code,
+    message: appErr.message,
+    ...(appErr.details && { details: appErr.details }),
+  })
+}
+```
+
+```java title="GlobalExceptionHandler.java / Java 17+ + Spring Boot"
+// @RestControllerAdvice IS the global handler: one class, applied to
+// every controller, with a method per exception type. Spring picks the
+// most specific match, so the Exception method is the final net.
+@RestControllerAdvice
+public class GlobalExceptionHandler {
+    private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
+
+    record ErrorResponse(int code, String message, Object details) {}
+
+    // Already wrapped as AppException
+    @ExceptionHandler(AppException.class)
+    ResponseEntity<ErrorResponse> onApp(AppException e) {
+        if (e.getCause() != null) {
+            log.error("app error", e.getCause()); // the real error, internally
+        }
+        return ResponseEntity.status(e.code())
+            .body(new ErrorResponse(e.code(), e.getMessage(), e.details()));
+    }
+
+    // Postgres unique constraint violation -> 409
+    @ExceptionHandler(DuplicateKeyException.class)
+    ResponseEntity<ErrorResponse> onDuplicate() {
+        return ResponseEntity.status(409)
+            .body(new ErrorResponse(409, "resource already exists", null));
+    }
+
+    // Foreign key / referenced row missing -> 404
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    ResponseEntity<ErrorResponse> onIntegrity() {
+        return ResponseEntity.status(404)
+            .body(new ErrorResponse(404, "referenced resource not found", null));
+    }
+
+    // Everything else -> 500, and the real error goes to the log ONLY.
+    @ExceptionHandler(Exception.class)
+    ResponseEntity<ErrorResponse> onUnhandled(Exception e, HttpServletRequest req) {
+        log.error("unhandled error path={}", req.getRequestURI(), e);
+        return ResponseEntity.status(500)
+            .body(new ErrorResponse(500, "something went wrong", null));
+    }
+}
+
+// Turn OFF the default error attributes, or Spring's own /error page can
+// hand back the exception message and a stack trace, undoing all of this:
+//   server.error.include-message: never
+//   server.error.include-stacktrace: never
+//   server.error.include-binding-errors: never
+```
+
+14
+
+## Sicurezza: cosa esporre, cosa nascondere
+
+<Callout type="info">
+Ogni messaggio di errore che lascia il tuo backend è una potenziale perdita di informazioni. Tratta le tue risposte agli errori con la stessa cura delle risposte API.
+</Callout>
+
+### (1) Non divulgare mai i dettagli interni
+
+I messaggi di errore del database provenienti da Postgres contengono nomi di tabelle, nomi di colonne, nomi di indici e nomi di vincoli. Se inoltri un file raw `pgconn.PgError` messaggio direttamente al client, un utente malintenzionato apprende il tuo schema e può creare tentativi di SQL injection più mirati.
+
+| Cosa hai | Cosa inviare al cliente |
+| ------------------------------------------------------------------ | -------------------------------------- |
+| `duplicate key value violates unique constraint "users_email_key"` | `"Email already in use"`               |
+| `relation "usres" does not exist` (errore di battitura) | `"Something went wrong"`               |
+| `deadlock detected on relation 42816`                              | `"Something went wrong, please retry"` |
+| `stack trace: panic at server.go:142`                              | `"Internal server error"`              |
+
+### (2) Errori di autenticazione vaghi (di proposito)
+
+Gli endpoint di accesso sono la superficie più attaccata in qualsiasi applicazione. Se restituisci messaggi specifici come _"nessun utente con questo indirizzo email esiste"_ oppure _"la password non è corretta"_, un utente malintenzionato può enumerare messaggi di posta elettronica validi tramite un semplice ciclo.
+
+<Diagram caption="Fig 6: Specific auth error messages enable email enumeration attacks. Use a single generic message for all auth failures.">
+<svg viewBox="0 0 640 180" xmlns="http://www.w3.org/2000/svg" width="100%"><rect width="640" height="180" fill="var(--dg-paper)"></rect><text x="20" y="26" font-family="var(--font-ui)" font-size="13" font-weight="700" fill="var(--dg-accent)">Strategia dell'attaccante (quando si utilizzano errori specifici)</text><rect x="20" y="40" width="170" height="50" rx="6" fill="var(--dg-accent-surface)" stroke="var(--dg-accent)"></rect><text x="105" y="62" text-anchor="middle" fill="var(--dg-ink)" font-family="var(--font-ui)" font-size="11" font-weight="700">Passaggio 1: enumerazione e-mail</text><text x="105" y="78" text-anchor="middle" fill="var(--dg-ink-2)" font-family="var(--font-ui)" font-size="10">Prova molte email con pwd falso</text><text x="105" y="90" text-anchor="middle" fill="var(--dg-accent)" font-family="var(--font-diagram-mono)" font-size="9">-&gt; &quot;utente non trovato&quot; finché non viene colpito</text><rect x="220" y="40" width="170" height="50" rx="6" fill="var(--dg-accent-surface)" stroke="var(--dg-accent)"></rect><text x="305" y="62" text-anchor="middle" fill="var(--dg-ink)" font-family="var(--font-ui)" font-size="11" font-weight="700">Passaggio 2: ho ricevuto un'e-mail valida</text><text x="305" y="78" text-anchor="middle" fill="var(--dg-ink-2)" font-family="var(--font-ui)" font-size="10">Ora prova le password comuni</text><text x="305" y="90" text-anchor="middle" fill="var(--dg-accent)" font-family="var(--font-diagram-mono)" font-size="9">-&gt; &quot;password errata&quot; ad ogni errore</text><rect x="420" y="40" width="200" height="50" rx="6" fill="var(--dg-accent)"></rect><text x="520" y="62" text-anchor="middle" fill="var(--dg-on-accent)" font-family="var(--font-ui)" font-size="11" font-weight="700">Passaggio 3: account compromesso</text><text x="520" y="78" text-anchor="middle" fill="var(--dg-on-accent)" font-family="var(--font-ui)" font-size="10">L'account del tuo utente è ora di proprietà</text><text x="20" y="128" font-family="var(--font-ui)" font-size="13" font-weight="700" fill="var(--dg-ok)">La soluzione: utilizzare sempre un messaggio generico</text><rect x="20" y="140" width="600" height="30" rx="6" fill="var(--dg-ok-surface)" stroke="var(--dg-ok)"></rect><text x="320" y="160" text-anchor="middle" fill="var(--dg-ink)" font-family="var(--font-diagram-mono)" font-size="12">{ &quot;messaggio&quot;: &quot;email o password non valide&quot; } &lt;- sempre lo stesso messaggio</text></svg>
+</Diagram>
+
+### (3) Pratiche di registrazione sicure
+
+I log vengono spesso inviati a servizi di aggregazione di terze parti (Datadog, Grafana Cloud, ELK). Nelle principali violazioni dei dati, i file di registro trapelati hanno esposto milioni di record, perché gli ingegneri avevano registrato incautamente campi sensibili.
+
+- **Non accedere mai**: password, chiavi API, numeri di carta di credito, SSN, indirizzi email completi, token di sessione.
+- **Registra invece**: ID utente (non email), ID correlazione/richiesta, nome operazione, codice errore.
+- Utilizza una **libreria di pulizia dei log** (vai: `slog` con un gestore personalizzato; Pitone: `structlog` processori; Nodo: di pino `redact`; Java: un logback `RegexReplacement`) per oscurare automaticamente i campi sensibili noti.
+
+Vai a Python JavaScript TypeScript Java
+
+log l'identificatore, mai l'identità
+
+```go title="safe_logging.go / Go + log/slog"
+// UNSAFE, never do this
+slog.Error("login_failed",
+    "email", user.Email,          // PII leak
+    "password", req.Password,     // catastrophic
+    "api_key", cfg.OpenAIKey,      // secret leak
+)
+
+// SAFE, IDs and correlation only
+slog.Error("login_failed",
+    "user_id", user.ID,
+    "correlation_id", r.Header.Get("X-Request-ID"),
+    "reason", "invalid_credentials",  // generic code, not DB message
+)
+```
+
+```python title="safe_logging.py / Python + structlog"
+# UNSAFE, never do this
+log.error("login_failed",
+    email=user.email,           # PII leak
+    password=req.password,      # catastrophic
+    api_key=cfg.openai_key,     # secret leak
+)
+
+# SAFE, IDs and correlation only
+log.error("login_failed",
+    user_id=user.id,
+    correlation_id=request.headers.get("X-Request-ID"),
+    reason="invalid_credentials",  # generic code, not DB message
+)
+
+# Better still: make the leak impossible rather than remembering not to
+# do it. A structlog processor scrubs known-sensitive keys on every
+# event, including the ones a future call site adds carelessly.
+SENSITIVE = {"password", "api_key", "token", "card", "email"}
+
+def scrub(logger, method_name, event_dict):
+    for key in event_dict:
+        if key.lower() in SENSITIVE:
+            event_dict[key] = "[REDACTED]"
+    return event_dict
+
+structlog.configure(processors=[scrub, ...])
+```
+
+```js title="safeLogging.js / Node 20+ + pino"
+// UNSAFE, never do this
+log.error({
+  email: user.email,          // PII leak
+  password: req.body.password, // catastrophic
+  api_key: config.openaiKey,   // secret leak
+}, 'login_failed')
+
+// SAFE, IDs and correlation only
+log.error({
+  user_id: user.id,
+  correlation_id: req.get('X-Request-ID'),
+  reason: 'invalid_credentials', // generic code, not DB message
+}, 'login_failed')
+
+// Best: configure redaction ONCE, so the unsafe version above is
+// neutralised even when somebody writes it by accident.
+const log = pino({
+  redact: {
+    paths: ['*.password', '*.api_key', '*.token', '*.card', 'req.headers.authorization'],
+    censor: '[REDACTED]',
+  },
+})
+
+// Note what redaction does NOT cover: `log.error(user)` where the whole
+// object is logged, or an error whose MESSAGE contains the token. The
+// list is a safety net, not a substitute for choosing the fields.
+```
+
+```ts title="safeLogging.ts / TypeScript 5+ + pino"
+// Redaction is a runtime safety net. TypeScript can add a compile-time
+// one on top, which catches the mistake before it ever ships.
+type Sensitive = 'password' | 'email' | 'api_key' | 'token' | 'card'
+
+// A log payload that simply cannot carry a sensitive key: the mapped
+// type sets each of them to `never`, so supplying one fails to compile.
+type SafeLog = Record<string, unknown> & { [K in Sensitive]?: never }
+
+export function logSafely(event: string, fields: SafeLog): void {
+  log.error(fields, event)
+}
+
+// SAFE, IDs and correlation only
+logSafely('login_failed', {
+  user_id: user.id,
+  correlation_id: req.get('X-Request-ID'),
+  reason: 'invalid_credentials', // generic code, not DB message
+})
+
+// UNSAFE, and this one is now a BUILD failure rather than a breach:
+// logSafely('login_failed', { email: user.email, password: req.body.password })
+```
+
+```java title="SafeLogging.java / Java 17+ + SLF4J"
+// UNSAFE, never do this
+log.error("login_failed email={} password={} api_key={}",
+    user.email(), req.password(), config.openAiKey());
+
+// SAFE, IDs and correlation only
+log.atError()
+   .setMessage("login_failed")
+   .addKeyValue("user_id", user.id())
+   .addKeyValue("correlation_id", req.getHeader("X-Request-ID"))
+   .addKeyValue("reason", "invalid_credentials") // generic code, not DB message
+   .log();
+
+// Java's structural guard is `toString()`: a record prints ALL of its
+// components, so logging a User record logs the password field with it.
+// Override it once, at the type, and every log site is safe by default.
+public record User(String id, String email, String passwordHash) {
+    @Override
+    public String toString() {
+        return "User[id=" + id + "]"; // no email, no hash, ever
+    }
+}
+
+// Logback can also mask at the appender with a RegexReplacement rule,
+// which catches secrets embedded in exception messages, the case no
+// field-level approach can reach.
+```
+
+<Callout type="info">
+Segui il [Cheat Sheet di autenticazione OWASP](https://cheatsheetseries.owasp.org/cheatsheets/Authentication_Cheat_Sheet.html) per la sicurezza dell'endpoint di autenticazione. Copre la gestione dei messaggi di errore, la protezione dalla forza bruta, il blocco degli account e altro ancora.
+</Callout>
+
+15
+
+## Riferimenti e ulteriori letture
+
+[Foglio informativo sulla gestione degli errori OWASP](https://cheatsheetseries.owasp.org/cheatsheets/Error_Handling_Cheat_Sheet.html) [Foglio informativo sull'autenticazione OWASP](https://cheatsheetseries.owasp.org/cheatsheets/Authentication_Cheat_Sheet.html) [Vai pacchetto errori](https://pkg.go.dev/errors) [Go slog (registrazione strutturata)](https://pkg.go.dev/log/slog) [Gestione degli errori FastAPI](https://fastapi.tiangolo.com/tutorial/handling-errors/) [log della struttura (Python)](https://www.structlog.org/) [MDN, codici di stato HTTP](https://developer.mozilla.org/en-US/docs/Web/HTTP/Status) [AWS: Backoff con jitter](https://aws.amazon.com/builders-library/timeouts-retries-and-backoff-with-jitter/) [Grafana Loki](https://grafana.com/docs/loki/latest/)
+
+---
+
+Manuale da campo backend / Gestione degli errori e tolleranza agli errori / Capitolo 16
+
+Backend dai Primi Principi / Capitolo 12 / Errori. Il codice è destinato a Go 1.22+, Python 3.11+, Node.js 20+, TypeScript 5+ e Java 17+ (Spring Boot).

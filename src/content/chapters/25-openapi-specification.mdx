@@ -1,0 +1,677 @@
+---
+order: 25
+title: "Specifiche e documentazione OpenAPI"
+navTitle: "OpenAPI e documenti"
+summary: "Un'API senza documentazione è una voce, non un'interfaccia. OpenAPI è diventato il linguaggio contrattuale standard del settore per le API, trasformando gli accordi in prosa in specifiche leggibili dalle macchine che guidano la documentazione, i test e la generazione di codice. Questo capitolo spiega cos'è OpenAPI, perché esiste, come scrivere una specifica, i compromessi tra flussi di lavoro design-first e code-first e come mantenere sincronizzate le specifiche e l'implementazione nel tempo."
+readingTime: "2-3 ore"
+keywords:
+  - "openapi"
+  - "swagger"
+  - "api documentation"
+  - "specification"
+  - "contract"
+  - "code generation"
+  - "swagger ui"
+  - "design-first"
+  - "code-first"
+  - "api client"
+---
+Parte II / Il livello contrattuale
+
+## Il problema risolto da OpenAPI
+
+Ogni API inizia come un'idea tra due ingegneri. Alice costruisce un server. Bob scrive un cliente. All'inizio il contratto vive nella testa di Alice, o in un thread Slack, o in un file di markdown scritto a mano che vive accanto al codice. Funziona, finché non funziona più.
+
+La modalità di fallimento è universale e profondamente umana: **deriva**. Alice aggiunge un campo a una risposta. Il cliente di Bob crolla. Alice dice "non si tratta di una modifica sostanziale", Bob dice "il mio codice lo prevede". Un file di ribasso non è mai stato un contratto: era una conversazione e le conversazioni vanno alla deriva. Il costo non è il bug in sé; è il tempo trascorso a discutere su cosa fa _effettivamente_ l'API, tempo che avrebbe potuto essere impiegato per la creazione.
+
+<Diagram caption="The drift problem">
+<svg viewBox="0 0 720 220" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Due ingegneri, Alice e Bob, il cui contratto API si allontana perché le specifiche vivono nella prosa, non nel codice"><rect x="40" y="30" width="140" height="80" rx="12" fill="var(--dg-accent-surface)" stroke="var(--dg-accent)"></rect><text x="110" y="62" font-size="13" font-weight="700" fill="var(--dg-accent)" text-anchor="middle">Alice</text><text x="110" y="85" class="mono" font-size="9" fill="var(--dg-ink-2)" text-anchor="middle">scrive il codice</text><rect x="280" y="30" width="160" height="80" rx="12" fill="var(--dg-warn-surface)" stroke="var(--dg-warn)"></rect><text x="360" y="62" font-size="13" font-weight="700" fill="var(--dg-warn)" text-anchor="middle">Specificazione della prosa</text><text x="360" y="85" class="mono" font-size="9" fill="var(--dg-ink-2)" text-anchor="middle">vive in ribasso</text><rect x="540" y="30" width="140" height="80" rx="12" fill="var(--dg-accent-surface)" stroke="var(--dg-accent)"></rect><text x="610" y="62" font-size="13" font-weight="700" fill="var(--dg-accent)" text-anchor="middle">Bob</text><text x="610" y="85" class="mono" font-size="9" fill="var(--dg-ink-2)" text-anchor="middle">legge la prosa</text><path d="M180 70 H280" stroke="var(--dg-line)" stroke-width="1.5" stroke-dasharray="4 3"></path><path d="M440 70 H540" stroke="var(--dg-line)" stroke-width="1.5" stroke-dasharray="4 3"></path><path d="M190 150 H160" stroke="var(--dg-warn)" stroke-width="1.5" stroke-dasharray="3 2"></path><path d="M160 160 H140" stroke="var(--dg-warn)" stroke-width="1.5" stroke-dasharray="3 2"></path><path d="M140 170 H130" stroke="var(--dg-warn)" stroke-width="1.5" stroke-dasharray="3 2"></path><text x="90" y="190" font-size="9" fill="var(--dg-warn)" text-anchor="end">deriva</text><text x="360" y="208" class="mono" font-size="10" fill="var(--dg-ink-3)" text-anchor="middle">non un contratto: una conversazione</text></svg>
+</Diagram>
+
+**OpenAPI** (in precedenza Swagger) risolve questo problema rendendo il contratto API un **file leggibile dalla macchina**: un singolo documento YAML o JSON che descrive ogni endpoint, ogni forma di richiesta, ogni risposta, ogni codice di stato e ogni requisito di sicurezza. Le specifiche diventano la fonte della verità. Da esso viene generata la documentazione. I test sono scritti contro di esso. Da esso vengono generati gli SDK client. Quando Alice modifica le specifiche, l'attrezzatura informa Bob _immediatamente_, non alle 2 del mattino dopo un incidente di produzione.
+
+L'intuizione fondamentale è che **un contratto che le macchine possono leggere è un contratto che le macchine possono far rispettare**. Puoi scrivere un controllo CI che rifiuti una richiesta pull se l'implementazione non corrisponde alle specifiche. Non è un sogno: è il flusso di lavoro standard nei team che prendono sul serio la progettazione delle API.
+
+<Callout type="ok" title="L'unico cambiamento">
+Sostituisci "documentiamo l'API" con "specificiamo_ l'API". Una specifica è un file che un computer può analizzare. Un documento è un file che un essere umano legge e ignora. La differenza è la differenza tra un contratto in vita e una pagina wiki morta.
+</Callout>
+
+## Cos'è OpenAPI (e perché esiste)
+
+La specifica OpenAPI (OAS) è una **descrizione dell'interfaccia standard, indipendente dal linguaggio** per API di tipo REST. Definisce un modo canonico per descrivere:
+
+- **Quali endpoint esistono** e quali metodi HTTP supportano
+- **Quali input accettano** (parametri del percorso, parametri della query, corpi della richiesta, intestazioni)
+- **Quali output producono** (corpi di risposta, intestazioni, codici di stato)
+- **Come autenticarsi** (chiavi API, OAuth2, token Bearer)
+- **Aspetto delle forme dei dati** (schemi per richieste, risposte e tipi condivisi)
+
+La specifica è stata originariamente creata da **Tony Tam** presso **Wordnik** intorno al 2010 come specifica **Swagger**, spinta dalla necessità pratica di generare automaticamente la documentazione API dal codice. Nel 2015, la **OpenAPI Initiative** (sotto la Linux Foundation) ne ha assunto la proprietà, l'ha rinominata e standardizzata. OpenAPI 3.2.0 è l'ultima versione pubblicata; l'esempio YAML principale in questo capitolo utilizza OAS 3.1.0, che rimane ampiamente utilizzato nell'ecosistema degli strumenti API: dall'interfaccia utente Swagger a Postman ai generatori di codice in tutti i principali linguaggi.
+
+<Callout type="info" title="Spavalderia contro OpenAPI">
+"Swagger" era il nome originale. L'iniziativa OpenAPI ha preso il sopravvento nel 2015. Gli strumenti "Swagger" funzionano ancora - Swagger UI, la toolchain swagger-codegen - ma la specifica formale è ora chiamata OpenAPI. Quando qualcuno dice "Specifiche Swagger", di solito intende una specifica OpenAPI. Non confonderti; sono la stessa cosa.
+</Callout>
+
+Il motivo per cui OpenAPI è decollato è che si trova all'intersezione di **tre problemi che alla fine ogni team API incontra**: documentazione che diventa obsoleta, test di integrazione che in realtà sono manuali e SDK client che vengono copiati e incollati anziché generati. OpenAPI li risolve tutti e tre contemporaneamente rendendo le specifiche l'unica fonte di verità da cui derivano documentazione, test e client.
+
+## L'anatomia di una specifica OpenAPI
+
+Una specifica OpenAPI è un singolo file YAML (o JSON). Al centro ci sono queste chiavi di primo livello:
+
+```yaml
+openapi: 3.1.0
+info:
+  title: Bookstore API
+  description: A simple API for managing a book collection
+  version: 1.0.0
+  contact:
+    name: API Support
+    email: support@bookstore.example.com
+servers:
+  - url: https://api.bookstore.example.com/v1
+    description: Production server
+  - url: http://localhost:3000/v1
+    description: Local development server
+paths:
+  /books:
+    get:
+      summary: List all books
+      ...
+  /books/{bookId}:
+    get:
+      summary: Get a single book
+      ...
+components:
+  schemas:
+    Book:
+      type: object
+      ...
+```
+
+Ogni chiave ha un lavoro specifico:
+
+| Chiave | Scopo | Obbligatorio |
+|-----|---------|----------|
+| `openapi` | Versione della specifica OAS utilizzata (ad es. `3.1.0`) | Sì |
+| `info` | Metadati: titolo, descrizione, versione, informazioni di contatto | Sì |
+| `servers` | URL di base per diversi ambienti (produzione, staging, locale) | No |
+| `paths` | Ogni endpoint e relativi metodi, parametri e risposte HTTP | Sì |
+| `components` | Definizioni riutilizzabili: schemi, schemi di sicurezza, parametri | No |
+| `tags` | Raggruppamento logico di endpoint (ad esempio "Libri", "Utenti") | No |
+| `security` | Requisiti di autenticazione globale | No |
+
+### Il `info` block: perché i metadati sono importanti
+
+Il `info` l'oggetto è ingannevolmente semplice. Contiene il titolo, la descrizione, la versione e le informazioni di contatto dell'API. Ma ha uno scopo più profondo del branding: **il `version` Il campo è il modo in cui tieni traccia delle specifiche che corrispondono alle API distribuite**. Quando modifichi le specifiche, aumenti la versione e ogni strumento che utilizza le specifiche sa esattamente cosa sta guardando.
+
+```yaml
+info:
+  title: Bookstore API
+  version: 2.1.0
+  description: >
+    Version 2.1 adds pagination to all list endpoints
+    and introduces the `publisher` field on books.
+```
+
+La descrizione supporta il **Markdown**, quindi puoi scrivere log delle modifiche dettagliati, guide alla migrazione e note sull'utilizzo direttamente nelle specifiche.
+
+### Il `servers` blocco: consapevolezza ambientale
+
+Senza `servers`, ogni esempio nelle specifiche punta a un singolo URL e devi adattarti mentalmente alla gestione temporanea, alla produzione e allo sviluppo locale. Il `servers` array risolve questo elencando tutti gli ambienti:
+
+```yaml
+servers:
+  - url: https://api.example.com/v1
+    description: Production
+  - url: https://staging.api.example.com/v1
+    description: Staging
+  - url: http://localhost:4000/v1
+    description: Local development
+```
+
+L'interfaccia utente di Swagger e altri strumenti ti consentono di passare da un server all'altro, quindi la documentazione interattiva riflette l'URL di base corretto per l'ambiente su cui stai testando.
+
+### Il `paths` oggetto: ogni endpoint, ogni metodo
+
+Il `paths` l'oggetto è il nucleo delle specifiche. Ogni chiave è un modello di percorso URL. Ogni valore è un oggetto che mappa i metodi HTTP sugli oggetti operazione:
+
+```yaml
+paths:
+  /books:
+    get:
+      operationId: listBooks
+      summary: List all books
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 10
+      responses:
+        "200":
+          description: A paginated list of books
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Book'
+                  total:
+                    type: integer
+```
+
+Notare lo schema: ogni operazione ha un `operationId` (un identificatore univoco utilizzato dai generatori di codice), a `summary`, `parameters`, e a `responses` oggetto. Le risposte sono codificate dal codice di stato HTTP: `"200"`, `"404"`, `"500"` - e ogni risposta descrive il tipo di contenuto e lo schema.
+
+<Diagram caption="An OpenAPI spec at a glance">
+<svg viewBox="0 0 720 300" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Le sezioni principali di un file di specifiche OpenAPI disposte come diagramma"><rect x="20" y="30" width="680" height="52" rx="10" fill="var(--dg-accent)" stroke="var(--dg-accent)"></rect><text x="60" y="50" font-size="13" font-weight="700" fill="var(--dg-on-accent)" text-anchor="middle">openapi: &quot;3.1.0&quot;</text><text x="60" y="68" class="mono" font-size="10" fill="var(--dg-on-accent)" text-anchor="middle">L'identificatore della versione della specifica</text><rect x="20" y="100" width="320" height="170" rx="10" fill="var(--dg-ok-surface)" stroke="var(--dg-ok)"></rect><text x="60" y="122" font-size="12" font-weight="700" fill="var(--dg-ok)" text-anchor="middle">informazioni</text><text x="60" y="140" class="mono" font-size="9" fill="var(--dg-ink-2)" text-anchor="middle">titolo, versione, contatto</text><rect x="380" y="100" width="320" height="170" rx="10" fill="var(--dg-info-surface)" stroke="var(--dg-info)"></rect><text x="420" y="122" font-size="12" font-weight="700" fill="var(--dg-info)" text-anchor="middle">percorsi</text><text x="420" y="140" class="mono" font-size="9" fill="var(--dg-ink-2)" text-anchor="middle">ogni endpoint e metodo</text><text x="60" y="175" class="mono" font-size="8.5" fill="var(--dg-ink-3)">/books, /books/:id</text><text x="60" y="190" class="mono" font-size="8.5" fill="var(--dg-ink-3)">GET, POST, PUT, DELETE</text><rect x="20" y="290" width="680" height="0" rx="10" fill="none"></rect><rect x="680" y="270" width="680" height="0" rx="10" fill="none"></rect><rect x="20" y="275" width="320" height="20" rx="5" fill="var(--dg-warn-surface)" stroke="var(--dg-warn)"></rect><text x="60" y="289" font-size="10" font-weight="600" fill="var(--dg-warn)" text-anchor="middle">componenti</text><rect x="380" y="275" width="320" height="20" rx="5" fill="var(--dg-accent-surface)" stroke="var(--dg-accent)"></rect><text x="420" y="289" font-size="10" font-weight="600" fill="var(--dg-accent)" text-anchor="middle">server, tag, sicurezza</text></svg>
+</Diagram>
+
+## Definizione di endpoint, schemi e codici di stato
+
+### Parametri ed enti di richiesta
+
+OpenAPI distingue tra parametri che risiedono nell'URL e corpi che risiedono nel payload della richiesta:
+
+```yaml
+parameters:
+  - name: bookId
+    in: path          # URL path parameter — always required
+    required: true
+    schema:
+      type: string
+      pattern: '^[a-zA-Z0-9_-]+$'
+  - name: filter
+    in: query         # Query parameter — optional
+    required: false
+    schema:
+      type: string
+      enum: [active, archived, all]
+      default: all
+  - name: X-Request-ID
+    in: header        # Header parameter
+    required: false
+    schema:
+      type: string
+      format: uuid
+requestBody:          # Body parameter — for POST/PUT/PATCH
+  required: true
+  content:
+    application/json:
+      schema:
+        $ref: '#/components/schemas/CreateBook'
+```
+
+Il `in` campo determina dove risiede il parametro: `path` (parte dell'URL), `query` (dopo `?`), `header` (nelle intestazioni HTTP), o `cookie`. I parametri del percorso sono sempre obbligatori; i parametri query, intestazione e cookie possono essere facoltativi. Il `requestBody` è separato e si applica solo ai metodi che trasportano un carico utile.
+
+### Schemi di risposta e codici di stato
+
+Ogni risposta deve avere una chiave del codice di stato e una descrizione. Il `content` il blocco specifica il tipo di supporto e lo schema:
+
+```yaml
+responses:
+  "200":
+    description: Successfully retrieved a book
+    content:
+      application/json:
+        schema:
+          $ref: '#/components/schemas/Book'
+  "404":
+    description: Book not found
+    content:
+      application/json:
+        schema:
+          $ref: '#/components/schemas/Error'
+  "500":
+    description: Internal server error
+```
+
+I codici di stato in OpenAPI seguono la stessa semantica di HTTP: `2xx` per il successo, `4xx` per errori del cliente, `5xx` per errori del server. Un'API ben specifica documenta almeno il caso di successo e i casi di errore più importanti, quelli che un consumatore deve effettivamente gestire.
+
+### Schemi riutilizzabili con `components`
+
+Il `components/schemas` sezione è dove definisci i tipi di dati riutilizzabili. Ogni parametro e risposta può farvi riferimento `$ref`:
+
+```yaml
+components:
+  schemas:
+    Book:
+      type: object
+      required: [id, title, author]
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        title:
+          type: string
+          minLength: 1
+          maxLength: 200
+        author:
+          type: string
+          minLength: 1
+        isbn:
+          type: [string, "null"]
+          format: isbn
+        publishedAt:
+          type: string
+          format: date-time
+      example:
+        id: 42
+        title: "Designing Data-Intensive Applications"
+        author: "Martin Kleppmann"
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: integer
+        message:
+          type: string
+        details:
+          type: object
+    CreateBook:
+      type: object
+      required: [title, author]
+      properties:
+        title:
+          type: string
+          minLength: 1
+        author:
+          type: string
+        isbn:
+          type: string
+          format: isbn
+```
+
+Notare il `readOnly: true` su `id` – questo lo dice ai consumatori `id` è sempre presente nelle risposte ma non deve mai essere inviato nelle richieste. Il `example` Il campo fornisce un esempio concreto del rendering dell'interfaccia utente di Swagger nella documentazione interattiva.
+
+<Callout type="info" title="Perché i componenti sono importanti">
+Senza `components`, ogni risposta e ogni corpo della richiesta dovrebbero incorporare la definizione completa dello schema. Con `components`, a `Book` è definito una volta e viene fatto riferimento ovunque con `$ref: '#/components/schemas/Book'`. Ciò mantiene le specifiche DRY, leggibili e coerenti: se modifichi lo schema del libro, ogni endpoint che lo utilizza si aggiorna automaticamente.
+</Callout>
+
+## Autenticazione e schemi di sicurezza
+
+OpenAPI definisce la sicurezza su due livelli: **globalmente** (si applica a tutti gli endpoint per impostazione predefinita) e **per operazione** (sostituendo o aggiungendo requisiti specifici).
+
+### Definizione degli schemi di sicurezza
+
+Il `components/securitySchemes` object dichiara ogni meccanismo di autenticazione supportato dall'API:
+
+```yaml
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    OAuth2:
+      type: oauth2
+      flows:
+        authorizationCode:
+          authorizationUrl: https://auth.example.com/oauth/authorize
+          tokenUrl: https://auth.example.com/oauth/token
+          scopes:
+            read: Read access
+            write: Write access
+            admin: Full administrative access
+```
+
+Tre tipi di schemi comuni coprono la maggior parte delle API del mondo reale:
+
+| Digitare | Dove va la credenziale | Uso tipico |
+|------|--------------------------|-------------|
+| `apiKey` | Intestazione, query o cookie | Autenticazione semplice basata su chiave (ad es. `X-API-Key`) |
+| `http` | `Authorization` intestazione | Token al portatore, autenticazione di base |
+| `oauth2` | Flussi OAuth2 | Accesso delegato di terze parti |
+
+### Applicazione della sicurezza a livello globale e per operazione
+
+Applica la sicurezza a livello globale in modo che ogni endpoint richieda l'autenticazione a meno che non venga esplicitamente sovrascritto:
+
+```yaml
+security:
+  - BearerAuth: []          # All endpoints require Bearer token by default
+
+paths:
+  /books:
+    get:
+      security:             # Override: this endpoint is public
+        []
+      ...
+  /books/{id}:
+    get:
+      security:
+        - OAuth2: [read]      # Requires the "read" scope
+      ...
+  /books:
+    post:
+      security:
+        - OAuth2: [write]     # Requires the "write" scope
+```
+
+L'array vuoto `[]` poiché il valore di sicurezza significa "questo endpoint non richiede autenticazione" - una deliberata sostituzione dell'impostazione predefinita globale. La serie di ambiti su uno schema di sicurezza limita le autorizzazioni che il chiamante deve mantenere.
+
+<Diagram caption="Security scheme types and where credentials live">
+<svg viewBox="0 0 720 220" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Tre tipi di schemi di sicurezza OpenAPI e dove viene inviata ciascuna credenziale"><rect x="40" y="30" width="200" height="160" rx="12" fill="var(--dg-accent-surface)" stroke="var(--dg-accent)"></rect><text x="140" y="55" font-size="12" font-weight="700" fill="var(--dg-accent)" text-anchor="middle">apiKey</text><text x="140" y="80" class="mono" font-size="9" fill="var(--dg-ink-2)" text-anchor="middle">Intestazione, query o cookie</text><text x="140" y="100" class="mono" font-size="8.5" fill="var(--dg-ink-3)">Chiave API X: abc123</text><rect x="260" y="30" width="200" height="160" rx="12" fill="var(--dg-info-surface)" stroke="var(--dg-info)"></rect><text x="360" y="55" font-size="12" font-weight="700" fill="var(--dg-info)" text-anchor="middle">http</text><text x="360" y="80" class="mono" font-size="9" fill="var(--dg-ink-2)" text-anchor="middle">Intestazione dell'autorizzazione</text><text x="360" y="100" class="mono" font-size="8.5" fill="var(--dg-ink-3)">Portatore &lt;JWT&gt;</text><rect x="480" y="30" width="200" height="160" rx="12" fill="var(--dg-warn-surface)" stroke="var(--dg-warn)"></rect><text x="580" y="55" font-size="12" font-weight="700" fill="var(--dg-warn)" text-anchor="middle">oauth2</text><text x="580" y="80" class="mono" font-size="9" fill="var(--dg-ink-2)" text-anchor="middle">Flussi OAuth2</text><text x="580" y="100" class="mono" font-size="8.5" fill="var(--dg-ink-3)">URL di autenticazione/token</text><text x="60" y="205" font-size="10" font-style="italic" fill="var(--dg-ink-3)" text-anchor="start">Posizione delle credenziali determinata dal tipo di schema</text></svg>
+</Diagram>
+
+## Interfaccia utente spavalda e documentazione interattiva
+
+Il principale vantaggio pratico di una specifica OpenAPI è che può essere trasformata in **documentazione interattiva** da strumenti come **Swagger UI**, **Redoc** o **Scalar**. L'interfaccia utente di Swagger analizza le specifiche e produce un sito Web autodocumentante in cui gli utenti possono:
+
+1. **Sfoglia tutti gli endpoint** organizzati per tag
+2. **Espandi qualsiasi operazione** per visualizzare parametri, corpo della richiesta e risposte
+3. **Provalo**: inserisci i valori dei parametri, premi "Esegui" e osserva la risposta reale
+4. **Vedi valori di esempio** — da `example` campi nelle specifiche
+5. **Comprendi l'autenticazione**: scopri quali endpoint richiedono quali schemi di sicurezza
+
+<Diagram caption="From spec to interactive documentation">
+<svg viewBox="0 0 720 230" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Un file delle specifiche reso in documentazione interattiva dall'interfaccia utente di Swagger"><rect x="40" y="30" width="280" height="180" rx="12" fill="var(--dg-accent-surface)" stroke="var(--dg-accent)"></rect><text x="180" y="55" font-size="12" font-weight="700" fill="var(--dg-accent)" text-anchor="middle">openapi.yaml</text><text x="180" y="80" class="mono" font-size="9" fill="var(--dg-ink-2)" text-anchor="middle">percorsi, schemi, sicurezza</text><text x="180" y="105" class="mono" font-size="8.5" fill="var(--dg-ink-3)">specifiche leggibili dalla macchina</text><path d="M320 100 L370 100" stroke="var(--dg-line)" stroke-width="2" marker-end="url(#a)"></path><rect x="380" y="30" width="300" height="180" rx="12" fill="var(--dg-ok-surface)" stroke="var(--dg-ok)"></rect><text x="530" y="55" font-size="12" font-weight="700" fill="var(--dg-ok)" text-anchor="middle">Interfaccia utente spavalda</text><text x="530" y="80" class="mono" font-size="9" fill="var(--dg-ink-2)" text-anchor="middle">Documenti interattivi</text><text x="530" y="105" class="mono" font-size="8.5" fill="var(--dg-ink-3)">Prova gli endpoint, vedi gli esempi</text><text x="530" y="130" class="mono" font-size="8.5" fill="var(--dg-ink-3)">Generato dalle specifiche</text><defs><marker id="a" markerWidth="7" markerHeight="7" refX="5" refY="2.5" orient="auto"><path d="M0 0 L5 2.5 L0 5 Z" fill="var(--dg-ink-2)"></path></marker></defs><text x="360" y="208" font-size="10" font-style="italic" fill="var(--dg-ink-3)" text-anchor="middle">Una specifica, molti renderer</text></svg>
+</Diagram>
+
+### Pubblicazione con l'interfaccia utente Swagger
+
+Il modo più semplice per ottenere documenti interattivi è fornire le specifiche tramite l'interfaccia utente di Swagger. Questa operazione può essere eseguita tramite pacchetti npm, Docker o servizi ospitati come **Scalar** o **Redoc**. Per una semplice configurazione statica:
+
+```html
+<!-- Minimal Swagger UI HTML -->
+<!DOCTYPE html>
+<html>
+<head>
+  <title>API Docs</title>
+  <script src="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui.css">
+</head>
+<body>
+  <div id="swagger"></div>
+  <script>
+    SwaggerUIBundle({
+      url: "/openapi.yaml",
+      dom_id: "#swagger",
+      presets: [SwaggerUIBundle.Presets.APIs],
+    });
+  </script>
+</body>
+</html>
+```
+
+Il `url` punta al file delle specifiche OpenAPI. L'interfaccia utente di Swagger lo recupera, lo analizza e visualizza la documentazione interattiva completa. Ogni modifica alle specifiche aggiorna immediatamente i documenti, senza manutenzione manuale.
+
+### Altri renderer
+
+- **Redoc**: più rifinito, supporta il layout di una pagina e il collegamento diretto alle definizioni
+- **Scalare**: moderna, FastAPI nativa, eccellente modalità dark
+- **Elementi semaforo**: widget incorporabile se non desideri una pagina di documenti completa
+
+Tutti utilizzano le stesse specifiche OpenAPI, quindi scrivi le specifiche una volta e scegli il tuo renderer in base alle esigenze di branding.
+
+<Callout type="ok" title="Il flusso di lavoro della documentazione">
+Scrivi le specifiche → offrile tramite l'interfaccia utente di Swagger → ogni stakeholder (team frontend, team mobile, QA, partner esterni) ottiene un sito di documentazione live e interattivo che rimane automaticamente sincronizzato. Non più "i documenti sono su Confluence e non sono stati aggiornati dal 2021".
+</Callout>
+
+## Design-First o Code-First
+
+Esistono due filosofie fondamentalmente diverse per la creazione di una specifica OpenAPI e la scelta influisce sul modo in cui strutturi l'intero flusso di lavoro API.
+
+### Il design innanzitutto
+
+Nell'approccio **design-first**, scrivi le specifiche OpenAPI _prima_ di scrivere qualsiasi codice del server. La specifica è il contratto, il codice lo implementa e tutto viene convalidato rispetto ad esso.
+
+Il flusso di lavoro:
+1. Definire l'API in `openapi.yaml` — endpoint, schemi, codici di stato, sicurezza
+2. Convalidare le specifiche con un linter (ad es. `openapi-lint`)
+3. Genera stub del server e SDK client dalle specifiche
+4. Implementare il server compilando la logica del gestore generata
+5. Esegui test che verificano che l'implementazione corrisponda alle specifiche
+
+**Vantaggi:**
+- Il contratto viene concordato _prima_ dell'inizio dell'implementazione: i team frontend e backend possono lavorare in parallelo
+- Le specifiche sono un vero e proprio artefatto di progettazione, rivisto e aggiornato indipendentemente dal codice
+- Gli SDK client vengono generati contemporaneamente al server, quindi sono sempre disponibili
+- È più facile mantenere la coerenza tra più servizi perché condividono tutti le stesse specifiche
+
+**Svantaggi:**
+- Le specifiche devono essere mantenute sincronizzate con il codice manualmente (ne parleremo più avanti)
+- Refactoring dell'implementazione significa modificare sia le specifiche che il codice
+- Può sembrare pesante per API piccole e in rapida evoluzione
+
+### Prima il codice
+
+Nell'approccio **code-first**, si scrive prima il codice del server e da esso si generano le specifiche OpenAPI. Il codice definisce l'API e la specifica è un artefatto derivato.
+
+Il flusso di lavoro:
+1. Scrivi codice server con decoratori di rotte e modelli Pydantic/FastAPI
+2. Genera la specifica OpenAPI in fase di compilazione o runtime
+3. Servire le specifiche tramite l'interfaccia utente di Swagger
+4. Genera SDK client dalle specifiche generate
+5. Scrivi test rispetto alle specifiche generate
+
+**Vantaggi:**
+- Le specifiche sono sempre sincronizzate con il codice: vengono generate, non scritte a mano
+- Iterazione più rapida per piccoli team: scrivi il codice e le specifiche verranno visualizzate automaticamente
+- Meno passaggio di contesto tra file di specifiche e file di implementazione
+- Framework come FastAPI rendono questo banale
+
+**Svantaggi:**
+- La specifica eredita i vincoli del codice: non è possibile esprimere facilmente decisioni di progettazione che il codice non supporta
+- È più difficile ottenere un accordo tra team sulla forma dell'API prima dell'implementazione
+- Le specifiche possono contenere dettagli di implementazione che non appartengono a un contratto pubblico
+
+### Quando scegliere quale
+
+| Fattore | Design in primo luogo | Prima il codice |
+|--------|-------------|------------|
+| Dimensione della squadra | 3+ ingegneri, più team | Solo o piccola squadra |
+| Stabilità dell'API | Contratto stabile, API di lunga durata | In rapida evoluzione |
+| Consumatori esterni | Sì (API partner) | Solo interni |
+| Team frontend | Team frontend separato | Sviluppatore full-stack |
+| Maturità | API stabilita, processo formale | Prototipo o nuovo servizio |
+
+La maggior parte dei team API maturi inizia con la progettazione e migra verso il codice man mano che il team e l'API si stabilizzano. Alcuni team utilizzano un approccio ibrido: progettano il contratto iniziale (design-first), generano stub, implementano (code-first) e quindi mantengono le specifiche sincronizzate tramite la convalida CI.
+
+<Callout type="warn" title="L'ibrido è il punto debole per la maggior parte delle squadre">
+Scrivere prima le specifiche per il contratto iniziale (design-first), implementare il server nel codice (code-first) e utilizzare un controllo CI che convalidi le specifiche generate rispetto alle specifiche scritte a mano. Questo ti offre il meglio di entrambi: la conversazione sulla progettazione avviene prima del codice, ma le specifiche rimangono accurate perché vengono generate e convalidate, non mantenute manualmente.
+</Callout>
+
+## Generazione di codice e client API type-safe
+
+Una specifica OpenAPI non è solo documentazione: è una **fonte di verità che le macchine possono utilizzare**. I generatori di codice leggono le specifiche e producono SDK client, stub di server e tipi TypeScript pronti all'uso per ogni linguaggio dell'ecosistema.
+
+### Generatori popolari
+
+| Strumento | Uscita | Lingua | Note |
+|------|--------|----------|-------|
+| **generatore openapi** | SDK client, stub del server, documenti | Oltre 40 lingue | Il generatore più completo |
+| **orval** | Client TypeScript con fetcher | Dattiloscritto | Funziona con OpenAPI 3.x, eccellente DX |
+| **swagger-typescript-api** | Tipi TypeScript e client API | Dattiloscritto | Leggero, veloce |
+| **openapi-dattiloscritto** | Solo tipi TypeScript | Dattiloscritto | Minimo, tempo di esecuzione pari a zero |
+| **mockttp** | Server fittizi | — | Dalle specifiche |
+
+### Generazione di un client TypeScript
+
+Con **orval**, generare un client TypeScript indipendente dai tipi da una specifica è un singolo comando:
+
+```bash
+npx orval --input ./openapi.yaml --output ./src/api/client
+```
+
+Questo produce:
+- La funzione tipizzata chiama per ogni endpoint (`getBooks()`, `createBook(data)`, `getBookById(id)`)
+- Tipi TypeScript per ogni schema (`Book`, `CreateBook`, `Error`)
+- Inferenza del tipo di richiesta/risposta: il compilatore sa quale forma restituisce ciascuna chiamata
+
+```typescript
+// Auto-generated from the spec
+export const getBooks = (params?: { page?: number; limit?: number }) =>
+  fetcher<{ data: Book[]; total: number }>('/books', { method: 'GET', params });
+
+export type Book = {
+  id: number;
+  title: string;
+  author: string;
+  isbn?: string;
+  publishedAt?: string;
+};
+```
+
+Il risultato: il tuo codice frontend riceve il **controllo del tipo in fase di compilazione** per ogni chiamata API. Se le specifiche cambiano, i tipi generati cambiano e TypeScript ti dice esattamente quali file devono essere aggiornati. Non di più `any` e non dovrai più indovinare in fase di esecuzione.
+
+### Generazione di stub del server
+
+**openapi-generator** può anche generare stub di server (file scheletrici del controller in Go, Python, Java o qualsiasi linguaggio supportato) che riempi con la logica applicativa:
+
+```bash
+npx @openapi-generator/cli generate \
+  -i openapi.yaml \
+  -g go \
+  -o ./server/generated
+```
+
+Ciò produce gestori tipizzati con le firme dei metodi, i collegamenti dei parametri e i tipi di risposta corretti. Si implementano i gestori compilando i corpi della funzione generata.
+
+<Callout type="ok" title="Il ciclo del codegen">
+Scrivi la specifica → genera client e stub → implementa il server → testa l'implementazione rispetto alla specifica → rigenera i client quando la specifica cambia. Le specifiche guidano l'intero ciclo di sviluppo, non solo la documentazione.
+</Callout>
+
+## Mantenere le specifiche sincronizzate
+
+La parte più difficile di OpenAPI non è scrivere le specifiche: è **mantenerle sincronizzate** con l'implementazione man mano che l'API si evolve. Una specifica obsoleta è peggiore di nessuna specifica, perché fuorvia attivamente i consumatori.
+
+### Validazione in CI
+
+Aggiungi un passaggio di convalida alla pipeline CI che controlla le specifiche rispetto all'API in esecuzione:
+
+```yaml
+# .github/workflows/openapi-validation.yml
+name: Validate OpenAPI Spec
+on: [pull_request]
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: npm install
+      - run: npm run build
+      - run: npm run start &      # Start the upstream application
+      - run: npx prism proxy openapi.yaml http://localhost:4000 --port 4010 &
+      - run: curl --fail http://localhost:4010/books # Send requests through Prism
+```
+
+    La modalità proxy di convalida di Prism richiede che l'applicazione sia eseguita per prima. Convalida le richieste e le risposte instradate attraverso il proxy; non avvia l'applicazione upstream né genera una richiesta per ogni operazione. Avvia l'applicazione separatamente, avvia Prism e invia i tuoi test tramite il proxy Prism. Per la generazione di richieste basate sulle specifiche e la convalida della risposta, utilizzare **`dredd`**invece.
+
+### Linting le specifiche
+
+Elimina le specifiche stesse per problemi comuni prima che raggiungano la produzione:
+
+- **`openapi-lint`**: verifica la presenza di descrizioni mancanti, esempi non validi, codici di stato mancanti
+- **`spectral`** — Applica regole personalizzate (ad esempio, "tutti gli endpoint devono avere una risposta 4xx", "tutti gli schemi devono avere un esempio")
+- **`speccy`** — Convalida la sintassi e controlla gli errori comuni
+
+```yaml
+- run: npx spectral lint openapi.yaml
+```
+
+### Rilevamento della deriva
+
+Per i team code-first, rileva la deviazione tra le specifiche generate e quelle scritte a mano in fase di creazione:
+
+```bash
+# Generate the spec from code
+npm run build:spec       # Produces generated-openapi.yaml
+
+# Compare with the canonical spec
+npx json-diff openapi.yaml generated-openapi.yaml
+```
+
+Se ci sono differenze, le specifiche scritte a mano sono obsolete (aggiornarle) o il codice si è discostato dal contratto (correggere il codice). In ogni caso, la discrepanza emerge automaticamente.
+
+### Versione delle specifiche
+
+Tratta le specifiche OpenAPI come qualsiasi altro artefatto sorgente:
+
+- **Versionalo** con la versione API (`v1/openapi.yaml`, `v2/openapi.yaml`)
+- **Conservalo in Git** insieme al codice, mai in una wiki o Confluence separata
+- **Automatizza gli aggiornamenti** con una pipeline CI che rigenera le specifiche e apre un PR se la versione scritta a mano non corrisponde
+- **Aggiungi un registro delle modifiche** nelle specifiche `description` campo, utilizzando Markdown
+
+<Diagram caption="The spec maintenance loop">
+<svg viewBox="0 0 720 250" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Un ciclo continuo che mostra come le specifiche OpenAPI rimangono sincronizzate con l'implementazione"><circle cx="360" cy="125" r="110" fill="none" stroke="var(--dg-line)" stroke-width="1.5" stroke-dasharray="4 3"></circle><rect x="20" y="60" width="180" height="130" rx="10" fill="var(--dg-accent-surface)" stroke="var(--dg-accent)"></rect><text x="110" y="90" font-size="11" font-weight="700" fill="var(--dg-accent)" text-anchor="middle">Scrivi/Aggiorna specifiche</text><text x="110" y="120" class="mono" font-size="8.5" fill="var(--dg-ink-2)" text-anchor="middle">YAML, leggibile dalla macchina</text><text x="110" y="150" class="mono" font-size="8.5" fill="var(--dg-ink-3)">Convalidare con CI</text><path d="M200 125 A140 140 0 0 1 360 15" fill="none" stroke="var(--dg-ok)" stroke-width="2" marker-end="url(#br)"></path><rect x="310" y="30" width="190" height="130" rx="10" fill="var(--dg-ok-surface)" stroke="var(--dg-ok)"></rect><text x="405" y="60" font-size="11" font-weight="700" fill="var(--dg-ok)" text-anchor="middle">Genera SDK client</text><text x="405" y="90" class="mono" font-size="8.5" fill="var(--dg-ink-2)" text-anchor="middle">TypeScript, Go, Python</text><text x="405" y="120" class="mono" font-size="8.5" fill="var(--dg-ink-3)">Sicuro, sempre attuale</text><path d="M455 85 A140 140 0 0 1 600 125" fill="none" stroke="var(--dg-info)" stroke-width="2" marker-end="url(#bg)"></path><rect x="530" y="70" width="170" height="110" rx="10" fill="var(--dg-info-surface)" stroke="var(--dg-info)"></rect><text x="615" y="95" font-size="11" font-weight="700" fill="var(--dg-info)" text-anchor="middle">Servire documenti</text><text x="615" y="120" class="mono" font-size="8.5" fill="var(--dg-ink-2)" text-anchor="middle">Interfaccia utente spavalda/Scalare</text><text x="615" y="145" class="mono" font-size="8.5" fill="var(--dg-ink-3)">Interattivo, dal vivo</text><path d="M570 125 A140 140 0 0 1 450 170" fill="none" stroke="var(--dg-warn)" stroke-width="2" marker-end="url(#bw)"></path><rect x="260" y="170" width="200" height="70" rx="10" fill="var(--dg-warn-surface)" stroke="var(--dg-warn)"></rect><text x="360" y="198" font-size="11" font-weight="700" fill="var(--dg-warn)" text-anchor="middle">Convalida CI</text><text x="360" y="218" class="mono" font-size="8.5" fill="var(--dg-ink-2)" text-anchor="middle">Le specifiche corrispondono al server</text><defs><marker id="br" markerWidth="7" markerHeight="7" refX="5" refY="2.5" orient="auto"><path d="M0 0 L5 2.5 L0 5 Z" fill="var(--dg-ok)"></path></marker><marker id="bg" markerWidth="7" markerHeight="7" refX="5" refY="2.5" orient="auto"><path d="M0 0 L5 2.5 L0 5 Z" fill="var(--dg-info)"></path></marker><marker id="bw" markerWidth="7" markerHeight="7" refX="5" refY="2.5" orient="auto"><path d="M0 0 L5 2.5 L0 5 Z" fill="var(--dg-warn)"></path></marker></defs></svg>
+</Diagram>
+
+## OpenAPI per agenti IA
+
+Un agente AI è un altro tipo di client API: sceglie un'operazione, fornisce argomenti e interpreta la risposta. OpenAPI fornisce al runtime dell'agente una descrizione leggibile dalla macchina di tali operazioni, ma non trasforma di per sé un'API in un sistema autonomo. Un adattatore converte le operazioni OpenAPI selezionate nel formato dello strumento compreso dal modello, mentre l'applicazione rimane responsabile dell'autorizzazione, dell'esecuzione e degli effetti collaterali.
+
+Ad esempio, un adattatore può trasformare questa operazione:
+
+```yaml
+paths:
+  /books/{bookId}:
+    get:
+      operationId: getBook
+      summary: Get a book by ID
+      parameters:
+        - name: bookId
+          in: path
+          required: true
+          schema:
+            type: integer
+```
+
+in uno strumento con un nome stabile, una descrizione utile e uno schema di argomenti convalidati:
+
+```json
+{
+  "name": "getBook",
+  "description": "Get a book by its numeric ID.",
+  "parameters": {
+    "type": "object",
+    "required": ["bookId"],
+    "properties": {
+      "bookId": { "type": "integer" }
+    },
+    "additionalProperties": false
+  }
+}
+```
+
+Il modello può proporre una chiamata allo strumento, ma il runtime dell'agente deve convalidarla rispetto allo schema derivato da OpenAPI prima di effettuare una richiesta HTTP. Dovrebbe inoltre risolvere il percorso e il metodo da un registro delle operazioni attendibili anziché consentire al modello di costruire URL arbitrari. `operationId`, riepiloghi, descrizioni, enumerazioni, formati ed esempi contano quindi due volte: migliorano la documentazione umana e danno al modello confini più chiari per la scelta e il richiamo di uno strumento.
+
+### Limiti di produzione per le chiamate API degli agenti
+
+Tratta una chiamata allo strumento dell'agente come una richiesta non attendibile che attraversa un limite dell'API pubblica:
+
+- **Esponi una lista consentita.** Pubblica solo le operazioni necessarie all'agente. Non esporre endpoint amministrativi o distruttivi semplicemente perché compaiono nel documento OpenAPI completo.
+- **Autorizza il chiamante.** Applica l'identità, il tenant, le autorizzazioni e gli ambiti dell'utente finale sul server per ogni chiamata. La decisione di una modella non costituisce mai prova dell'autorizzazione.
+- **Letture separate dalle scritture.** Le operazioni di lettura possono spesso essere eseguite automaticamente; le operazioni di creazione, aggiornamento, eliminazione, pagamento e modifica delle autorizzazioni dovrebbero richiedere una conferma esplicita o una decisione politica.
+- **Convalida due volte.** Convalida gli argomenti prima dell'invio, quindi convalida la risposta upstream prima di restituirla al modello. Rifiuta campi, codici di stato e tipi di contenuto imprevisti anziché indovinare silenziosamente.
+- **Controlla l'esecuzione.** Applica timeout, limiti di frequenza, budget per i nuovi tentativi, chiavi di idempotenza e dimensioni massime delle risposte. I cicli di strumenti necessitano di un limite di passaggi e di un percorso di cancellazione.
+- **Traccia la decisione.** Registra l'utente, richiesta del modello, selezionato `operationId`, argomenti ripuliti, risultato dell'autorizzazione, latenza, codice di stato e ID richiesta. Mantieni i segreti e i dati sensibili delle risposte fuori dai registri ordinari.
+
+Mantieni la versione del documento OpenAPI e aggiungi l'adattatore dell'agente a una versione conosciuta. Un'operazione rinominata, uno schema ampliato o un endpoint di scrittura appena esposto possono modificare il comportamento dell'agente anche quando non viene modificata alcuna richiesta. Convalida le definizioni degli strumenti generati in CI, esercita le chiamate degli strumenti rappresentativi rispetto a un servizio fittizio o di staging ed esamina le modifiche delle autorizzazioni come qualsiasi altra modifica del contratto API.
+
+<Callout type="warn" title="OpenAPI è il contratto di capacità, non il motore delle politiche">
+Utilizza OpenAPI per descrivere cosa accetta e restituisce un'operazione. Utilizza il runtime dell'applicazione, del gateway e dell'agente per decidere chi può chiamarlo, se è richiesta l'approvazione e quanto lavoro può eseguire un agente. Mantenere tali responsabilità separate rende le integrazioni degli agenti verificabili e revocabili.
+</Callout>
+
+## Il capitolo in un fiato
+
+OpenAPI non è uno strumento di documentazione: è un **linguaggio contrattuale** per le API. Scrivi le specifiche, convalidale, generale da esse e mantienile sincronizzate. Le specifiche diventano l'unica fonte di verità che guida la documentazione, i test, gli SDK client e i controlli CI. I team che adottano questo flusso di lavoro smettono di discutere su cosa fa la loro API e iniziano a basarsi su di essa.
+
+<Callout type="info" title="Punto di partenza consigliato">
+Se stai avviando una nuova API, prova **code-first con FastAPI** (Python) o **NestJS** (TypeScript): entrambi generano una specifica OpenAPI valida dal tuo codice senza configurazione. Aggiungi l'interfaccia utente Swagger per documenti interattivi e una fase di convalida CI per individuare le derive. Man mano che l'API matura e il team cresce, passa a un flusso di lavoro incentrato sulla progettazione in cui le specifiche rappresentano il contratto esplicito che guida lo sviluppo parallelo.
+</Callout>

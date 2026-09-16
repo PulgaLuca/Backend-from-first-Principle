@@ -1,0 +1,1963 @@
+<!DOCTYPE html>
+<html lang="it">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="referrer" content="no-referrer">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Message Brokers e Kafka / Capitolo 23 / Backend dai principi primi</title>
+  <meta name="description" content="Capitolo 23 di Backend from First Principles: Message Brokers e Kafka. Note sui principi primi, diagrammi ed esempi eseguibili in Go e Python.">
+  <meta name="theme-color" content="#f3ede2">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2032%2032'%3E%3Crect%20width='32'%20height='32'%20rx='7'%20fill='%23b8402e'/%3E%3Ctext%20x='16'%20y='23'%20font-family='Georgia,serif'%20font-size='19'%20font-weight='700'%20fill='%23f3ede2'%20text-anchor='middle'%3EB%3C/text%3E%3C/svg%3E">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/go.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/python.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/sql.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/bash.min.js"></script>
+
+  <style>
+    :root{
+  --paper: #f3ede2;
+  --paper-2: #ece3d4;
+  --ink: #211e1a;
+  --ink-soft: #5b5347;
+  --rust: #b8402e;
+  --rust-deep: #8f2f20;
+  --gold: #b07d2b;
+  --teal: #3f6f4e;
+  --line: #d8cfbe;
+  --code-bg: #232019;
+  --code-bar: #1a1813;
+  --shadow: 0 1px 0 rgba(0,0,0,.04),0 18px 40px -28px rgba(40,30,20,.5);
+}
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0
+    }
+
+    html {
+      scroll-behavior: smooth;
+      scroll-padding-top: 24px
+    }
+
+    body {
+      background: var(--paper);
+      color: var(--ink);
+      font-family:"Spline Sans", system-ui, sans-serif;
+      font-size: 17px;
+      line-height: 1.7;
+      -webkit-font-smoothing: antialiased;
+      background-image: radial-gradient(circle at 12% 8%, rgba(184,64,46, .05), transparent 38%), radial-gradient(circle at 88% 92%, rgba(63,111,78, .05), transparent 42%);
+    }
+
+    .hero {
+      margin-bottom: 64px;
+    }
+
+    .kicker {
+      font-family:"JetBrains Mono", ui-monospace, monospace;
+      font-size: 12.5px;
+      letter-spacing: .3em;
+      text-transform: uppercase;
+      color: var(--rust);
+      font-weight: 700;
+      margin-bottom: 20px;
+    }
+
+    .hero h1 {
+      font-family:"Fraunces", Georgia, serif;
+      font-weight: 900;
+      font-size: clamp(40px, 6.5vw, 78px);
+      line-height: .95;
+      letter-spacing: -.025em;
+      margin-bottom: 24px;
+    }
+
+    .hero h1 em {
+      font-style: italic;
+      color: var(--rust);
+      font-weight: 500;
+    }
+
+    .hero .lede{
+      font-size: 19px;
+      max-width:64ch;
+      color: var(--ink-soft);
+      line-height: 1.6;
+    }
+
+    .hero .meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 32px;
+    }
+
+    .hero .meta span {
+      font-family:"JetBrains Mono", ui-monospace, monospace;
+      font-size: 12px;
+      border: 1px solid var(--line);
+      background: var(--paper-2);
+      padding: 6px 13px;
+      border-radius: 30px;
+      color: var(--ink-soft);
+    }
+
+    .hero .rule {
+      height: 3px;
+      width:120px;
+      background: var(--rust);
+      margin-top: 38px;
+    }
+
+    .part-label {
+      font-family:"JetBrains Mono", ui-monospace, monospace;
+      font-size: 12px;
+      letter-spacing: .22em;
+      text-transform: uppercase;
+      color: var(--rust);
+      font-weight: 700;
+      margin: 64px 0 8px;
+      padding-bottom: 6px;
+      border-bottom: 1px dashed var(--line);
+    }
+
+    .part-label:first-of-type {
+      margin-top: 0;
+    }
+
+    section {
+      margin-bottom: 72px;
+      scroll-margin-top: 20px;
+    }
+
+    .sec-head {
+      display: flex;
+      align-items: flex-start;
+      gap: 18px;
+      margin-bottom: 24px;
+      border-bottom: 1px solid var(--line);
+      padding-bottom: 16px;
+    }
+
+    .sec-num {
+      font-family:"JetBrains Mono", ui-monospace, monospace;
+      font-weight: 700;
+      font-size: 14px;
+      color: #fff;
+      background: var(--rust);
+      border-radius: 8px;
+      padding: 7px 11px;
+      line-height: 1;
+      margin-top: 8px;
+      white-space: nowrap;
+      box-shadow: 0 3px 10px rgba(184,64,46, .3);
+    }
+
+    h2 {
+      font-family:"Fraunces", Georgia, serif;
+      font-weight: 600;
+      font-size: clamp(27px, 3.6vw, 38px);
+      line-height: 1.06;
+      letter-spacing: -.015em;
+    }
+
+    h3 {
+      font-family:"Fraunces", Georgia, serif;
+      font-weight: 600;
+      font-size: 22px;
+      margin: 34px 0 12px;
+      letter-spacing: -.01em;
+    }
+
+    h4 {
+      font-size: 14px;
+      font-weight: 700;
+      letter-spacing: .04em;
+      text-transform: uppercase;
+      color: var(--rust-deep);
+      margin: 24px 0 9px;
+    }
+
+    p {
+      margin-bottom: 15px;
+      max-width:76ch;
+    }
+
+    strong {
+      font-weight: 700;
+      color: var(--ink);
+    }
+
+    ul,
+    ol {
+      margin: 0 0 17px 0;
+      padding-left:0;
+      max-width:76ch;
+    }
+
+    li {
+      margin: 0 0 9px 28px;
+    }
+
+    li::marker {
+      color: var(--rust);
+      font-weight: 700;
+    }
+
+    code:not(pre code) {
+      font-family:"JetBrains Mono", ui-monospace, monospace;
+      font-size: .85em;
+      background: var(--paper-2);
+      border: 1px solid var(--line);
+      padding: .12em .42em;
+      border-radius: 5px;
+      color: var(--rust-deep);
+      white-space: nowrap;
+    }
+
+    .box {
+      border-radius: 12px;
+      padding: 18px 22px;
+      margin: 22px 0;
+      border: 1px solid var(--line);
+      background: var(--paper-2);
+    }
+
+    .box .tag {
+      font-family:"JetBrains Mono", ui-monospace, monospace;
+      font-size: 11px;
+      letter-spacing: .16em;
+      text-transform: uppercase;
+      font-weight: 700;
+      margin-bottom: 7px;
+      display: block;
+    }
+
+    .box p:last-child {
+      margin-bottom: 0;
+    }
+
+    .box.key {
+      background: linear-gradient(180deg, rgba(176,125,43, .1), rgba(176,125,43, .04));
+      border-color: rgba(176,125,43, .4);
+    }
+
+    .box.key .tag {
+      color: var(--gold);
+    }
+
+    .box.gotcha {
+      background: linear-gradient(180deg, rgba(184,64,46, .1), rgba(184,64,46, .03));
+      border-color: rgba(184,64,46, .4);
+    }
+
+    .box.gotcha .tag {
+      color: var(--rust);
+    }
+
+    .box.note {
+      background: linear-gradient(180deg, rgba(63,111,78, .09), rgba(63,111,78, .03));
+      border-color: rgba(63,111,78, .4);
+    }
+
+    .box.note .tag {
+      color: var(--teal);
+    }
+
+    .analogy {
+      font-style: italic;
+      color: var(--ink-soft);
+      font-family:"Fraunces", Georgia, serif;
+      font-size: 18px;
+      line-height: 1.55;
+      border-left: 3px solid var(--gold);
+      padding: 6px 0 6px 22px;
+      margin: 20px 0;
+    }
+
+    .tbl-wrap {
+      overflow-x: auto;
+      margin: 22px 0;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+    }
+
+    table {
+      border-collapse: collapse;
+      width:100%;
+      font-size: 14px;
+    }
+
+    th,
+    td {
+      text-align: left;
+      padding: 11px 15px;
+      border-bottom: 1px solid var(--line);
+      vertical-align: top;
+    }
+
+    th {
+      background: var(--paper-2);
+      font-weight: 700;
+      font-size: 11.5px;
+      letter-spacing: .05em;
+      text-transform: uppercase;
+      color: var(--rust-deep);
+    }
+
+    tr:last-child td {
+      border-bottom: none;
+    }
+
+    td code {
+      white-space: nowrap;
+    }
+
+    .mono-cell {
+      font-family:"JetBrains Mono", ui-monospace, monospace;
+      font-weight: 700;
+      color: var(--rust-deep);
+      font-size: 13px;
+    }
+
+    .yes {
+      color: #3f6f4e;
+      font-weight: 700;
+    }
+
+    .no {
+      color: #b8402e;
+      font-weight: 700;
+    }
+
+    .cond {
+      color: #b07d2b;
+      font-weight: 700;
+    }
+
+    .sc {
+      font-family:"JetBrains Mono", ui-monospace, monospace;
+      font-weight: 700;
+      padding: 2px 8px;
+      border-radius: 6px;
+      font-size: 13px;
+      white-space: nowrap;
+    }
+
+    .sc.s1 {
+      background: #dee5ee;
+      color: #3f6f4e;
+    }
+
+    .sc.s2 {
+      background: #e0e9dd;
+      color: #3f6f4e;
+    }
+
+    .sc.s3 {
+      background: #f0e5c9;
+      color: #b07d2b;
+    }
+
+    .sc.s4 {
+      background: #f4ded6;
+      color: #b8402e;
+    }
+
+    .sc.s5 {
+      background: #eccdc2;
+      color: #8f2f20;
+    }
+
+    .codeblock {
+      background: var(--code-bg);
+      margin: 20px 0;
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 14px 30px -16px var(--shadow);
+      border: 1px solid #35302a;
+    }
+
+    .code-bar {
+      display: flex;
+      align-items: center;
+      background: var(--code-bar);
+      padding: 0 14px;
+      border-bottom: 1px solid #35302a;
+    }
+
+    .code-bar .dots {
+      display: flex;
+      gap: 7px;
+      margin-right: 14px;
+    }
+
+    .code-bar .dots i {
+      width:11px;
+      height: 11px;
+      border-radius: 50%;
+      display: block;
+    }
+
+    .dots i:nth-child(1) {
+      background: #d05a47;
+    }
+
+    .dots i:nth-child(2) {
+      background: #cf9f4b;
+    }
+
+    .dots i:nth-child(3) {
+      background: #5a9a5f;
+    }
+
+    .code-tabs {
+      display: flex;
+    }
+
+    .code-tabs button {
+      font-family:"JetBrains Mono", ui-monospace, monospace;
+      font-size: 12.5px;
+      font-weight: 600;
+      background: none;
+      border: none;
+      color: #9c948a;
+      padding: 13px 18px;
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      transition: .15s;
+    }
+
+    .code-tabs button:hover {
+      color: #e9e2d3;
+    }
+
+    .code-tabs button.on {
+      color: #fff;
+      border-bottom-color: var(--rust);
+    }
+
+    .lang-go {
+      color: #7fb0c9;
+    }
+
+    .lang-py {
+      color: #d8b66a;
+    }
+
+    .code-panel {
+      display: none;
+    }
+
+    .code-panel.on {
+      display: block;
+    }
+
+    .codeblock pre {
+      margin: 0;
+    }
+
+    .codeblock pre code {
+      font-family:"JetBrains Mono", ui-monospace, monospace !important;
+      font-size: 13px;
+      line-height: 1.6;
+      padding: 18px 20px !important;
+      display: block;
+      overflow-x: auto;
+      background: var(--code-bg) !important;
+    }
+
+    .code-cap {
+      font-size: 13px;
+      color: var(--ink-soft);
+      font-style: italic;
+      margin: -8px 2px 22px;
+      font-family:"Fraunces", Georgia, serif;
+    }
+
+    .codeblock.single .code-bar .filename {
+      font-family:"JetBrains Mono", ui-monospace, monospace;
+      font-size: 12.5px;
+      color: #9c948a;
+      padding: 13px 4px;
+    }
+
+    .flow {
+      margin: 22px 0;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: var(--paper-2);
+      padding: 24px 22px;
+    }
+
+    .flow .step {
+      display: flex;
+      gap: 15px;
+      align-items: flex-start;
+      padding: 9px 0;
+    }
+
+    .flow .step .b {
+      font-family:"JetBrains Mono", ui-monospace, monospace;
+      font-weight: 700;
+      font-size: 12px;
+      background: var(--ink);
+      color: var(--paper);
+      min-width:30px;
+      height: 30px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 8px;
+      flex-shrink: 0;
+    }
+
+    .flow .step.srv .b {
+      background: var(--teal);
+    }
+
+    .flow .step.cli .b {
+      background: var(--rust);
+    }
+
+    .flow .step .t {
+      padding-top: 3px;
+      font-size: 14.5px;
+    }
+
+    .flow .arrow {
+      color: var(--line);
+      text-align: center;
+      font-size: 18px;
+      line-height: .4;
+      margin: 0 0 0 14px;
+    }
+
+    /* method card */
+    .method {
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      margin: 26px 0;
+      overflow: hidden;
+      background: var(--paper-2);
+    }
+
+    .method-top {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 14px;
+      padding: 18px 22px;
+      background: linear-gradient(180deg, rgba(33,30,26, .04), transparent);
+      border-bottom: 1px solid var(--line);
+    }
+
+    .method-top .verb {
+      font-family:"JetBrains Mono", ui-monospace, monospace;
+      font-weight: 700;
+      font-size: 18px;
+      color: #fff;
+      background: var(--ink);
+      padding: 6px 14px;
+      border-radius: 8px;
+    }
+
+    .method-top .verb.get {
+      background: #3f6f4e;
+    }
+
+    .method-top .verb.post {
+      background: var(--rust);
+    }
+
+    .method-top .verb.put {
+      background: #8a6420;
+    }
+
+    .method-top .verb.patch {
+      background: #b07d2b;
+    }
+
+    .method-top .verb.delete {
+      background: #8f2f20;
+    }
+
+    .method-top .verb.head {
+      background: #37607f;
+    }
+
+    .method-top .verb.options {
+      background: var(--teal);
+    }
+
+    .method-top .verb.connect {
+      background: #5b5347;
+    }
+
+    .method-top .verb.trace {
+      background: #8d8475;
+    }
+
+    .method-top .props {
+      display: flex;
+      gap: 7px;
+      flex-wrap: wrap;
+      margin-left:auto;
+    }
+
+    .method-top .props span {
+      font-family:"JetBrains Mono", ui-monospace, monospace;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 4px 9px;
+      border-radius: 20px;
+      border: 1px solid var(--line);
+      background: var(--paper);
+    }
+
+    .method-top .props .y {
+      color: #3f6f4e;
+      border-color: #bcd3b6;
+    }
+
+    .method-top .props .c {
+      color: #b07d2b;
+      border-color: #ddc79a;
+    }
+
+    .method-body {
+      padding: 6px 22px 20px;
+    }
+
+    .method-body .gloss {
+      font-family:"Fraunces", Georgia, serif;
+      font-style: italic;
+      font-size: 17px;
+      color: var(--ink-soft);
+      margin: 14px 0;
+    }
+
+    .foot {
+      border-top: 3px solid var(--rust);
+      margin-top: 56px;
+      padding-top: 28px;
+      color: var(--ink-soft);
+      font-size: 14px;
+    }
+
+    .foot strong {
+      color: var(--ink);
+    }
+
+    .toc-toggle {
+      display: none;
+    }
+
+    /* ============ VISUALIZATION STYLES (added) ============ */
+    .viz {
+      margin: 30px 0;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: linear-gradient(180deg, #f6f0e6, var(--paper-2));
+      padding: 24px 22px 18px;
+      box-shadow: 0 10px 26px -18px var(--shadow);
+    }
+
+    .viz-cap {
+      font-family:"JetBrains Mono", ui-monospace, monospace;
+      font-size: 11px;
+      letter-spacing: .18em;
+      text-transform: uppercase;
+      color: var(--rust);
+      font-weight: 700;
+      margin-bottom: 4px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .viz-cap::before {
+      content: "";
+      width:18px;
+      height: 2px;
+      background: var(--rust);
+      display: inline-block;
+    }
+
+    .viz-title {
+      font-family:"Fraunces", Georgia, serif;
+      font-weight: 600;
+      font-size: 18px;
+      letter-spacing: -.01em;
+      margin-bottom: 16px;
+      color: var(--ink);
+    }
+
+    .viz svg {
+      display: block;
+      width:100%;
+      height: auto;
+      overflow: visible;
+    }
+
+    .viz svg text {
+      font-family:"Spline Sans", system-ui, sans-serif;
+    }
+
+    .viz svg .mono {
+      font-family:"JetBrains Mono", ui-monospace, monospace;
+    }
+
+    .viz svg .serif {
+      font-family:"Fraunces", Georgia, serif;
+    }
+
+    .viz-note {
+      font-size: 12.5px;
+      color: var(--ink-soft);
+      font-style: italic;
+      font-family:"Fraunces", Georgia, serif;
+      margin-top: 14px;
+      padding-top: 12px;
+      border-top: 1px dashed var(--line);
+    }
+
+    @media(max-width:980px) {
+
+      .toc-toggle {
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        position: fixed;
+        top: 16px;
+        left:16px;
+        z-index: 60;
+        background: var(--ink);
+        color: var(--paper);
+        border: none;
+        font-family:"JetBrains Mono", ui-monospace, monospace;
+        font-size: 13px;
+        font-weight: 600;
+        padding: 11px 16px;
+        border-radius: 10px;
+        cursor: pointer;
+        box-shadow: 0 6px 18px var(--shadow);
+      }
+
+      .method-top .props {
+        margin-left:0;
+        width:100%;
+      }}
+
+    @media(max-width:560px) {
+      body {
+        font-size: 16px;
+      }}
+
+    ::selection {
+      background: var(--rust);
+      color: #fff;
+    }</style>
+<style>
+.chapter-nav{position:fixed;bottom:0;left:0;right:0;z-index:9998;display:flex;align-items:center;justify-content:space-between;padding:14px clamp(16px,4vw,48px);background:rgba(243,237,226,.88);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border-top:1.5px solid #c7bca6;box-shadow:0 -8px 32px -16px rgba(40,30,20,.18);font-family:"JetBrains Mono", ui-monospace, monospace;}
+.nav-chapter-link{display:flex;align-items:center;gap:12px;text-decoration:none;color:#5b5347;padding:10px 18px;border-radius:10px;transition:all .2s ease;max-width:38%;}
+.nav-chapter-link:hover{background:rgba(184,64,46,.08);color:#b8402e;transform:translateY(-1px);}
+.nav-chapter-link.nav-next{text-align:right;flex-direction:row;}
+.nav-arrow{font-size:22px;color:#b8402e;font-weight:700;flex:none;}
+.nav-label{display:flex;flex-direction:column;gap:2px;font-size:13.5px;line-height:1.3;}
+.nav-small{font-size:10px;letter-spacing:.22em;text-transform:uppercase;color:#8d8475;font-weight:600;}
+.nav-indicator{font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:#b8402e;font-weight:700;text-decoration:none;padding:8px 16px;border:1.5px solid #c7bca6;border-radius:40px;background:rgba(255,255,255,.5);transition:all .2s;white-space:nowrap;}
+.nav-indicator:hover{background:#b8402e;color:#fff;border-color:#b8402e;}
+.nav-dot{display:inline-block;width:7px;height:7px;background:#b8402e;border-radius:50%;margin-right:4px;vertical-align:middle;}
+.nav-sep{color:#c7bca6;margin:0 2px;}
+.nav-disabled{visibility:hidden;pointer-events:none;}
+@media(max-width:700px){.nav-label{font-size:11.5px;}.nav-chapter-link{padding:8px 10px;max-width:38%;}.chapter-nav{padding:10px 12px;}.nav-small{font-size:9px;letter-spacing:.16em;}}
+@media(max-width:520px){.nav-label{display:none;}.nav-chapter-link{max-width:none;padding:8px 12px;}.nav-arrow{font-size:20px;}.nav-indicator{font-size:11px;padding:7px 13px;letter-spacing:.12em;}}
+body{padding-bottom:80px;}
+</style>
+  <link rel="stylesheet" href="../../assets/copy-button.css">
+  <link rel="stylesheet" href="../../assets/enhancements.css">
+  <link rel="stylesheet" href="../../assets/shell.css">
+  <link rel="stylesheet" href="../../assets/theme.css">
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;0,9..144,900;1,9..144,400;1,9..144,600&family=Spline+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script src="../../assets/theme.js"></script>
+</head>
+
+<body>
+<button class="bfp-toc-toggle" id="bfpTocToggle" aria-controls="bfpToc" aria-expanded="false"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><line x1="2" y1="4" x2="14" y2="4"/><line x1="2" y1="8" x2="14" y2="8"/><line x1="2" y1="12" x2="14" y2="12"/></svg>Contenuto</button>
+<div class="bfp-toc-scrim" id="bfpTocScrim"></div>
+<div class="bfp-shell">
+    <aside class="bfp-toc" id="bfpToc">
+      <div class="bfp-brand"><span class="bfp-brand-name">Kafka</span><span class="bfp-brand-slash">/</span><span class="bfp-brand-lens">l'obiettivo del back-end</span></div>
+      <div class="bfp-brand-sub">Capitolo 23/Manuale da campo</div>
+      <div class="bfp-toc-rule"></div>
+      <nav class="bfp-toc-nav">
+        <a class="bfp-toc-link" href="#s1"><span class="bfp-toc-num">01</span><span class="bfp-toc-text">Che cosa è realmente Kafka</span></a>
+        <a class="bfp-toc-link" href="#s2"><span class="bfp-toc-num">02</span><span class="bfp-toc-text">Coda vs registro</span></a>
+        <a class="bfp-toc-link" href="#s3"><span class="bfp-toc-num">03</span><span class="bfp-toc-text">Il registro dei commit</span></a>
+        <a class="bfp-toc-link" href="#s4"><span class="bfp-toc-num">04</span><span class="bfp-toc-text">Argomenti e partizioni</span></a>
+        <a class="bfp-toc-link" href="#s5"><span class="bfp-toc-num">05</span><span class="bfp-toc-text">Broker, replica e durabilità</span></a>
+        <a class="bfp-toc-link" href="#s6"><span class="bfp-toc-num">06</span><span class="bfp-toc-text">Produttori</span></a>
+        <a class="bfp-toc-link" href="#s7"><span class="bfp-toc-num">07</span><span class="bfp-toc-text">Consumatori e gruppi di consumatori</span></a>
+        <a class="bfp-toc-link" href="#s8"><span class="bfp-toc-num">08</span><span class="bfp-toc-text">Offset e gestione degli offset</span></a>
+        <a class="bfp-toc-link" href="#s9"><span class="bfp-toc-num">09</span><span class="bfp-toc-text">Semantica della consegna</span></a>
+        <a class="bfp-toc-link" href="#s10"><span class="bfp-toc-num">10</span><span class="bfp-toc-text">Garanzie sugli ordini</span></a>
+        <a class="bfp-toc-link" href="#s11"><span class="bfp-toc-num">11</span><span class="bfp-toc-text">Conservazione e compattazione dei tronchi</span></a>
+        <a class="bfp-toc-link" href="#s12"><span class="bfp-toc-num">12</span><span class="bfp-toc-text">Schemi e registro degli schemi</span></a>
+        <a class="bfp-toc-link" href="#s13"><span class="bfp-toc-num">13</span><span class="bfp-toc-text">Modelli guidati dagli eventi</span></a>
+        <a class="bfp-toc-link" href="#s14"><span class="bfp-toc-num">14</span><span class="bfp-toc-text">Origine eventi e CQRS</span></a>
+        <a class="bfp-toc-link" href="#s15"><span class="bfp-toc-num">15</span><span class="bfp-toc-text">Posta in uscita e modifica acquisizione dati</span></a>
+        <a class="bfp-toc-link" href="#s16"><span class="bfp-toc-num">16</span><span class="bfp-toc-text">Elaborazione del flusso</span></a>
+        <a class="bfp-toc-link" href="#s17"><span class="bfp-toc-num">17</span><span class="bfp-toc-text">Kafka contro le code tradizionali</span></a>
+        <a class="bfp-toc-link" href="#s18"><span class="bfp-toc-num">18</span><span class="bfp-toc-text">Le insidie del consumatore</span></a>
+        <a class="bfp-toc-link" href="#s19"><span class="bfp-toc-num">19</span><span class="bfp-toc-text">Operazioni e monitoraggio</span></a>
+        <a class="bfp-toc-link" href="#s20"><span class="bfp-toc-num">20</span><span class="bfp-toc-text">Progettare con Kafka</span></a>
+        <a class="bfp-toc-link" href="#s21"><span class="bfp-toc-num">21</span><span class="bfp-toc-text">Cheat-Sheet</span></a>
+      </nav>
+    </aside>
+    <main class="bfp-content">
+
+      <header class="hero">
+        <div class="kicker">Un riferimento dettagliato al backend</div>
+        <h1>Kafka, il <em>registro</em><br>al centro del tuo sistema</h1>
+        <p class="lede">Una guida dettagliata ai principi primi della piattaforma distribuita di streaming di eventi che sostiene i nervosi
+          sistemi di LinkedIn, Uber, Netflix e la più moderna fintech, dall’unica idea su cui tutto poggia (an
+          sola aggiunta <em>registro dei commit</em>), attraverso partizioni, gruppi di consumatori, offset e semantica di consegna, in
+          conservazione, schemi, modelli guidati dagli eventi, il trucco della posta in uscita/CDC e l'elaborazione del flusso. Scritto per spiegare no
+          semplicemente <em>cosa</em> ogni pezzo fa ma <em>perché</em> esiste e <em>come</em> funziona sotto.
+          Codice produttore/consumatore sia in Go che in Python.</p>
+        <div class="meta">
+          <span>Registro dei commit distribuiti</span>
+          <span>Partizioni e gruppi di consumatori</span>
+          <span>Vai 1.22+ / Python 3.11+</span>
+          <span>21 sezioni</span>
+        </div>
+        <div class="rule"></div>
+      </header>
+
+      <div class="part-label">Parte I / Il modello logaritmico</div>
+
+      <!-- 1 -->
+      <section id="s1">
+        <div class="sec-head"><div class="sec-num">01</div><h2>Che cosa è realmente Kafka</h2></div>
+        <p>Togliendo il marketing, Kafka è una cosa: <strong>un registro degli eventi distribuito, di sola aggiunta e durevole
+          che molti consumatori indipendenti possono leggere al proprio ritmo.</strong> Non una coda, non un database, non un
+          bus di messaggi nel senso classico, a <em>registro</em>. I produttori aggiungono i record alla fine; i consumatori leggono
+          in avanti da una posizione si seguono; e i record <em>restare</em> dopo essere stato letto, per a
+          conservazione configurata. Una volta che quella singola immagine è nella tua testa, ogni caratteristica di questo manuale è una conseguenza
+          di esso.</p>
+
+        <p>La descrizione ufficiale è &quot;una piattaforma di streaming di eventi distribuiti&quot; e ogni parola merita il suo posto.
+          <strong>Distribuito</strong>: funziona come un cluster di broker, replicando i dati per la tolleranza agli errori e
+          scalando orizzontalmente. <strong>Trasmissione di eventi</strong>: è costruito attorno ad un flusso illimitato e continuo di
+          immutabile <em>eventi</em> (è successo qualcosa: è stato effettuato un ordine, un pagamento è stato cancellato, un sensore ha letto), no
+          chiamate di richiesta/risposta. <strong>Piattaforma</strong>: produttori, consumatori, un ecosistema di connettori e flusso
+          l'elaborazione si trova tutti sullo stesso registro.</p>
+
+        <div class="analogy">Una coda di messaggi tradizionale è un elenco di cose da fare: prendi un elemento, lo fai e non c'è più. Kafka
+          è un <em>giornale di bordo della nave</em>: ogni evento viene scritto in ordine e rimane nel libro. Dieci diversi
+          ciascuno degli ufficiali può leggere il registro da dove si era interrotto, rileggere le voci di ieri o iniziare da
+          dall'inizio, e la lettura non cancella mai una riga.</div>
+
+        <div class="viz">
+          <div class="viz-cap">La forma di Kafka</div>
+          <div class="viz-title">I produttori aggiungono; il registro persiste; molti consumatori leggono in modo indipendente</div>
+          <svg viewBox="0 0 720 230" xmlns="http://www.w3.org/2000/svg" role="img"
+            aria-label="I produttori scrivono eventi in un registro di sola aggiunta, che viene conservato, mentre diversi gruppi di consumatori indipendenti leggono dalle proprie posizioni">
+            <rect x="20" y="40" width="120" height="40" rx="9" fill="#b8402e"/><text x="80" y="65" font-size="11" font-weight="700" fill="#fff" text-anchor="middle">produttori</text>
+            <defs><marker id="k1" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0 0 L7 3 L0 6 Z" fill="#8f2f20"/></marker><marker id="k2" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0 0 L7 3 L0 6 Z" fill="#3f6f4e"/></marker></defs>
+            <path d="M142 75 C180 90 200 100 230 104" stroke="#8f2f20" stroke-width="1.8" marker-end="url(#k1)"/><text x="180" y="98" class="mono" font-size="9" fill="#8f2f20">aggiungere -&gt;</text>
+            <!-- the log -->
+            <text x="235" y="100" class="mono" font-size="10" font-weight="700" fill="#b07d2b">THE LOG (solo aggiunta, conservato)</text>
+            <g>
+              <rect x="232" y="108" width="44" height="34" rx="4" fill="#f0e5c9" stroke="#b07d2b"/><text x="254" y="129" class="mono" font-size="10" fill="#8a6420">e0</text>
+              <rect x="278" y="108" width="44" height="34" rx="4" fill="#f0e5c9" stroke="#b07d2b"/><text x="300" y="129" class="mono" font-size="10" fill="#8a6420">e1</text>
+              <rect x="324" y="108" width="44" height="34" rx="4" fill="#f0e5c9" stroke="#b07d2b"/><text x="346" y="129" class="mono" font-size="10" fill="#8a6420">e2</text>
+              <rect x="370" y="108" width="44" height="34" rx="4" fill="#f0e5c9" stroke="#b07d2b"/><text x="392" y="129" class="mono" font-size="10" fill="#8a6420">e3</text>
+              <rect x="416" y="108" width="44" height="34" rx="4" fill="#f0e5c9" stroke="#b07d2b"/><text x="438" y="129" class="mono" font-size="10" fill="#8a6420">e4</text>
+              <rect x="462" y="108" width="44" height="34" rx="4" fill="#f0e6cc" stroke="#b07d2b" stroke-dasharray="3 2"/><text x="484" y="129" class="mono" font-size="10" fill="#9a9182">...</text>
+            </g>
+            <text x="232" y="160" class="mono" font-size="8.5" fill="#9a9182">offset 0 1 2 3 4 -&gt; le nuove scritture vanno alla coda</text>
+            <!-- consumers reading at different offsets -->
+            <rect x="540" y="40" width="160" height="34" rx="8" fill="#e0e9dd" stroke="#3f6f4e"/><text x="620" y="62" font-size="10" font-weight="700" fill="#3f6f4e" text-anchor="middle">consumatore A @ offset 4</text>
+            <rect x="540" y="100" width="160" height="34" rx="8" fill="#e0e9dd" stroke="#3f6f4e"/><text x="620" y="122" font-size="10" font-weight="700" fill="#3f6f4e" text-anchor="middle">consumatore B @ compensazione 1</text>
+            <rect x="540" y="160" width="160" height="34" rx="8" fill="#e0e9dd" stroke="#3f6f4e"/><text x="620" y="182" font-size="10" font-weight="700" fill="#3f6f4e" text-anchor="middle">consumatore C @ offset 0</text>
+            <path d="M460 120 C500 100 510 70 538 60" stroke="#3f6f4e" stroke-width="1.4" fill="none" marker-end="url(#k2)"/>
+            <path d="M300 130 C420 150 470 130 538 120" stroke="#3f6f4e" stroke-width="1.4" fill="none" marker-end="url(#k2)"/>
+            <path d="M254 142 C360 200 460 195 538 182" stroke="#3f6f4e" stroke-width="1.4" fill="none" marker-end="url(#k2)"/>
+            <text x="360" y="220" class="serif" font-size="12.5" font-style="italic" fill="#5b5347" text-anchor="middle">Ogni consumatore traccia la propria posizione; leggere e1 non lo rimuove, un altro consumatore può ancora leggerlo.</text>
+          </svg>
+          <div class="viz-note">Questo disaccoppiamento, tra eventi mantenuti durevoli e posizioni per consumatore, è il
+            intero gioco. È ciò che consente a un flusso di eventi di alimentare in modo indipendente molti sistemi non correlati.</div>
+        </div>
+
+        <div class="box key"><span class="tag">L'unica definizione</span>
+          <p>Kafka è un <strong>log di commit distribuito, durevole e di sola aggiunta</strong> di eventi immutabili, partizionati
+            per scala e replicato per tolleranza agli errori, quello <strong>più consumatori indipendenti leggono per conto proprio
+            compensare</strong>: con eventi <em>trattenuto</em> dopo aver letto. Tutto il resto è dettaglio.</p>
+        </div>
+      </section>
+
+      <!-- 2 -->
+      <section id="s2">
+        <div class="sec-head"><div class="sec-num">02</div><h2>Coda vs registro: perché Kafka è diverso</h2></div>
+        <p>Questa è la sezione più importante del manuale, perché lo è confondere Kafka con una coda di messaggi tradizionale
+          la radice della maggior confusione. Il capitolo sulle code di attività ha trattato in modo approfondito il modello delle code, i produttori, i lavoratori,
+          broker come RabbitMQ e SQS, nuovi tentativi, timeout di visibilità. Kafka è un <em>forma diversa della cosa</em>, e
+          la differenza non è un dettaglio; cambia i problemi che risolve.</p>
+
+        <div class="viz">
+          <div class="viz-cap">Il contrasto fondamentale</div>
+          <div class="viz-title">Una coda distribuisce ed elimina; un registro conserva e riproduce</div>
+          <svg viewBox="0 0 720 250" xmlns="http://www.w3.org/2000/svg" role="img"
+            aria-label="A sinistra: una coda in cui ogni messaggio viene consegnato a un consumatore e rimosso. A destra: un log in cui ogni consumatore legge tutti i messaggi in modo indipendente e nulla viene rimosso durante la lettura">
+            <text x="180" y="22" class="mono" font-size="11" font-weight="700" fill="#8f2f20" text-anchor="middle">CODA (RabbitMQ, SQS), consumatori concorrenti</text>
+            <rect x="30" y="40" width="120" height="30" rx="6" fill="#eccdc2" stroke="#8f2f20"/><text x="90" y="60" font-size="10" fill="#8f2f20" text-anchor="middle">messaggio in entrata</text>
+            <g class="mono" font-size="10" fill="#7a1f1f"><rect x="40" y="86" width="34" height="26" rx="4" fill="#eccdc2" stroke="#8f2f20"/><text x="57" y="104" text-anchor="middle">m3</text><rect x="78" y="86" width="34" height="26" rx="4" fill="#eccdc2" stroke="#8f2f20"/><text x="95" y="104" text-anchor="middle">m2</text><rect x="116" y="86" width="34" height="26" rx="4" fill="#eccdc2" stroke="#8f2f20"/><text x="133" y="104" text-anchor="middle">m1</text></g>
+            <defs><marker id="qa" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0 0 L6 3 L0 6 Z" fill="#8f2f20"/></marker></defs>
+            <path d="M160 99 H210" stroke="#8f2f20" stroke-width="1.5" marker-end="url(#qa)"/>
+            <rect x="212" y="78" width="60" height="24" rx="5" fill="#e8b9b9"/><text x="242" y="95" font-size="9" fill="#7a1f1f" text-anchor="middle">lavoratore 1</text>
+            <rect x="212" y="108" width="60" height="24" rx="5" fill="#e8b9b9"/><text x="242" y="125" font-size="9" fill="#7a1f1f" text-anchor="middle">lavoratore 2</text>
+            <text x="180" y="160" font-size="10.5" font-style="italic" fill="#8f2f20" text-anchor="middle">ogni messaggio va a UN lavoratore</text>
+            <text x="180" y="178" font-size="10.5" font-style="italic" fill="#8f2f20" text-anchor="middle">&amp; viene CANCELLATO una volta colpito</text>
+            <text x="180" y="200" class="mono" font-size="9.5" fill="#8f2f20" text-anchor="middle">nessuna riproduzione/ordine tra i consumatori persi</text>
+
+            <line x1="360" y1="34" x2="360" y2="220" stroke="#d8cfbe" stroke-dasharray="4 4"/>
+
+            <text x="545" y="22" class="mono" font-size="11" font-weight="700" fill="#3f6f4e" text-anchor="middle">LOG (Kafka), consumatori indipendenti</text>
+            <g class="mono" font-size="10" fill="#3f6f4e"><rect x="400" y="50" width="34" height="26" rx="4" fill="#e0e9dd" stroke="#3f6f4e"/><text x="417" y="68" text-anchor="middle">e0</text><rect x="436" y="50" width="34" height="26" rx="4" fill="#e0e9dd" stroke="#3f6f4e"/><text x="453" y="68" text-anchor="middle">e1</text><rect x="472" y="50" width="34" height="26" rx="4" fill="#e0e9dd" stroke="#3f6f4e"/><text x="489" y="68" text-anchor="middle">e2</text><rect x="508" y="50" width="34" height="26" rx="4" fill="#e0e9dd" stroke="#3f6f4e"/><text x="525" y="68" text-anchor="middle">e3</text></g>
+            <text x="473" y="92" class="mono" font-size="8.5" fill="#9a9182">mantenuto, nulla viene eliminato durante la lettura</text>
+            <rect x="560" y="108" width="130" height="26" rx="6" fill="#dbeede" stroke="#3f6f4e"/><text x="625" y="125" font-size="9" fill="#3f6f4e" text-anchor="middle">la fatturazione legge tutto</text>
+            <rect x="560" y="140" width="130" height="26" rx="6" fill="#dbeede" stroke="#3f6f4e"/><text x="625" y="157" font-size="9" fill="#3f6f4e" text-anchor="middle">l'analisi legge tutto</text>
+            <rect x="560" y="172" width="130" height="26" rx="6" fill="#dbeede" stroke="#3f6f4e"/><text x="625" y="189" font-size="9" fill="#3f6f4e" text-anchor="middle">la ricerca legge tutto</text>
+            <path d="M544 70 C552 100 552 118 558 121" stroke="#3f6f4e" stroke-width="1.3" fill="none" marker-end="url(#k2)"/>
+            <text x="473" y="222" font-size="10.5" font-style="italic" fill="#3f6f4e" text-anchor="middle">ogni consumatore vede OGNI evento / può riprodurre da qualsiasi offset</text>
+          </svg>
+        </div>
+
+        <div class="tbl-wrap">
+          <table>
+            <thead><tr><th>Dimensione</th><th>Coda tradizionale (cap.10)</th><th>Registro di Kafka</th></tr></thead>
+            <tbody>
+              <tr><td>Dopo che un messaggio è stato letto</td><td>Eliminato (consumato una volta)</td><td>Conservati (fino alla scadenza della conservazione)</td></tr>
+              <tr><td>Chi riceve un messaggio</td><td>Un consumatore concorrente</td><td>Ogni gruppo di consumatori, in modo indipendente</td></tr>
+              <tr><td>Riproduci/rileggi</td><td>No, non c'è più</td><td>Sì, cerca qualsiasi compensazione</td></tr>
+              <tr><td>Posizione del consumatore</td><td>Il broker traccia e rimuove</td><td>Il consumatore tiene traccia del proprio offset</td></tr>
+              <tr><td>Ordinare</td><td>Debole/nessuno tra i consumatori</td><td>Rigoroso all'interno di una partizione</td></tr>
+              <tr><td>Modello mentale</td><td>Distribuzione del lavoro (lista delle cose da fare)</td><td>Cronologia degli eventi/fonte della verità (registro)</td></tr>
+              <tr><td>Punto debole</td><td>Scarico compiti, elaborazione lavori</td><td>Streaming di eventi, molti abbonati, replay, throughput elevato</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="box note"><span class="tag">Coesistono, questo non è né/o</span>
+          <p>Utilizzerai spesso entrambi: Kafka come struttura portante degli eventi durevoli (ordini, pagamenti, clic trasmessi in streaming a molti
+            sistemi) e una coda di attività (Celery/SQS, cap.10) per lavori in background discreti (inviare questa e-mail, ridimensionare
+            quell'immagine). Il confronto completo e &quot;quale quando&quot; è sez 17. Per ora mantieni la distinzione: <strong>coda =
+            distribuire il lavoro e dimenticare; log = registra gli eventi e consente a molti sistemi di consumarli e riprodurli.</strong></p>
+        </div>
+      </section>
+
+      <!-- 3 -->
+      <section id="s3">
+        <div class="sec-head"><div class="sec-num">03</div><h2>Il registro dei commit</h2></div>
+        <p>Tutto ciò che Kafka fa si basa sulla struttura dati più umile del mondo informatico: il <strong>log di sola aggiunta</strong>: una sequenza ordinata di record che puoi aggiungere solo alla fine, mai inserire nel mezzo o modificare.
+          Ogni record ottiene un aumento monotono <strong>compensare</strong> (0, 1, 2, ...) cioè il suo permanente
+          indirizzo. Si tratta della stessa struttura utilizzata da un database per il registro write-ahead e la durabilità; L'intuizione di Kafka era
+          per rendere il log stesso il <em>astrazione primaria e pubblica</em> piuttosto che un dettaglio interno nascosto.</p>
+
+        <div class="viz">
+          <div class="viz-cap">Di sola aggiunta, con indirizzo offset</div>
+          <div class="viz-title">Le scritture vanno in coda; l'offset è un indirizzo permanente</div>
+          <svg viewBox="0 0 720 170" xmlns="http://www.w3.org/2000/svg" role="img"
+            aria-label="Un registro di sola aggiunta con offset che aumentano da sinistra a destra, nuovi record aggiunti solo in coda e un puntatore del lettore che avanza in avanti">
+            <g class="mono" font-size="11">
+              <rect x="30" y="50" width="64" height="40" rx="5" fill="#ece3d4" stroke="#b07d2b"/><text x="62" y="75" fill="#8a6420" text-anchor="middle">rec</text>
+              <rect x="96" y="50" width="64" height="40" rx="5" fill="#ece3d4" stroke="#b07d2b"/><text x="128" y="75" fill="#8a6420" text-anchor="middle">rec</text>
+              <rect x="162" y="50" width="64" height="40" rx="5" fill="#ece3d4" stroke="#b07d2b"/><text x="194" y="75" fill="#8a6420" text-anchor="middle">rec</text>
+              <rect x="228" y="50" width="64" height="40" rx="5" fill="#ece3d4" stroke="#b07d2b"/><text x="260" y="75" fill="#8a6420" text-anchor="middle">rec</text>
+              <rect x="294" y="50" width="64" height="40" rx="5" fill="#ece3d4" stroke="#b07d2b"/><text x="326" y="75" fill="#8a6420" text-anchor="middle">rec</text>
+              <rect x="360" y="50" width="64" height="40" rx="5" fill="#fbf6e8" stroke="#b07d2b" stroke-dasharray="4 3"/><text x="392" y="75" fill="#bca96a" text-anchor="middle">nuovo</text>
+            </g>
+            <g class="mono" font-size="9" fill="#9a9182"><text x="62" y="106" text-anchor="middle">0</text><text x="128" y="106" text-anchor="middle">1</text><text x="194" y="106" text-anchor="middle">2</text><text x="260" y="106" text-anchor="middle">3</text><text x="326" y="106" text-anchor="middle">4</text><text x="392" y="106" text-anchor="middle">5</text></g>
+            <defs><marker id="la3" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0 0 L7 3 L0 6 Z" fill="#b8402e"/></marker></defs>
+            <path d="M440 70 H520" stroke="#b8402e" stroke-width="1.8" marker-end="url(#la3)"/><text x="600" y="66" class="mono" font-size="10" fill="#8f2f20">aggiungere solo alla coda</text>
+            <path d="M62 120 H326" stroke="#3f6f4e" stroke-width="1.6" marker-end="url(#la3)" marker-start="url(#la3)"/>
+            <text x="194" y="140" class="mono" font-size="9.5" fill="#3f6f4e" text-anchor="middle">un lettore avanza per offset; non torna mai indietro se non lo cerchi</text>
+            <text x="360" y="160" class="serif" font-size="12" font-style="italic" fill="#5b5347" text-anchor="middle">Nessun aggiornamento, nessuna eliminazione sul posto, nessun inserimento casuale, basta aggiungere e leggere. Questo vincolo è la superpotenza.</text>
+          </svg>
+        </div>
+
+        <h4>Perché un registro di sola aggiunta è così veloce e utile</h4>
+        <ul>
+          <li><strong>L'I/O sequenziale è economico.</strong> Aggiungere alla fine di un file e leggerlo in avanti sono
+            operazioni sequenziali del disco, notevolmente più veloci dell'accesso casuale, anche su SSD. Kafka si appoggia a
+            Cache della pagina del sistema operativo e <em>copia zero</em> transfer per spostare i dati dal disco alla rete senza passare attraverso
+            memoria dell'applicazione, che è il modo in cui sostiene milioni di messaggi al secondo su hardware modesto.</li>
+          <li><strong>L’immutabilità è semplice e sicura.</strong> I record non cambiano mai, quindi non ci sono blocchi per gli aggiornamenti,
+            nessun conflitto di lettura/scrittura e i lettori simultanei non interferiscono mai. Una storia immutabile è anche banalmente
+            memorizzabile nella cache e su cui è facile ragionare.</li>
+          <li><strong>Il registro <em>è</em> la storia.</strong> Poiché nulla viene sovrascritto, il registro è completo,
+            registrazione ordinata di tutto ciò che è accaduto, che è esattamente ciò che rende la riproduzione (sez 11), evento
+            sourcing (sezione 14) e nutrire nuovi consumatori fin dall'inizio.</li>
+        </ul>
+
+        <div class="box key"><span class="tag">Una struttura, tutto segue</span>
+          <p>Tieni saldamente il log di sola aggiunta: scrive append e ottiene un offset; legge andare avanti; i record sono immutabili
+            e trattenuto. Le partizioni (sezione 4) sono semplicemente più log di questo tipo; i gruppi di consumatori (sezione 7) sono segnalibri
+            loro; la semantica di consegna (sez. 9) riguarda l'attenzione con cui tieni traccia di tali segnalibri. L'intero sistema è il
+            idea di log, ridimensionata e replicata.</p>
+        </div>
+      </section>
+
+      <div class="part-label">Parte II / Architettura</div>
+
+      <!-- 4 -->
+      <section id="s4">
+        <div class="sec-head"><div class="sec-num">04</div><h2>Argomenti e partizioni</h2></div>
+        <p>A <strong>argomento</strong> è un flusso denominato di eventi correlati, <code>orders</code>, <code>payments</code>,
+          <code>page-views</code>. È il canale logico su cui scrivono i produttori e da cui i consumatori leggono. Ma un argomento non lo è
+          un unico tronco; è diviso in <strong>partizioni</strong>, e la partizione è dove si trovano tutti i veri meccanismi
+          vivere. La partizione è allo stesso tempo l'unità di Kafka <em>parallelismo</em>, di <em>ordinare</em>, e di
+          <em>stoccaggio</em>, tre delle proprietà più importanti del sistema, tutte basate su questo unico concetto.</p>
+
+        <div class="viz">
+          <div class="viz-cap">Un argomento è partizionato</div>
+          <div class="viz-title">Un argomento, diversi log indipendenti di sola aggiunta; una chiave seleziona la partizione</div>
+          <svg viewBox="0 0 720 240" xmlns="http://www.w3.org/2000/svg" role="img"
+            aria-label="Un argomento suddiviso in tre partizioni, ciascuna un log di sola aggiunta, con un produttore che esegue l'hashing delle chiavi dei record per scegliere una partizione in modo che i record con la stessa chiave rimangano ordinati">
+            <rect x="20" y="30" width="120" height="50" rx="9" fill="#b8402e"/><text x="80" y="52" font-size="11" font-weight="700" fill="#fff" text-anchor="middle">produttore</text><text x="80" y="69" class="mono" font-size="8.5" fill="#f4d9cf" text-anchor="middle">chiave -&gt; cancelletto</text>
+            <text x="430" y="22" class="mono" font-size="10.5" font-weight="700" fill="#b07d2b">ARGOMENTO: ordini (3 partizioni)</text>
+            <defs><marker id="pa4" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0 0 L6 3 L0 6 Z" fill="#8f2f20"/></marker></defs>
+            <!-- P0 -->
+            <text x="180" y="55" class="mono" font-size="9" fill="#8a6420">P0</text>
+            <g class="mono" font-size="9"><rect x="200" y="40" width="36" height="26" rx="3" fill="#f0e5c9" stroke="#b07d2b"/><rect x="238" y="40" width="36" height="26" rx="3" fill="#f0e5c9" stroke="#b07d2b"/><rect x="276" y="40" width="36" height="26" rx="3" fill="#f0e5c9" stroke="#b07d2b"/><rect x="314" y="40" width="36" height="26" rx="3" fill="#f0e6cc" stroke="#b07d2b" stroke-dasharray="3 2"/></g>
+            <!-- P1 -->
+            <text x="180" y="115" class="mono" font-size="9" fill="#8a6420">P1</text>
+            <g class="mono" font-size="9"><rect x="200" y="100" width="36" height="26" rx="3" fill="#f0e5c9" stroke="#b07d2b"/><rect x="238" y="100" width="36" height="26" rx="3" fill="#f0e5c9" stroke="#b07d2b"/><rect x="276" y="100" width="36" height="26" rx="3" fill="#f0e6cc" stroke="#b07d2b" stroke-dasharray="3 2"/></g>
+            <!-- P2 -->
+            <text x="180" y="175" class="mono" font-size="9" fill="#8a6420">P2</text>
+            <g class="mono" font-size="9"><rect x="200" y="160" width="36" height="26" rx="3" fill="#f0e5c9" stroke="#b07d2b"/><rect x="238" y="160" width="36" height="26" rx="3" fill="#f0e5c9" stroke="#b07d2b"/><rect x="276" y="160" width="36" height="26" rx="3" fill="#f0e5c9" stroke="#b07d2b"/><rect x="314" y="160" width="36" height="26" rx="3" fill="#f0e5c9" stroke="#b07d2b"/><rect x="352" y="160" width="36" height="26" rx="3" fill="#f0e6cc" stroke="#b07d2b" stroke-dasharray="3 2"/></g>
+            <path d="M142 50 C165 50 175 52 198 53" stroke="#8f2f20" stroke-width="1.4" fill="none" marker-end="url(#pa4)"/>
+            <path d="M142 58 C165 90 175 110 198 113" stroke="#8f2f20" stroke-width="1.4" fill="none" marker-end="url(#pa4)"/>
+            <path d="M142 66 C165 130 175 170 198 173" stroke="#8f2f20" stroke-width="1.4" fill="none" marker-end="url(#pa4)"/>
+            <text x="430" y="120" class="serif" font-size="12" font-style="italic" fill="#5b5347">L'ordine è garantito ALL'INTERNO di una partizione, non attraverso di esse.</text>
+            <text x="430" y="142" class="serif" font-size="12" font-style="italic" fill="#5b5347">I record con la stessa chiave finiscono sempre nella stessa partizione,</text>
+            <text x="430" y="164" class="serif" font-size="12" font-style="italic" fill="#5b5347">quindi tutti gli eventi per un ordine rimangono in ordine.</text>
+            <text x="430" y="200" class="mono" font-size="9.5" fill="#8f2f20">partizione = hash(chiave) % numPartizioni</text>
+          </svg>
+        </div>
+
+        <h4>I tre ruoli di una partizione</h4>
+        <ul>
+          <li><strong>Parallelismo.</strong> Le partizioni possono risiedere su broker diversi ed essere utilizzate da diversi broker
+            consumatori contemporaneamente, quindi il throughput di un argomento aumenta con il numero di partizioni. Altre partizioni -&gt; altro
+            consumo parallelo (fino al limite del gruppo di consumatori, sez. 7).</li>
+          <li><strong>Ordinare.</strong> Kafka garantisce l'ordine <em>dentro</em> una singola partizione e non fa alcuna promessa
+            <em>attraverso</em> partizioni. Questo è il compromesso centrale (sez. 10): per mantenere ordinati gli eventi correlati, tu
+            instradarli alla stessa partizione tramite un file shared <strong>chiave</strong> (tutti gli eventi per <code>order-42</code> utilizzare
+            chiave <code>"order-42"</code>, quindi sono rigorosamente ordinati l'uno rispetto all'altro).</li>
+          <li><strong>Stoccaggio.</strong> Ogni partizione è fisicamente un insieme di file di segmenti sul disco di un broker, il file
+            registro effettivo di sola aggiunta dalla sezione 3. La conservazione e la compattazione (sezione 11) operano per partizione.</li>
+        </ul>
+
+        <div class="box gotcha"><span class="tag">Il conteggio delle partizioni è una decisione a senso unico</span>
+          <p>Puoi <em>aumentare</em> le partizioni di un argomento in un secondo momento, ma così facendo <strong>interrompe la stabilità della chiave per partizione</strong>
+            (il modulo cambia, quindi le chiavi esistenti possono spostarsi) e quindi infrange le garanzie di ordinazione per le chiavi a bordo. E
+            non puoi facilmente <em>diminuire</em> loro. Quindi scegli il conteggio delle partizioni deliberatamente in anticipo in base all'obiettivo
+            throughput e il massimo parallelismo del consumatore di cui avrai bisogno, troppo pochi limiti per il ridimensionamento, troppe aggiunte
+            sopra la testa (sec 19, sec 20).</p>
+        </div>
+      </section>
+
+      <!-- 5 -->
+      <section id="s5">
+        <div class="sec-head"><div class="sec-num">05</div><h2>Broker, replica e durabilità</h2></div>
+        <p>Un cluster Kafka è un insieme di <strong>broker</strong> (server); le partizioni sono distribuite su di essi, e questo è
+          come il cluster si adatta e sopravvive al fallimento. La durabilità viene da <strong>replica</strong>: ogni partizione
+          ne ha uno <strong>leader</strong> replica e alcuni <strong>seguace</strong> repliche su altri broker. Tutto legge
+          e scrive vai al leader; i follower lo copiano continuamente. Se muore il broker del leader, muore un follower
+          promosso, nessun dato perso, breve indisponibilità. Questo è lo stesso pensiero sullo stato desiderato/failover di
+          Capitolo Kubernetes, applicato ai dati.</p>
+
+        <div class="viz">
+          <div class="viz-cap">Replica</div>
+          <div class="viz-title">Ogni partizione ha un leader e follower sincronizzati su altri broker</div>
+          <svg viewBox="0 0 720 220" xmlns="http://www.w3.org/2000/svg" role="img"
+            aria-label="Tre intermediari detengono ciascuno repliche delle partizioni leader e follower, con produttori e consumatori che parlano solo con leader e follower che replicano">
+            <g>
+              <rect x="30" y="40" width="190" height="150" rx="12" fill="#f3eee4" stroke="#3f6f4e"/><text x="125" y="60" class="mono" font-size="10" font-weight="700" fill="#3f6f4e" text-anchor="middle">Intermediario 1</text>
+              <rect x="50" y="72" width="150" height="32" rx="7" fill="#b8402e"/><text x="125" y="92" font-size="10" font-weight="700" fill="#fff" text-anchor="middle">P0 (leader)</text>
+              <rect x="50" y="112" width="150" height="30" rx="7" fill="#e0e9dd" stroke="#3f6f4e"/><text x="125" y="131" font-size="9.5" fill="#3f6f4e" text-anchor="middle">P1 (seguace)</text>
+              <rect x="50" y="148" width="150" height="30" rx="7" fill="#e0e9dd" stroke="#3f6f4e"/><text x="125" y="167" font-size="9.5" fill="#3f6f4e" text-anchor="middle">P2 (seguace)</text>
+            </g>
+            <g>
+              <rect x="265" y="40" width="190" height="150" rx="12" fill="#f3eee4" stroke="#3f6f4e"/><text x="360" y="60" class="mono" font-size="10" font-weight="700" fill="#3f6f4e" text-anchor="middle">Intermediario 2</text>
+              <rect x="285" y="72" width="150" height="30" rx="7" fill="#e0e9dd" stroke="#3f6f4e"/><text x="360" y="91" font-size="9.5" fill="#3f6f4e" text-anchor="middle">P0 (seguace)</text>
+              <rect x="285" y="110" width="150" height="32" rx="7" fill="#b8402e"/><text x="360" y="130" font-size="10" font-weight="700" fill="#fff" text-anchor="middle">P1 (leader)</text>
+              <rect x="285" y="148" width="150" height="30" rx="7" fill="#e0e9dd" stroke="#3f6f4e"/><text x="360" y="167" font-size="9.5" fill="#3f6f4e" text-anchor="middle">P2 (seguace)</text>
+            </g>
+            <g>
+              <rect x="500" y="40" width="190" height="150" rx="12" fill="#f3eee4" stroke="#3f6f4e"/><text x="595" y="60" class="mono" font-size="10" font-weight="700" fill="#3f6f4e" text-anchor="middle">Intermediario 3</text>
+              <rect x="520" y="72" width="150" height="30" rx="7" fill="#e0e9dd" stroke="#3f6f4e"/><text x="595" y="91" font-size="9.5" fill="#3f6f4e" text-anchor="middle">P0 (seguace)</text>
+              <rect x="520" y="110" width="150" height="30" rx="7" fill="#e0e9dd" stroke="#3f6f4e"/><text x="595" y="129" font-size="9.5" fill="#3f6f4e" text-anchor="middle">P1 (seguace)</text>
+              <rect x="520" y="146" width="150" height="32" rx="7" fill="#b8402e"/><text x="595" y="166" font-size="10" font-weight="700" fill="#fff" text-anchor="middle">P2 (leader)</text>
+            </g>
+            <text x="360" y="208" class="serif" font-size="12" font-style="italic" fill="#5b5347" text-anchor="middle">I leader sono distribuiti tra i broker per garantire equilibrio; ogni seguace replica il suo leader. Perdere un broker -&gt; i seguaci dei suoi leader prendono il sopravvento.</text>
+          </svg>
+        </div>
+
+        <h4>I quadranti della durabilità: acks e ISR</h4>
+        <p>La sicurezza di una scrittura dipende da due impostazioni. Quello del produttore <strong><code>acks</code></strong> dice quanti
+          le repliche devono confermare prima che la scrittura venga considerata completata: <code>acks=0</code> (spara e dimentica, potresti perdere
+          dati), <code>acks=1</code> (solo leader, perso se il leader muore prima che i seguaci lo copino), oppure
+          <code>acks=all</code> (il leader più tutti <strong>repliche sincronizzate</strong>: la scelta sicura). Il
+          <strong>ISR</strong> (set di repliche sincronizzate) sono i follower attualmente raggiunti dal leader; abbinamento
+          <code>acks=all</code> con <code>min.insync.replicas=2</code> significa che una scrittura riesce solo se almeno due
+          le repliche ce l'hanno, sopravvivendo alla perdita di un singolo broker con zero perdite di dati.</p>
+
+        <div class="tbl-wrap">
+          <table>
+            <thead><tr><th>Impostazione</th><th>Garanzia</th><th>Compromesso</th></tr></thead>
+            <tbody>
+              <tr><td><code>acks=0</code></td><td>Nessuno, spara e dimentica</td><td>Il più veloce; può perdere silenziosamente i dati</td></tr>
+              <tr><td><code>acks=1</code></td><td>Il leader ce l'ha</td><td>Veloce; perso se il leader fallisce la pre-replica</td></tr>
+              <tr><td><code>acks=all</code> + <code>min.insync.replicas=2</code></td><td>&gt;=2 repliche ce l'hanno prima del successo</td><td>Più sicuro; latenza leggermente superiore, lo standard per dati importanti</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="box note"><span class="tag">ZooKeeper non c'è più, KRaft</span>
+          <p>Il vecchio Kafka faceva affidamento su un separato <strong>ZooKeeper</strong> cluster per archiviare metadati ed eleggere leader.
+            Gli usi moderni di Kafka <strong>KRaft</strong> (Kafka Raft), affidando quel ruolo agli stessi broker tramite a
+            Quorum dei controller basato su Raft, meno parti mobili, failover più rapido, operazioni più semplici. Se leggi documenti più vecchi
+            menzionando ZooKeeper, KRaft è il suo sostituto.</p>
+        </div>
+      </section>
+
+      <!-- 6 -->
+      <section id="s6">
+        <div class="sec-head"><div class="sec-num">06</div><h2>Produttori</h2></div>
+        <p>A <strong>produttore</strong> pubblica i record in un argomento. Tre preoccupazioni del produttore riguardano la correttezza della forma e
+          prestazione: il <strong>chiave</strong> (che decide la partizione e quindi l'ordinamento, sez 4), il
+          <strong>acks</strong> (durabilità, sez 5), e <strong>dosaggio</strong> (i record del gruppo di produttori
+          e li comprime per il throughput). Un record è una coppia chiave/valore più intestazioni facoltative e un timestamp; il
+          value è il payload dell'evento (spesso Avro/Protobuf, sec 12).</p>
+
+        <div class="codeblock" data-cb>
+          <div class="code-bar"><div class="dots"><i></i><i></i><i></i></div>
+            <div class="code-tabs"><button class="on" data-lang="go"><span class="lang-go">&amp;#9679;</span> Vai</button><button data-lang="py"><span class="lang-py">&amp;#9679;</span> Pitone</button></div></div>
+          <div class="code-panel on" data-panel="go"><pre><code class="language-go">// Using confluent-kafka-go (librdkafka). kafka-go (segmentio) is a pure-Go alternative.
+p, _ := kafka.NewProducer(&kafka.ConfigMap{
+    "bootstrap.servers": "localhost:9092",
+    "acks":              "all",   // durability: leader + in-sync replicas (sec 5)
+    "enable.idempotence": true,   // no duplicates on producer retry (sec 9)
+    "linger.ms":         5,       // wait up to 5ms to batch records (throughput)
+    "compression.type":  "zstd",
+})
+defer p.Close()
+
+topic := "orders"
+// The KEY decides the partition -&gt; all events for one order stay ordered (sec 4, sec 10).
+err := p.Produce(&kafka.Message{
+    TopicPartition: kafka.TopicPartition{Topic: &topic, Partition: kafka.PartitionAny},
+    Key:            []byte("order-42"),
+    Value:          []byte(`{"event":"placed","amount":1999}`),
+}, nil)
+if err != nil { log.Fatal(err) }
+
+// Producing is async + batched; Flush blocks until queued messages are delivered.
+p.Flush(5000)
+
+// Delivery reports tell you the final partition/offset (or an error) per message:
+//   for e := range p.Events() { if m, ok := e.(*kafka.Message); ok { ... } }</code></pre></div>
+          <div class="code-panel" data-panel="py"><pre><code class="language-python"># Using confluent-kafka (librdkafka). kafka-python / aiokafka are alternatives.
+from confluent_kafka import Producer
+
+p = Producer({
+    "bootstrap.servers": "localhost:9092",
+    "acks": "all",                 # durability: leader + in-sync replicas (sec 5)
+    "enable.idempotence": True,    # no duplicates on producer retry (sec 9)
+    "linger.ms": 5,                # batch window for throughput
+    "compression.type": "zstd",
+})
+
+def on_delivery(err, msg):         # async callback: final partition/offset or error
+    if err:
+        print("delivery failed:", err)
+    else:
+        print(f"delivered to {msg.topic()}[{msg.partition()}]@{msg.offset()}")
+
+# The KEY decides the partition -&gt; all events for one order stay ordered (sec 4, sec 10).
+p.produce(
+    "orders",
+    key=b"order-42",
+    value=b'{"event":"placed","amount":1999}',
+    on_delivery=on_delivery,
+)
+p.flush()                          # block until queued messages are delivered</code></pre></div>
+        </div>
+
+        <div class="box gotcha"><span class="tag">Nessuna chiave = round robin = nessun ordinamento</span>
+          <p>Se non imposti una chiave, i record vengono distribuiti su partizioni (round-robin/sticky), massimizzando il parallelismo
+            ma rinunciando ad ogni rapporto di ordinamento tra di loro. Va bene per eventi indipendenti; è un bug se quelli
+            eventi necessari per rimanere ordinati (tutti gli aggiornamenti su un account, ad esempio). <strong>Chiave in base al tuo ordine/entità
+            confine</strong>: solitamente l'ID dell'entità, ogni volta che l'ordine è importante (sez. 10).</p>
+        </div>
+      </section>
+
+      <!-- 7 -->
+      <section id="s7">
+        <div class="sec-head"><div class="sec-num">07</div><h2>Consumatori e gruppi di consumatori</h2></div>
+        <p>A <strong>consumatore</strong> legge i record dalle partizioni. La potente astrazione è il <strong>consumatore
+          gruppo</strong>: un insieme di consumatori che condividono un ID di gruppo che divide in modo cooperativo le partizioni di un argomento
+          loro stessi così <em>ogni partizione viene letta esattamente da un consumatore nel gruppo</em>. Aggiungi consumatori al gruppo
+          e Kafka <strong>riequilibri</strong>, riassegnando le partizioni per distribuire il carico. Ecco come si ridimensiona
+          consumo in senso orizzontale, ed è il meccanismo alla base sia della condivisione del lavoro che della trasmissione.</p>
+
+        <div class="viz">
+          <div class="viz-cap">Gruppi di consumatori</div>
+          <div class="viz-title">All'interno di un gruppo, le partizioni vengono divise; gruppi diversi ottengono ciascuno tutto</div>
+          <svg viewBox="0 0 720 250" xmlns="http://www.w3.org/2000/svg" role="img"
+            aria-label="Un argomento con quattro partizioni; il gruppo A con due consumatori li divide in due ciascuno, mentre il gruppo B li legge tutti e quattro in modo indipendente">
+            <text x="90" y="22" class="mono" font-size="10" font-weight="700" fill="#b07d2b">argomento: 4 partizioni</text>
+            <g><rect x="20" y="34" width="120" height="28" rx="6" fill="#f0e5c9" stroke="#b07d2b"/><text x="80" y="53" font-size="10" fill="#8a6420" text-anchor="middle">P0</text>
+            <rect x="20" y="70" width="120" height="28" rx="6" fill="#f0e5c9" stroke="#b07d2b"/><text x="80" y="89" font-size="10" fill="#8a6420" text-anchor="middle">P1</text>
+            <rect x="20" y="106" width="120" height="28" rx="6" fill="#f0e5c9" stroke="#b07d2b"/><text x="80" y="125" font-size="10" fill="#8a6420" text-anchor="middle">P2</text>
+            <rect x="20" y="142" width="120" height="28" rx="6" fill="#f0e5c9" stroke="#b07d2b"/><text x="80" y="161" font-size="10" fill="#8a6420" text-anchor="middle">P3</text></g>
+            <defs><marker id="ca7" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0 0 L6 3 L0 6 Z" fill="#3f6f4e"/></marker><marker id="cb7" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0 0 L6 3 L0 6 Z" fill="#b8402e"/></marker></defs>
+            <!-- group A -->
+            <rect x="300" y="34" width="180" height="64" rx="10" fill="#e0e9dd" stroke="#3f6f4e" stroke-dasharray="5 3"/>
+            <text x="390" y="50" class="mono" font-size="9.5" font-weight="700" fill="#3f6f4e" text-anchor="middle">gruppo A (2 utenze)</text>
+            <rect x="312" y="58" width="74" height="30" rx="6" fill="#dbeede" stroke="#3f6f4e"/><text x="349" y="77" font-size="9" fill="#3f6f4e" text-anchor="middle">c1 &lt;- P0,P1</text>
+            <rect x="394" y="58" width="74" height="30" rx="6" fill="#dbeede" stroke="#3f6f4e"/><text x="431" y="77" font-size="9" fill="#3f6f4e" text-anchor="middle">c2 &lt;- P2,P3</text>
+            <path d="M140 48 C220 48 240 66 300 66" stroke="#3f6f4e" stroke-width="1.2" fill="none" marker-end="url(#ca7)"/>
+            <path d="M140 120 C220 120 240 80 300 76" stroke="#3f6f4e" stroke-width="1.2" fill="none" marker-end="url(#ca7)"/>
+            <!-- group B -->
+            <rect x="300" y="120" width="180" height="64" rx="10" fill="#f7e9e2" stroke="#b8402e" stroke-dasharray="5 3"/>
+            <text x="390" y="136" class="mono" font-size="9.5" font-weight="700" fill="#8f2f20" text-anchor="middle">gruppo B (1 consumatore)</text>
+            <rect x="330" y="144" width="120" height="30" rx="6" fill="#f7d9d0" stroke="#b8402e"/><text x="390" y="163" font-size="9" fill="#8f2f20" text-anchor="middle">c1 &lt;- P0,P1,P2,P3</text>
+            <path d="M140 156 C220 156 240 156 298 156" stroke="#b8402e" stroke-width="1.2" fill="none" marker-end="url(#cb7)"/>
+            <text x="585" y="80" class="serif" font-size="11.5" font-style="italic" fill="#3f6f4e" text-anchor="middle">il gruppo A suddivide il carico</text>
+            <text x="585" y="98" class="serif" font-size="11.5" font-style="italic" fill="#3f6f4e" text-anchor="middle">(scala all'interno di un gruppo)</text>
+            <text x="585" y="150" class="serif" font-size="11.5" font-style="italic" fill="#8f2f20" text-anchor="middle">il gruppo B è indipendente</text>
+            <text x="585" y="168" class="serif" font-size="11.5" font-style="italic" fill="#8f2f20" text-anchor="middle">vede anche TUTTI gli eventi</text>
+            <text x="360" y="218" class="serif" font-size="12" font-style="italic" fill="#5b5347" text-anchor="middle">Stesso gruppo = condivisione del lavoro (ogni evento una volta). Gruppi diversi = trasmissione (ogni gruppo riceve tutto).</text>
+            <text x="360" y="240" class="mono" font-size="9.5" fill="#8f2f20" text-anchor="middle">massimo consumatori utili in un gruppo = numero di partizioni (i consumatori extra restano inattivi)</text>
+          </svg>
+        </div>
+
+        <div class="codeblock" data-cb>
+          <div class="code-bar"><div class="dots"><i></i><i></i><i></i></div>
+            <div class="code-tabs"><button class="on" data-lang="go"><span class="lang-go">&amp;#9679;</span> Vai</button><button data-lang="py"><span class="lang-py">&amp;#9679;</span> Pitone</button></div></div>
+          <div class="code-panel on" data-panel="go"><pre><code class="language-go">c, _ := kafka.NewConsumer(&kafka.ConfigMap{
+    "bootstrap.servers": "localhost:9092",
+    "group.id":          "billing",        // the consumer GROUP, scale by adding instances
+    "auto.offset.reset": "earliest",       // where to start if no committed offset (sec 8)
+    "enable.auto.commit": false,           // we'll commit manually for at-least-once (sec 9)
+})
+defer c.Close()
+c.Subscribe("orders", nil)                 // Kafka assigns this instance some partitions
+
+for {
+    msg, err := c.ReadMessage(-1)          // blocks for the next record
+    if err != nil { continue }
+
+    process(msg.Value)                     // do the work FIRST...
+    c.CommitMessage(msg)                   // ...THEN commit the offset (at-least-once, sec 9)
+}</code></pre></div>
+          <div class="code-panel" data-panel="py"><pre><code class="language-python">from confluent_kafka import Consumer
+
+c = Consumer({
+    "bootstrap.servers": "localhost:9092",
+    "group.id": "billing",                 # the consumer GROUP, scale by adding instances
+    "auto.offset.reset": "earliest",       # where to start if no committed offset (sec 8)
+    "enable.auto.commit": False,           # commit manually for at-least-once (sec 9)
+})
+c.subscribe(["orders"])                    # Kafka assigns this instance some partitions
+
+try:
+    while True:
+        msg = c.poll(1.0)                  # wait up to 1s for the next record
+        if msg is None:
+            continue
+        if msg.error():
+            print("error:", msg.error()); continue
+
+        process(msg.value())               # do the work FIRST...
+        c.commit(msg)                      # ...THEN commit the offset (at-least-once, sec 9)
+finally:
+    c.close()                              # leave the group cleanly -&gt; triggers a rebalance</code></pre></div>
+        </div>
+
+        <div class="box gotcha"><span class="tag">Le partizioni limitano il tuo parallelismo</span>
+          <p>Perché una partizione viene utilizzata al massimo da un consumatore <em>per gruppo</em>, un gruppo può utilmente avere a
+            quasi tanti consumatori attivi quante sono le partizioni dell'argomento. Un argomento con 4 partizioni e 6 membri del gruppo
+            lascia 2 consumatori inattivi. Quindi il tuo <em>il parallelismo di consumo massimo è impostato dal conteggio delle partizioni</em> (sec 4), un altro motivo per dimensionare le partizioni in base al picco di throughput in anticipo (sec 20).</p>
+        </div>
+      </section>
+
+      <div class="part-label">Parte III/Garanzie</div>
+
+      <!-- 8 -->
+      <section id="s8">
+        <div class="sec-head"><div class="sec-num">08</div><h2>Offset e gestione degli offset</h2></div>
+        <p>An <strong>compensare</strong> è la posizione di un record nella sua partizione (sez 3). Il compito del consumatore è monitorare
+          quale offset ha elaborato fino al suo <strong>compensazione impegnata</strong>: in modo che al riavvio o
+          riequilibrare riprende dal posto giusto invece di rileggere tutto o saltare i record. I negozi Kafka
+          questi offset impegnati in un argomento interno (<code>__consumer_offsets</code>), codificato per gruppo + partizione. Il
+          il divario tra l'ultimo offset in una partizione e l'offset impegnato di un gruppo è <strong>ritardo del consumatore</strong>: il singolo parametro di salute più importante per un consumatore (sez. 19).</p>
+
+        <div class="viz">
+          <div class="viz-cap">Posizione e ritardo</div>
+          <div class="viz-title">Offset impegnato, posizione corrente e ritardo rispetto alla coda</div>
+          <svg viewBox="0 0 720 170" xmlns="http://www.w3.org/2000/svg" role="img"
+            aria-label="Un log della partizione con un offset confermato rispetto alla posizione di lettura corrente e un ritardo misurato dalla posizione di lettura all'ultimo offset in coda">
+            <g class="mono" font-size="9">
+              <rect x="30" y="60" width="40" height="30" rx="4" fill="#cfe0d2" stroke="#3f6f4e"/><rect x="70" y="60" width="40" height="30" rx="4" fill="#cfe0d2" stroke="#3f6f4e"/><rect x="110" y="60" width="40" height="30" rx="4" fill="#cfe0d2" stroke="#3f6f4e"/>
+              <rect x="150" y="60" width="40" height="30" rx="4" fill="#f0e5c9" stroke="#b07d2b"/><rect x="190" y="60" width="40" height="30" rx="4" fill="#f0e5c9" stroke="#b07d2b"/>
+              <rect x="230" y="60" width="40" height="30" rx="4" fill="#f7e2d8" stroke="#b8402e"/><rect x="270" y="60" width="40" height="30" rx="4" fill="#f7e2d8" stroke="#b8402e"/><rect x="310" y="60" width="40" height="30" rx="4" fill="#f7e2d8" stroke="#b8402e"/>
+            </g>
+            <text x="90" y="50" font-size="9.5" fill="#3f6f4e" text-anchor="middle">elaborato e impegnato</text>
+            <text x="170" y="50" font-size="9.5" fill="#b07d2b" text-anchor="middle">letto, non ancora impegnato</text>
+            <text x="290" y="50" font-size="9.5" fill="#b8402e" text-anchor="middle">non letto (ritardo)</text>
+            <defs><marker id="oa8" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0 0 L6 3 L0 6 Z" fill="#211e1a"/></marker></defs>
+            <line x1="150" y1="100" x2="150" y2="120" stroke="#3f6f4e" stroke-width="1.5"/><text x="150" y="135" font-size="9" fill="#3f6f4e" text-anchor="middle">compensazione impegnata</text>
+            <line x1="230" y1="100" x2="230" y2="120" stroke="#b07d2b" stroke-width="1.5"/><text x="230" y="135" font-size="9" fill="#b07d2b" text-anchor="middle">posizione attuale</text>
+            <line x1="350" y1="100" x2="350" y2="120" stroke="#b8402e" stroke-width="1.5"/><text x="350" y="135" font-size="9" fill="#b8402e" text-anchor="middle">fine del tronco (coda)</text>
+            <path d="M232 150 H348" stroke="#211e1a" stroke-width="1.4" marker-start="url(#oa8)" marker-end="url(#oa8)"/><text x="430" y="154" class="mono" font-size="10" font-weight="700" fill="#8f2f20">LAG = coda - posizione</text>
+            <text x="540" y="80" class="serif" font-size="11.5" font-style="italic" fill="#5b5347" text-anchor="middle">Il ritardo crescente significa il</text>
+            <text x="540" y="98" class="serif" font-size="11.5" font-style="italic" fill="#5b5347" text-anchor="middle">il consumatore resta indietro</text>
+          </svg>
+        </div>
+
+        <h4>Quando ti impegni decide la tua garanzia</h4>
+        <p>La scelta tra <strong>impegno automatico</strong> (Kafka si impegna periodicamente in sottofondo) e
+          <strong>commit manuale</strong> (ti impegni esplicitamente) è in realtà una scelta sulla semantica di consegna (sez. 9).
+          L'ordine tra &quot;elaborare il messaggio&quot; e &quot;commettere l'offset&quot; è tutto: commit <em>dopo</em>
+          l'elaborazione e un arresto anomalo nel mezzo significa che elaborerai nuovamente (almeno una volta); impegnarsi <em>prima</em> elaborazione
+          e un arresto anomalo significa che salterai (al massimo una volta). È possibile eseguire il commit automatico su un timer <em>neanche</em> a seconda dei tempi,
+          ecco perché i consumatori sensibili alla correttezza si impegnano manualmente dopo che il lavoro è stato svolto (come nel codice della sezione 7).</p>
+
+        <div class="box note"><span class="tag">Gli offset sono per gruppo e puoi cercare</span>
+          <p>Perché ciascuno <em>gruppo</em> ha i propri offset impegnati, da cui può iniziare un gruppo nuovo di zecca
+            <code>earliest</code> e riprodurre l'intera cronologia conservata, la base per avviarne una nuova
+            consumatore o ricostruire una vista (sez. 14). Puoi anche esplicitamente <code>seek</code> un consumatore a qualsiasi compensazione
+            o timestamp per rielaborare un intervallo. L'immutabilità mantenuta del registro (sez. 3) è ciò che rende ciò possibile;
+            una coda non può farlo.</p>
+        </div>
+      </section>
+
+      <!-- 9 -->
+      <section id="s9">
+        <div class="sec-head"><div class="sec-num">09</div><h2>Semantica della consegna</h2></div>
+        <p>La domanda a cui ogni sistema di messaggistica distribuita deve rispondere: se le cose falliscono e si riprova, quante volte potrebbe a
+          il messaggio verrà recapitato? Ci sono tre possibili garanzie e Kafka può darti qualcuna a seconda di queste
+          configurazione, quindi devi scegliere consapevolmente in base a ciò che la tua elaborazione può tollerare.</p>
+
+        <div class="viz">
+          <div class="viz-cap">Tre semantiche</div>
+          <div class="viz-title">Il compromesso tra la perdita dei messaggi e la loro duplicazione</div>
+          <svg viewBox="0 0 720 200" xmlns="http://www.w3.org/2000/svg" role="img"
+            aria-label="Tre scatole: al massimo una volta può perdere, al minimo una volta può duplicarsi, esattamente una volta nessuno dei due ma è più costoso">
+            <rect x="20" y="40" width="210" height="120" rx="12" fill="#f0e5c9" stroke="#b07d2b"/>
+            <text x="125" y="64" font-size="13" font-weight="700" fill="#b07d2b" text-anchor="middle">Al massimo una volta</text>
+            <text x="125" y="88" class="mono" font-size="9" fill="#5b5347" text-anchor="middle">commit PRIMA dell'elaborazione</text>
+            <text x="125" y="110" font-size="11" fill="#8f2f20" text-anchor="middle">potrebbe PERDERE messaggi</text>
+            <text x="125" y="128" font-size="11" fill="#3f6f4e" text-anchor="middle">non duplica mai</text>
+            <text x="125" y="148" font-size="9.5" font-style="italic" fill="#5b5347" text-anchor="middle">ok per le metriche con perdita</text>
+
+            <rect x="255" y="40" width="210" height="120" rx="12" fill="#e0e9dd" stroke="#3f6f4e"/>
+            <text x="360" y="64" font-size="13" font-weight="700" fill="#3f6f4e" text-anchor="middle">Almeno una volta</text>
+            <text x="360" y="88" class="mono" font-size="9" fill="#5b5347" text-anchor="middle">commit DOPO l'elaborazione</text>
+            <text x="360" y="110" font-size="11" fill="#3f6f4e" text-anchor="middle">non perde mai</text>
+            <text x="360" y="128" font-size="11" fill="#8f2f20" text-anchor="middle">potrebbe DUPLICARE</text>
+            <text x="360" y="148" font-size="9.5" font-style="italic" fill="#5b5347" text-anchor="middle">il default comune + idempotenza</text>
+
+            <rect x="490" y="40" width="210" height="120" rx="12" fill="#f7e9e2" stroke="#b8402e"/>
+            <text x="595" y="64" font-size="13" font-weight="700" fill="#8f2f20" text-anchor="middle">Esattamente una volta</text>
+            <text x="595" y="88" class="mono" font-size="9" fill="#5b5347" text-anchor="middle">produttore idempotente + txns</text>
+            <text x="595" y="110" font-size="11" fill="#3f6f4e" text-anchor="middle">nessuna perdita, nessun ingannato</text>
+            <text x="595" y="128" font-size="11" fill="#b07d2b" text-anchor="middle">più costoso / Kafka-a-Kafka</text>
+            <text x="595" y="148" font-size="9.5" font-style="italic" fill="#5b5347" text-anchor="middle">pipeline di lettura-processo-scrittura</text>
+            <text x="360" y="186" class="serif" font-size="12" font-style="italic" fill="#5b5347" text-anchor="middle">La maggior parte dei sistemi sceglie almeno una volta e rende l'elaborazione idempotente, il punto debole pragmatico.</text>
+          </svg>
+        </div>
+
+        <div class="box key"><span class="tag">Almeno una volta + consumatori idempotenti = la risposta pratica</span>
+          <p>Il vero end-to-end-exact-once è ristretto: quello di Kafka <code>enable.idempotence</code> si ferma <em>produttore</em>
+            duplicati e <strong>transazioni</strong> dare esattamente una volta per Kafka<em>a</em>-Elaborazione del flusso Kafka
+            (consumare, trasformare, produrre e impegnare gli offset atomicamente). Ma nel momento in cui il tuo consumatore scrive ad un
+            <em>esterno</em> sistema (un database, un'API di pagamento), esattamente una volta oltre quel confine non è gratuito. Il
+            approccio testato in battaglia: scegliere <strong>almeno una volta</strong> ed effettua la tua elaborazione
+            <strong>idempotente</strong>: sicuro per applicare lo stesso evento due volte (deduplicazione per ID evento, upsert invece di
+            inserire). Questa è la stessa disciplina di idempotenza del capitolo sulle code di attività (sez. 14 lì) e REST
+            chiavi di idempotenza, ed è per questo che i duplicati diventano innocui anziché catastrofici.</p>
+        </div>
+
+        <div class="codeblock single">
+          <div class="code-bar"><div class="dots"><i></i><i></i><i></i></div><span class="filename">rendere sicuro almeno una volta: elaborazione idempotente (pseudocodice, entrambi i linguaggi)</span></div>
+          <pre><code class="language-sql">-- The consumer may see the same event twice on retry/rebalance.
+-- Make the write idempotent so a duplicate is a no-op:
+
+-- (a) dedupe by a unique event id
+INSERT INTO processed_events (event_id) VALUES ($1)
+ON CONFLICT (event_id) DO NOTHING;        -- second delivery inserts nothing
+-- ...only do the side effect if the insert affected a row.
+
+-- (b) or make the effect itself idempotent, upsert the end state, don't increment
+INSERT INTO account_balance (account_id, balance) VALUES ($1, $2)
+ON CONFLICT (account_id) DO UPDATE SET balance = EXCLUDED.balance;
+-- applying the same "balance = 100" twice lands on the same state.</code></pre>
+        </div>
+      </section>
+
+      <!-- 10 -->
+      <section id="s10">
+        <div class="sec-head"><div class="sec-num">10</div><h2>Garanzie sugli ordini</h2></div>
+        <p>Una frase da memorizzare: <strong>Kafka garantisce l'ordinamento all'interno di una partizione e da nessun'altra parte.</strong>
+          I record nella partizione P vengono consegnati a un consumatore nell'esatto ordine di offset in cui sono stati scritti. Attraverso
+          partizioni dello stesso argomento, c'è <em>no</em> ordinamento globale, i record si intercalano arbitrariamente. Questo
+          non è una limitazione su cui aggirare tanto quanto il prezzo diretto del parallelismo a livello di partizione (sez 4): puoi
+          avere un ordinamento totale oppure puoi avere una scala orizzontale, ma non entrambi contemporaneamente per lo stesso flusso.</p>
+
+        <div class="viz">
+          <div class="viz-cap">Ordinamento vs parallelismo</div>
+          <div class="viz-title">La codifica preserva l'ordine per entità; il compromesso è l’inclinazione della partizione</div>
+          <svg viewBox="0 0 720 200" xmlns="http://www.w3.org/2000/svg" role="img"
+            aria-label="Gli eventi per l'ordine 42 vengono tutti instradati su una partizione in ordine rigoroso, mentre ordini diversi si diffondono tra le partizioni per parallelismo">
+            <text x="20" y="24" class="mono" font-size="10" font-weight="700" fill="#8f2f20">chiave = ID ordine -&gt; gli eventi dello stesso ordine rimangono insieme e ordinati</text>
+            <rect x="30" y="38" width="120" height="40" rx="8" fill="#b8402e"/><text x="90" y="62" font-size="10.5" font-weight="700" fill="#fff" text-anchor="middle">produttore</text>
+            <defs><marker id="oa10" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0 0 L6 3 L0 6 Z" fill="#8f2f20"/></marker></defs>
+            <text x="200" y="56" class="mono" font-size="9" fill="#8a6420">P0</text>
+            <g class="mono" font-size="8.5"><rect x="220" y="42" width="84" height="22" rx="3" fill="#f0e5c9" stroke="#b07d2b"/><text x="262" y="57" text-anchor="middle">o42:posto</text><rect x="306" y="42" width="92" height="22" rx="3" fill="#f0e5c9" stroke="#b07d2b"/><text x="352" y="57" text-anchor="middle">o42:pagato</text><rect x="400" y="42" width="104" height="22" rx="3" fill="#f0e5c9" stroke="#b07d2b"/><text x="452" y="57" text-anchor="middle">o42: spedito</text></g>
+            <text x="200" y="100" class="mono" font-size="9" fill="#8a6420">P1</text>
+            <g class="mono" font-size="8.5"><rect x="220" y="86" width="84" height="22" rx="3" fill="#f0e5c9" stroke="#b07d2b"/><text x="262" y="101" text-anchor="middle">o88:posto</text><rect x="306" y="86" width="92" height="22" rx="3" fill="#f0e5c9" stroke="#b07d2b"/><text x="352" y="101" text-anchor="middle">o88:pagato</text></g>
+            <path d="M150 52 C175 52 185 52 218 52" stroke="#8f2f20" stroke-width="1.3" fill="none" marker-end="url(#oa10)"/>
+            <path d="M150 60 C175 90 185 96 218 96" stroke="#8f2f20" stroke-width="1.3" fill="none" marker-end="url(#oa10)"/>
+            <text x="540" y="56" class="serif" font-size="11" font-style="italic" fill="#3f6f4e" text-anchor="middle">o42 rigorosamente ordinato in P0;</text>
+            <text x="540" y="74" class="serif" font-size="11" font-style="italic" fill="#3f6f4e" text-anchor="middle">o88 rigorosamente ordinato in P1;</text>
+            <text x="540" y="92" class="serif" font-size="11" font-style="italic" fill="#5b5347" text-anchor="middle">Ordine P0 vs P1 = indefinito</text>
+            <text x="360" y="150" class="serif" font-size="12" font-style="italic" fill="#8f2f20" text-anchor="middle">Rischio: un tasto &quot;di scelta rapida&quot; (un cliente enorme) sovraccarica la sua singola partizione, inclinazione della partizione (sez. 18).</text>
+            <text x="360" y="176" class="serif" font-size="12" font-style="italic" fill="#5b5347" text-anchor="middle">Scegli la chiave al livello di granularità in cui l'ordine è importante ma il carico si diffonde comunque.</text>
+          </svg>
+        </div>
+
+        <div class="box gotcha"><span class="tag">Due pistole a piedi che ordinano</span>
+          <p>In primo luogo, <strong>inclinazione dei tasti</strong>: se l'ordine richiede una codifica con un valore approssimativo (ad esempio un mega-tenant), tutto
+            il traffico di quel tenant viene incanalato in una partizione, limitandone il throughput indipendentemente dal numero di partizioni
+            esistere (sez 18). In secondo luogo, <strong>i tentativi possono riordinarsi</strong>: con un produttore non idempotente e multiplo
+            richieste in corso, un messaggio riprovato può arrivare dopo uno successivo. Abilitazione <code>enable.idempotence</code>
+            (sec 6) preserva l'ordine per partizione anche tra i tentativi, un altro motivo per cui è un'impostazione predefinita sensata.</p>
+        </div>
+      </section>
+
+      <!-- 11 -->
+      <section id="s11">
+        <div class="sec-head"><div class="sec-num">11</div><h2>Conservazione e compattazione dei tronchi</h2></div>
+        <p>Poiché i record vengono conservati dopo la lettura (sezione 2), Kafka ha bisogno di regole su quando farlo <em>rimuovere</em> loro, altrimenti il tronco cresce per sempre. Esistono due politiche di pulizia e rispondono a esigenze diverse.
+          <strong>Conservazione del tempo/dimensione</strong> (l'impostazione predefinita) conserva i record per una finestra, ad esempio 7 giorni o 50 GB per
+          partizione, quindi elimina la più vecchia. <strong>Compattazione del registro</strong> è più intelligente: mantiene il
+          <em>più recente</em> record per ogni chiave e raccoglie le versioni precedenti di quella chiave, trasformando il registro in un file
+          istantanea costantemente aggiornata del &quot;valore corrente per chiave&quot;.</p>
+
+        <div class="viz">
+          <div class="viz-cap">Ritenzione vs compattazione</div>
+          <div class="viz-title">Elimina per età o mantieni il valore più recente per chiave</div>
+          <svg viewBox="0 0 720 210" xmlns="http://www.w3.org/2000/svg" role="img"
+            aria-label="In alto: conservazione del tempo eliminando i vecchi record. In basso: compattazione mantenendo solo l'ultimo record per chiave">
+            <text x="20" y="22" class="mono" font-size="10.5" font-weight="700" fill="#b07d2b">elimina la policy (ora/dimensione), elimina la più vecchia</text>
+            <g class="mono" font-size="9"><rect x="30" y="32" width="50" height="28" rx="4" fill="#efe7d6" stroke="#bbb" stroke-dasharray="3 2"/><text x="55" y="50" fill="#999" text-anchor="middle">vecchio</text><rect x="84" y="32" width="50" height="28" rx="4" fill="#efe7d6" stroke="#bbb" stroke-dasharray="3 2"/><text x="109" y="50" fill="#999" text-anchor="middle">vecchio</text><rect x="138" y="32" width="50" height="28" rx="4" fill="#f0e5c9" stroke="#b07d2b"/><text x="163" y="50" fill="#8a6420" text-anchor="middle">mantenere</text><rect x="192" y="32" width="50" height="28" rx="4" fill="#f0e5c9" stroke="#b07d2b"/><text x="217" y="50" fill="#8a6420" text-anchor="middle">mantenere</text><rect x="246" y="32" width="50" height="28" rx="4" fill="#f0e5c9" stroke="#b07d2b"/><text x="271" y="50" fill="#8a6420" text-anchor="middle">mantenere</text></g>
+            <text x="430" y="50" font-size="10.5" font-style="italic" fill="#5b5347">i record oltre la finestra vengono eliminati indipendentemente dalla chiave</text>
+
+            <text x="20" y="100" class="mono" font-size="10.5" font-weight="700" fill="#3f6f4e">politica compatta, mantieni l'ultimo per CHIAVE</text>
+            <text x="30" y="118" class="mono" font-size="8.5" fill="#5b5347">prima:</text>
+            <g class="mono" font-size="8"><rect x="80" y="106" width="64" height="22" rx="3" fill="#efe7d6" stroke="#bbb"/><text x="112" y="121" fill="#999" text-anchor="middle">k=A v=1</text><rect x="148" y="106" width="64" height="22" rx="3" fill="#efe7d6" stroke="#bbb"/><text x="180" y="121" fill="#999" text-anchor="middle">k=B v=1</text><rect x="216" y="106" width="64" height="22" rx="3" fill="#efe7d6" stroke="#bbb"/><text x="248" y="121" fill="#999" text-anchor="middle">k=A v=2</text><rect x="284" y="106" width="64" height="22" rx="3" fill="#efe7d6" stroke="#bbb"/><text x="316" y="121" fill="#999" text-anchor="middle">k=A v=3</text></g>
+            <defs><marker id="ra11" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0 0 L7 3 L0 6 Z" fill="#3f6f4e"/></marker></defs>
+            <path d="M360 117 H410" stroke="#3f6f4e" stroke-width="1.6" marker-end="url(#ra11)"/>
+            <text x="30" y="160" class="mono" font-size="8.5" fill="#5b5347">dopo:</text>
+            <g class="mono" font-size="8"><rect x="80" y="148" width="64" height="22" rx="3" fill="#dbeede" stroke="#3f6f4e"/><text x="112" y="163" fill="#3f6f4e" text-anchor="middle">k=B v=1</text><rect x="148" y="148" width="64" height="22" rx="3" fill="#dbeede" stroke="#3f6f4e"/><text x="180" y="163" fill="#3f6f4e" text-anchor="middle">k=A v=3</text></g>
+            <text x="430" y="160" font-size="10.5" font-style="italic" fill="#3f6f4e">sopravvive solo il valore più recente di ciascuna chiave, un'istantanea dal vivo</text>
+            <text x="360" y="196" class="serif" font-size="12" font-style="italic" fill="#5b5347" text-anchor="middle">La compattazione rende un argomento utilizzabile come archivio chiave/valore durevole e riproducibile dello stato corrente.</text>
+          </svg>
+        </div>
+
+        <div class="box note"><span class="tag">Stato dei poteri di compattazione e storia del replay</span>
+          <p>Un argomento compatto è il modo in cui regge Kafka <em>corrente</em> Stato per sempre senza crescita illimitata, la base
+            per snapshot di origine eventi (sez. 14), archivi di stato di Kafka Streams e KTables (sez. 16) e configurazione/ricerca
+            dati che un nuovo consumatore può riprodurre da zero per ricostruire un quadro completo. Risposta agli argomenti sulla conservazione del tempo
+            &quot;cosa è successo di recente&quot;; gli argomenti compatti rispondono &quot;qual è lo stato più recente di tutto&quot;. Scegli la politica
+            in base a quale domanda il tuo argomento esiste per rispondere.</p>
+        </div>
+      </section>
+
+      <div class="part-label">Parte IV / Schemi e modelli</div>
+
+      <!-- 12 -->
+      <section id="s12">
+        <div class="sec-head"><div class="sec-num">12</div><h2>Schemi e registro degli schemi</h2></div>
+        <p>Kafka stesso tratta i valori dei record come byte opachi, non sa né gli interessa cosa c'è dentro. Quella libertà
+          è una trappola su larga scala: se produttori e consumatori non sono d'accordo sulla forma del carico utile, un produttore cambia campo
+          interrompe silenziosamente ogni consumatore a valle (lo stesso pericolo di deriva contrattuale nei capitoli gRPC e serializzazione
+          messo in guardia, ora diffuso in molti team indipendenti). La soluzione è a <strong>schema</strong> per ogni argomento
+          più un <strong>Registro degli schemi</strong> che memorizza gli schemi, assegna loro gli ID e <em>impone la compatibilità</em>
+          man mano che si evolvono.</p>
+
+        <div class="viz">
+          <div class="viz-cap">Registro degli schemi</div>
+          <div class="viz-title">Produttori e consumatori condividono uno schema registrato e con versione</div>
+          <svg viewBox="0 0 720 200" xmlns="http://www.w3.org/2000/svg" role="img"
+            aria-label="Un produttore che registra e serializza con uno schema, il registro che memorizza gli schemi con versione e impone la compatibilità e un consumatore che recupera lo schema per deserializzare">
+            <rect x="20" y="80" width="130" height="44" rx="9" fill="#b8402e"/><text x="85" y="100" font-size="11" font-weight="700" fill="#fff" text-anchor="middle">produttore</text><text x="85" y="116" class="mono" font-size="8" fill="#f4d9cf" text-anchor="middle">serializza + ID schema</text>
+            <rect x="295" y="30" width="170" height="56" rx="10" fill="#211e1a"/><text x="380" y="54" font-size="11" font-weight="700" fill="#fff" text-anchor="middle">Registro degli schemi</text><text x="380" y="72" class="mono" font-size="8" fill="#e9e2d3" text-anchor="middle">versione / verifica compat</text>
+            <rect x="295" y="110" width="170" height="44" rx="10" fill="#f0e5c9" stroke="#b07d2b"/><text x="380" y="130" font-size="10.5" font-weight="700" fill="#b07d2b" text-anchor="middle">argomento (byte + id)</text><text x="380" y="146" class="mono" font-size="8" fill="#5b5347" text-anchor="middle">Kafka memorizza solo byte</text>
+            <rect x="570" y="80" width="130" height="44" rx="9" fill="#e0e9dd" stroke="#3f6f4e"/><text x="635" y="100" font-size="11" font-weight="700" fill="#3f6f4e" text-anchor="middle">consumatore</text><text x="635" y="116" class="mono" font-size="8" fill="#5b5347" text-anchor="middle">recuperare lo schema, decodificare</text>
+            <defs><marker id="sa12" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0 0 L6 3 L0 6 Z" fill="#8f2f20"/></marker></defs>
+            <path d="M120 88 C200 60 240 56 293 54" stroke="#8f2f20" stroke-width="1.4" fill="none" marker-end="url(#sa12)"/><text x="205" y="50" class="mono" font-size="8" fill="#8f2f20">registrarsi</text>
+            <path d="M150 110 C200 122 240 128 293 130" stroke="#8f2f20" stroke-width="1.4" fill="none" marker-end="url(#sa12)"/><text x="210" y="124" class="mono" font-size="8" fill="#8f2f20">produrre</text>
+            <path d="M465 130 C510 128 540 122 568 112" stroke="#8f2f20" stroke-width="1.4" fill="none" marker-end="url(#sa12)"/>
+            <path d="M568 96 C540 70 510 56 467 54" stroke="#8f2f20" stroke-width="1.4" fill="none" marker-end="url(#sa12)"/><text x="520" y="50" class="mono" font-size="8" fill="#8f2f20">recuperare per ID</text>
+            <text x="360" y="184" class="serif" font-size="12" font-style="italic" fill="#5b5347" text-anchor="middle">Il registro rifiuta una modifica dello schema incompatibile, le modifiche importanti non riescono in fase di distribuzione, non in produzione.</text>
+          </svg>
+        </div>
+
+        <h4>Formati e compatibilità</h4>
+        <p>I formati di serializzazione comuni sono <strong>Avro</strong> (il tradizionale abbinamento Kafkiano, compatto con un ricco
+          storia dell’evoluzione dello schema), <strong>Protobuff</strong> (lo stesso IDL del capitolo gRPC, sempre più popolare),
+          e <strong>Schema JSON</strong> (leggibile, più grande). Il registro impone a <strong>modalità di compatibilità</strong>: tipicamente <em>all'indietro</em> compatibilità, il che significa che i nuovi consumatori possono leggere i vecchi dati: puoi aggiungere campi facoltativi
+          e rimuovi quelli con valori predefiniti, ma non puoi rinominare o riscrivere un campo. Questo è precisamente il cambiamento additivo
+          disciplina dal capitolo gRPC (sez 04 lì: numeri di campo, mai riutilizzare) e controllo delle versioni REST, applicato
+          automaticamente da un server.</p>
+
+        <div class="box key"><span class="tag">Uno schema è un contratto tra team</span>
+          <p>In un parco istanze di microservizi, lo schema di un argomento è un'API pubblica da cui dipendono molti team indipendenti. Lo schema
+            Il registro trasforma &quot;per favore, non rompere il carico utile&quot; da una convenzione tribale in un cancello controllato dalla macchina, lo stesso ruolo che buf gioca per gRPC <code>.proto</code> file. Tratta i cambiamenti dello schema con la stessa cura di qualsiasi altro
+            Modifica API: additiva e compatibile per impostazione predefinita.</p>
+        </div>
+      </section>
+
+      <!-- 13 -->
+      <section id="s13">
+        <div class="sec-head"><div class="sec-num">13</div><h2>Modelli guidati dagli eventi</h2></div>
+        <p>Kafka è il substrato per <strong>architettura guidata dagli eventi (EDA)</strong>, dove i servizi comunicano tramite
+          emettendo e reagendo agli eventi invece di chiamarsi a vicenda direttamente. Invece del servizio d'ordine
+          <em>comandare</em> i servizi di posta elettronica, inventario e analisi (stretto accoppiamento, il servizio ordini deve saperlo
+          tutti), semplicemente <em>annuncia</em> &quot;OrderPlaced&quot; a un argomento e qualsiasi servizio interessato si iscrive. Il
+          il produttore non sa, né si preoccupa, chi consuma. Questo è il profondo vantaggio del disaccoppiamento del tronco
+          (sez 1): si aggiunge un nuovo consumatore senza toccare il produttore.</p>
+
+        <div class="viz">
+          <div class="viz-cap">Coreografia</div>
+          <div class="viz-title">Un evento, molte reazioni indipendenti, di cui il produttore non è a conoscenza</div>
+          <svg viewBox="0 0 720 200" xmlns="http://www.w3.org/2000/svg" role="img"
+            aria-label="Un servizio di ordine che emette un evento OrderPlaced su un argomento, che i servizi di posta elettronica, inventario e analisi consumano ciascuno in modo indipendente">
+            <rect x="20" y="80" width="130" height="48" rx="9" fill="#b8402e"/><text x="85" y="100" font-size="11" font-weight="700" fill="#fff" text-anchor="middle">servizio d'ordine</text><text x="85" y="117" class="mono" font-size="8" fill="#f4d9cf" text-anchor="middle">emette OrderPlaced</text>
+            <defs><marker id="ea13" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0 0 L6 3 L0 6 Z" fill="#8f2f20"/></marker></defs>
+            <path d="M152 104 H243" stroke="#8f2f20" stroke-width="1.8" marker-end="url(#ea13)"/>
+            <rect x="245" y="84" width="150" height="40" rx="9" fill="#f0e5c9" stroke="#b07d2b"/><text x="320" y="108" font-size="10.5" font-weight="700" fill="#b07d2b" text-anchor="middle">argomento: ordini</text>
+            <g stroke="#3f6f4e" stroke-width="1.4" fill="none"><path d="M396 96 C450 64 480 56 530 52" marker-end="url(#k2)"/><path d="M396 104 H530" marker-end="url(#k2)"/><path d="M396 112 C450 152 480 158 530 162" marker-end="url(#k2)"/></g>
+            <rect x="532" y="32" width="168" height="40" rx="9" fill="#e0e9dd" stroke="#3f6f4e"/><text x="616" y="56" font-size="10" font-weight="700" fill="#3f6f4e" text-anchor="middle">servizio di posta elettronica</text>
+            <rect x="532" y="84" width="168" height="40" rx="9" fill="#e0e9dd" stroke="#3f6f4e"/><text x="616" y="108" font-size="10" font-weight="700" fill="#3f6f4e" text-anchor="middle">servizio di inventario</text>
+            <rect x="532" y="136" width="168" height="40" rx="9" fill="#e0e9dd" stroke="#3f6f4e"/><text x="616" y="160" font-size="10" font-weight="700" fill="#3f6f4e" text-anchor="middle">servizio di analisi</text>
+            <text x="360" y="192" class="serif" font-size="12" font-style="italic" fill="#5b5347" text-anchor="middle">Aggiungi un consumatore &quot;punti fedeltà&quot; domani, zero modifiche al servizio ordini.</text>
+          </svg>
+        </div>
+
+        <div class="tbl-wrap">
+          <table>
+            <thead><tr><th>Modello</th><th>Cosa comporta l'evento</th><th>Compromesso</th></tr></thead>
+            <tbody>
+              <tr><td><strong>Notifica eventi</strong></td><td>Solo &quot;X è successo&quot; + un ID</td><td>Piccoli messaggi; i consumatori devono richiamare per i dettagli (accoppiamento, carico)</td></tr>
+              <tr><td><strong>Trasferimento di stato portato da eventi</strong></td><td>Lo stato completo pertinente all'evento</td><td>I consumatori sono autosufficienti (nessun callback); messaggi più grandi, possibile duplicazione</td></tr>
+              <tr><td><strong>Coreografia</strong></td><td>I servizi reagiscono agli eventi in modo autonomo</td><td>Accoppiamento allentato, facile da estendere; il flusso è più difficile da vedere dall'inizio alla fine</td></tr>
+              <tr><td><strong>Orchestrazione</strong></td><td>Un coordinatore guida i passi (una saga)</td><td>Flusso esplicito e visibile; reintroduce un coordinatore centrale</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="box gotcha"><span class="tag">Il disaccoppiamento non è gratuito</span>
+          <p>L’EDA scambia la chiarezza di una richiesta diretta di flessibilità. Lo svantaggio è che nessun singolo luogo descrive il
+            intero flusso di lavoro, &quot;cosa succede quando viene effettuato un ordine?&quot; è ora distribuito tra molti abbonati, il che
+            rende il debug e il ragionamento più difficili. Mitigare con una buona osservabilità (ID di traccia/correlazione tramite event
+            intestazioni, la stessa idea della sez 13/sec 15 dei livelli e dei capitoli di registrazione), schemi di eventi chiari (sez 12),
+            e scegliere l'orchestrazione (una saga esplicita) quando un flusso necessita veramente di una sequenza visibile e coordinata.</p>
+        </div>
+      </section>
+
+      <!-- 14 -->
+      <section id="s14">
+        <div class="sec-head"><div class="sec-num">14</div><h2>Origine eventi e CQRS</h2></div>
+        <p>Due modelli avanzati abilitati dal registro, spesso confusi, spesso accoppiati. <strong>Approvvigionamento di eventi</strong>
+          i negozi dichiarano come <em>sequenza di eventi che lo hanno prodotto</em> piuttosto che solo l'istantanea corrente: invece
+          di una riga <code>balance = 100</code>, continui <code>Deposited 60</code>, <code>Deposited 50</code>,
+          <code>Withdrew 10</code>e ricavare il saldo riproducendoli. L'immutabile, l'ordinato, il trattenuto di Kafka
+          log (sec 3) è un archivio di eventi naturali. <strong>CQRS</strong> (Segregazione delle responsabilità delle query di comando)
+          separa il modello di scrittura da uno o più modelli di lettura ottimizzati per l'esecuzione di query.</p>
+
+        <div class="viz">
+          <div class="viz-cap">Origine eventi + CQRS</div>
+          <div class="viz-title">Il registro eventi è la fonte della verità; i modelli di lettura sono proiezioni derivate</div>
+          <svg viewBox="0 0 720 210" xmlns="http://www.w3.org/2000/svg" role="img"
+            aria-label="I comandi aggiungono gli eventi a un registro che è la fonte della verità; i consumatori proiettano tali eventi in modelli di lettura specializzati come un indice di ricerca e una visualizzazione SQL">
+            <rect x="20" y="84" width="110" height="44" rx="9" fill="#b8402e"/><text x="75" y="104" font-size="10.5" font-weight="700" fill="#fff" text-anchor="middle">comando</text><text x="75" y="120" class="mono" font-size="8" fill="#f4d9cf" text-anchor="middle">&quot;deposito 60&quot;</text>
+            <defs><marker id="es14" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0 0 L6 3 L0 6 Z" fill="#8f2f20"/></marker></defs>
+            <path d="M132 106 H193" stroke="#8f2f20" stroke-width="1.6" marker-end="url(#es14)"/>
+            <rect x="195" y="78" width="170" height="56" rx="10" fill="#f0e5c9" stroke="#b07d2b"/><text x="280" y="100" font-size="10.5" font-weight="700" fill="#b07d2b" text-anchor="middle">registro eventi</text><text x="280" y="118" class="mono" font-size="8" fill="#5b5347" text-anchor="middle">FONTE DELLA VERITÀ (solo aggiunta)</text>
+            <g stroke="#3f6f4e" stroke-width="1.4" fill="none"><path d="M366 96 C420 70 450 60 500 56" marker-end="url(#k2)"/><path d="M366 116 C420 142 450 152 500 156" marker-end="url(#k2)"/></g>
+            <rect x="502" y="34" width="196" height="44" rx="9" fill="#e0e9dd" stroke="#3f6f4e"/><text x="600" y="54" font-size="10" font-weight="700" fill="#3f6f4e" text-anchor="middle">modello di lettura: indice di ricerca</text><text x="600" y="70" class="mono" font-size="8" fill="#5b5347" text-anchor="middle">proiezione per query veloci</text>
+            <rect x="502" y="134" width="196" height="44" rx="9" fill="#e0e9dd" stroke="#3f6f4e"/><text x="600" y="154" font-size="10" font-weight="700" fill="#3f6f4e" text-anchor="middle">modello di lettura: vista SQL</text><text x="600" y="170" class="mono" font-size="8" fill="#5b5347" text-anchor="middle">proiezione per il reporting</text>
+            <text x="360" y="200" class="serif" font-size="12" font-style="italic" fill="#5b5347" text-anchor="middle">Hai perso un modello letto? Ricostruiscilo riproducendo il registro dall'offset 0. Gli eventi sono la verità; le visualizzazioni sono usa e getta.</text>
+          </svg>
+        </div>
+
+        <p>I vantaggi sono reali: a <strong>traccia di controllo completa</strong> (ogni cambiamento è un fatto registrato, oro per
+          finanza e conformità), la capacità di <strong>ricostruire lo stato in qualsiasi momento passato</strong> riproducendo un
+          compensare e <strong>più modelli di lettura specializzati</strong> ciascuno ricostruibile dallo stesso registro (la compattazione, sezione 11, fornisce l'istantanea per evitare la riproduzione dall'alba dei tempi).</p>
+
+        <div class="box gotcha"><span class="tag">Potente e non gratuito, non raggiungerlo per impostazione predefinita</span>
+          <p>L'origine degli eventi aggiunge una reale complessità: l'evoluzione dello schema di <em>storico</em> eventi è difficile (non potrai mai
+            cambiare il passato, solo come lo interpreti), ricostruire lo stato ha un costo, e &quot;qual è il valore attuale?&quot;
+            ora richiede una proiezione anziché una lettura di riga. Si distingue per ambiti complessi e ricchi di controlli (pagamenti,
+            registri, esattamente fintech) dove la storia <em>è</em> il valore. Per CRUD ordinario, un normale
+            il database è più semplice e corretto, utilizza il modello in cui la traccia di controllo e la riproduzione pagano veramente
+            complessità, non come un'architettura predefinita.</p>
+        </div>
+      </section>
+
+      <!-- 15 -->
+      <section id="s15">
+        <div class="sec-head"><div class="sec-num">15</div><h2>Il modello della posta in uscita e l'acquisizione dei dati di modifica</h2></div>
+        <p>Un problema sottile e importante nei sistemi basati sugli eventi: quando un servizio deve avere entrambe le cose <strong>aggiornare il proprio database
+          e pubblicare un evento</strong>, eseguirli come due operazioni separate non è sicuro. Se il commit del DB ha esito positivo ma
+          la pubblicazione di Kafka fallisce (o viceversa), i tuoi sistemi divergono, l'ordine esiste ma non c'è &quot;OrderPlaced&quot;
+          evento attivato o un evento attivato per un ordine sottoposto a rollback. Questo è il <strong>problema della doppia scrittura</strong>,
+          e non puoi risolverlo riordinando le due scritture, c'è sempre una finestra di arresto anomalo tra di loro.</p>
+
+        <div class="viz">
+          <div class="viz-cap">Il problema della doppia scrittura e la correzione della posta in uscita</div>
+          <div class="viz-title">Scrivere l'evento nella stessa transazione DB; riferitelo poi a Kafka</div>
+          <svg viewBox="0 0 720 230" xmlns="http://www.w3.org/2000/svg" role="img"
+            aria-label="In alto: scrivendo su DB poi Kafka separatamente rischia la divergenza in caso di incidente tra di loro. In basso: scrittura dei dati aziendali e di una riga di posta in uscita in un'unica transazione, quindi un inoltro che pubblica la posta in uscita su Kafka">
+            <text x="20" y="22" class="mono" font-size="10" font-weight="700" fill="#8f2f20">la doppia scrittura ingenua può divergere</text>
+            <rect x="30" y="34" width="100" height="34" rx="7" fill="#eccdc2" stroke="#8f2f20"/><text x="80" y="55" font-size="9.5" fill="#8f2f20" text-anchor="middle">commit DB</text>
+            <text x="140" y="55" font-size="13" fill="#8f2f20">&amp;#8594;</text>
+            <text x="160" y="50" font-size="9" font-style="italic" fill="#8f2f20">⚡ schiantati qui</text>
+            <rect x="250" y="34" width="110" height="34" rx="7" fill="#eccdc2" stroke="#8f2f20"/><text x="305" y="55" font-size="9.5" fill="#8f2f20" text-anchor="middle">pubblicare Kafka</text>
+            <text x="380" y="55" font-size="10.5" font-style="italic" fill="#8f2f20">DB aggiornato ma evento mai inviato</text>
+
+            <text x="20" y="104" class="mono" font-size="10" font-weight="700" fill="#3f6f4e">modello di posta in uscita, atomico</text>
+            <rect x="30" y="118" width="220" height="72" rx="10" fill="#e0e9dd" stroke="#3f6f4e"/><text x="140" y="138" font-size="10" font-weight="700" fill="#3f6f4e" text-anchor="middle">UNA transazione DB</text>
+            <rect x="46" y="148" width="92" height="32" rx="6" fill="#dbeede" stroke="#3f6f4e"/><text x="92" y="168" font-size="8.5" fill="#3f6f4e" text-anchor="middle">riga degli ordini</text>
+            <rect x="144" y="148" width="92" height="32" rx="6" fill="#dbeede" stroke="#3f6f4e"/><text x="190" y="168" font-size="8.5" fill="#3f6f4e" text-anchor="middle">riga della posta in uscita</text>
+            <defs><marker id="ob15" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0 0 L6 3 L0 6 Z" fill="#8f2f20"/></marker></defs>
+            <path d="M252 154 H300" stroke="#8f2f20" stroke-width="1.6" marker-end="url(#ob15)"/>
+            <rect x="302" y="138" width="120" height="34" rx="8" fill="#211e1a"/><text x="362" y="159" font-size="9.5" font-weight="700" fill="#fff" text-anchor="middle">relè/CDC</text>
+            <path d="M424 154 H472" stroke="#8f2f20" stroke-width="1.6" marker-end="url(#ob15)"/>
+            <rect x="474" y="138" width="120" height="34" rx="8" fill="#f0e5c9" stroke="#b07d2b"/><text x="534" y="159" font-size="9.5" font-weight="700" fill="#b07d2b" text-anchor="middle">Argomento Kafkiano</text>
+            <text x="360" y="212" class="serif" font-size="12" font-style="italic" fill="#5b5347" text-anchor="middle">Entrambe le righe si impegnano insieme o non si impegnano affatto; un relè separato inoltra in modo affidabile la posta in uscita, senza eventi persi o fantasma.</text>
+          </svg>
+        </div>
+
+        <p>Il <strong>modello di posta in uscita</strong> lo risolve con un'unica transazione locale: scrivi il tuo cambiamento aziendale
+          <em>e</em> una riga &quot;posta in uscita&quot; che descrive l'evento nel file <em>stesso</em> transazione del database, quindi loro
+          impegnarsi atomicamente. Un separato <strong>relè</strong> il processo quindi legge le nuove righe della posta in uscita e le pubblica in
+          Kafka (riprovare fino al successo, almeno una volta, quindi i consumatori rimangono idempotenti, sez 9). Il moderno,
+          è un modo a basso attrito per far funzionare quel relè <strong>Modifica acquisizione dati (CDC)</strong>: uno strumento come
+          <strong>Debezium</strong> segue il registro delle transazioni del database e trasmette direttamente le modifiche apportate
+          Kafka, non è richiesto alcun sondaggio delle applicazioni.</p>
+
+        <div class="codeblock single">
+          <div class="code-bar"><div class="dots"><i></i><i></i><i></i></div><span class="filename">posta in uscita: scrittura aziendale + evento in un'unica transazione</span></div>
+          <pre><code class="language-sql">BEGIN;
+
+-- 1) the actual business change
+INSERT INTO orders (id, customer_id, amount, status)
+VALUES ('order-42', 'cust-7', 1999, 'PLACED');
+
+-- 2) the event to publish, written in the SAME transaction -&gt; atomic with (1)
+INSERT INTO outbox (id, aggregate, event_type, payload, created_at)
+VALUES (gen_random_uuid(), 'order-42', 'OrderPlaced',
+        '{"id":"order-42","amount":1999}', now());
+
+COMMIT;   -- both succeed together, or neither does, no dual-write gap
+
+-- A relay (or Debezium CDC on the transaction log) then reads new `outbox`
+-- rows and produces them to Kafka, marking each published. Retries are safe
+-- because downstream consumers are idempotent (sec 9).</code></pre>
+        </div>
+
+        <div class="box key"><span class="tag">La risposta standard a &quot;DB + Kafka insieme&quot;</span>
+          <p>Ogni volta che una scrittura deve produrre atomicamente un evento, onnipresente nei sistemi di pagamento e di ordine, raggiungere
+            per la posta in uscita (spesso tramite Debezium CDC). Converte un problema di transazione distribuita impossibile in un problema
+            transazione locale ordinaria più un relè affidabile e idempotente. Questo è uno dei più preziosi dal punto di vista pratico
+            modelli nell’intero toolkit basato sugli eventi.</p>
+        </div>
+      </section>
+
+      <div class="part-label">Parte V / Elaborazione, operazioni e pratica</div>
+
+      <!-- 16 -->
+      <section id="s16">
+        <div class="sec-head"><div class="sec-num">16</div><h2>Elaborazione del flusso</h2></div>
+        <p>Finora i consumatori leggono gli eventi uno alla volta. <strong>Elaborazione del flusso</strong> è la disciplina dell'informatica
+          <em>continuamente</em> sopra il flusso, filtrando, trasformando, aggregando, unendo, producendo nuovo
+          flussi derivati. Invece di &quot;leggi l'evento, fai una cosa&quot;, esprimi una query permanente come &quot;una sequenza di 5 minuti
+          conteggio dei pagamenti falliti per commerciante&quot; che si aggiorna continuamente con l'arrivo degli eventi. La biblioteca di Kafka per questo è
+          <strong>Flussi di Kafka</strong> (JVM); <strong>ksqlDB</strong> offre un livello simile a SQL e <strong>Apache
+          Sbattere le palpebre</strong> è il peso massimo per lavori grandi e complessi.</p>
+
+        <div class="tbl-wrap">
+          <table>
+            <thead><tr><th>Concetto</th><th>Significato</th></tr></thead>
+            <tbody>
+              <tr><td><strong>KStream</strong></td><td>Un flusso illimitato di eventi indipendenti (una visualizzazione del registro di accodamento), ogni record è importante.</td></tr>
+              <tr><td><strong>KTable</strong></td><td>Un registro delle modifiche interpretato come stato corrente per chiave, la vista ad argomento compatto (sez. 11); vince l'ultimo valore.</td></tr>
+              <tr><td><strong>Operazioni con stato</strong></td><td>Aggregazioni/join che ricordano gli eventi, supportati da un archivio statale locale (a sua volta un argomento Kafka compatto per la tolleranza agli errori).</td></tr>
+              <tr><td><strong>Finestre</strong></td><td>Dividere gli eventi in base al tempo (ribaltamento, salto, sessione) per aggregarli &quot;per 5 minuti&quot;, ecc.</td></tr>
+              <tr><td><strong>Evento vs tempo di elaborazione</strong></td><td>Quando l'evento <em>è successo</em> rispetto a quando tu <em>processo</em> it, differiscono e i dati in ritardo/non in ordine devono essere gestiti.</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="box note"><span class="tag">La dualità flusso/tabella</span>
+          <p>L'elegante idea centrale: a <strong>flusso</strong> e un <strong>tavolo</strong> sono due visualizzazioni degli stessi dati.
+            Un flusso di cambiamenti <em>aggregato</em> tramite chiave fornisce una tabella (stato corrente); un tavolo <em>registro delle modifiche</em> è
+            un flusso di aggiornamenti. Questa è esattamente la distinzione tra ritenzione e compattazione (sez. 11) elevata a a
+            modello di programmazione, ed è per questo che un argomento compatto <em>è</em> una tabella e un argomento normale <em>è</em> un
+            flusso. La maggior parte degli ingegneri di backend consumano flussi con il consumatore semplice (sez. 7); raggiungere un ruscello-
+            framework di elaborazione quando sono necessari aggregazioni con stato, join o finestre che sarebbero dolorose
+            rotolo a mano.</p>
+        </div>
+      </section>
+
+      <!-- 17 -->
+      <section id="s17">
+        <div class="sec-head"><div class="sec-num">17</div><h2>Kafka contro le code tradizionali</h2></div>
+        <p>Ritornando alla distinzione della seconda sezione con un contesto sufficiente per decidere bene. Questa è la domanda che manda le persone
+          al capitolo sulle code di attività e ritorno: <strong>voglio Kafka o una coda di messaggi (RabbitMQ, SQS, the
+          Sedano/mondo Sidekiq)?</strong> Si sovrappongono abbastanza da confondere e differiscono abbastanza da avere importanza.</p>
+
+        <div class="tbl-wrap">
+          <table>
+            <thead><tr><th>Dimensione</th><th>Kafka (registro)</th><th>RabbitMQ/SQS (coda)</th></tr></thead>
+            <tbody>
+              <tr><td>Modello fondamentale</td><td>Registro eventi duraturo e riproducibile</td><td>Coda di lavoro transitoria</td></tr>
+              <tr><td>Dopo il consumo</td><td>Mantenuto; rigiocabile da qualsiasi gruppo</td><td>Eliminato una volta attaccato</td></tr>
+              <tr><td>Fan-out su molti sistemi</td><td><span class="yes">Nativo, ogni gruppo legge tutto</span></td><td>Necessita di configurazione di scambi/fan-out; non quello predefinito</td></tr>
+              <tr><td>Produttività</td><td>Molto alto (milioni/sec)</td><td>Alto, ma generalmente inferiore</td></tr>
+              <tr><td>Ordinare</td><td>Forte per partizione</td><td>Debole; Le modalità FIFO sono limitate/più lente</td></tr>
+              <tr><td>Routing/priorità/TTL per messaggio</td><td>Limited, non il suo modello</td><td><span class="yes">Ricco (chiavi di instradamento, priorità, ritardo, DLQ)</span></td></tr>
+              <tr><td>Replay/viaggio nel tempo</td><td><span class="yes">Sì, cerca qualsiasi compensazione</span></td><td>No</td></tr>
+              <tr><td>Meglio per</td><td>Streaming di eventi, molti abbonati, riproduzione, analisi, approvvigionamento di eventi</td><td>Offload delle attività, lavori tipo RPC, routing complesso, controllo per messaggio</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="box key"><span class="tag">L'euristica della decisione</span>
+          <p>Raggiungi <strong>Kafka</strong> quando gli eventi sono fatti che interessano a molti sistemi, quando è necessario un throughput elevato,
+            l'ordinamento o la capacità di riprodurre la cronologia, la dorsale dello streaming. Raggiungi un <strong>coda</strong>
+            (cap.10) quando si distribuiscono unità discrete di lavoro da eseguire una volta, in particolare con l'instradamento per messaggio,
+            priorità, ritardi o gestione dei messaggi non recapitabili. Sono complementari: moltissimi sistemi reali gestiscono Kafka come
+            la spina dorsale dell'evento <em>e</em> una coda di attività per i lavori in background. Non forzare la semantica della coda di attività su Kafka
+            (TTL per messaggio, priorità, riconoscimento selettivo), questo va contro il suo design.</p>
+        </div>
+      </section>
+
+      <!-- 18 -->
+      <section id="s18">
+        <div class="sec-head"><div class="sec-num">18</div><h2>Le insidie del consumatore</h2></div>
+        <p>La maggior parte del dolore Kafka della produzione si manifesta dal lato del consumatore. Queste sono le modalità di fallimento che mordono le squadre vere, che vale la pena riconoscere prima che ti chiami alle 2 del mattino.</p>
+
+        <div class="tbl-wrap">
+          <table>
+            <thead><tr><th>Insidia</th><th>Cosa succede</th><th>Mitigazione</th></tr></thead>
+            <tbody>
+              <tr><td><strong>Riequilibrare le tempeste</strong></td><td>I frequenti ribilanciamenti del gruppo (l'elaborazione lenta fa scattare il timeout del sondaggio, il membro viene dichiarato morto) bloccano ripetutamente il consumo</td><td>Mantieni il lavoro per sondaggio limitato, sintonizzati <code>max.poll.records</code> / <code>max.poll.interval.ms</code>; scaricare il lavoro lento; utilizzare il riequilibrio cooperativo/incrementale</td></tr>
+              <tr><td><strong>Pillola di veleno</strong></td><td>Un messaggio non elaborabile (schema errato, dati errati) provoca l'arresto anomalo del consumer e riprova all'infinito, la partizione è bloccata</td><td>Cattura errori per record; instradare il record danneggiato a <em>argomento lettera morta</em> e andare avanti</td></tr>
+              <tr><td><strong>Ritardo del consumatore</strong></td><td>I produttori superano i consumatori; il ritardo diventa illimitato; i dati diventano obsoleti</td><td>Aggiungi partizioni + consumatori (sec 7), accelera l'elaborazione, batch; avviso di ritardo (sez. 19)</td></tr>
+              <tr><td><strong>Partizione/disallineamento chiave</strong></td><td>Un tasto di scelta rapida (un tenant gigante) sovraccarica la sua singola partizione mentre gli altri sono inattivi (sec 10)</td><td>Scegli una chiave con cardinalità più alta o una chiave composta; isolare gli inquilini caldi</td></tr>
+              <tr><td><strong>L'elaborazione lenta blocca l'ordine</strong></td><td>Per mantenere l'ordine si elabora una partizione in modo seriale, quindi un record lento ritarda il resto</td><td>Parallelizza tra partizioni, non all'interno; considerare i modelli di parallelismo per chiave</td></tr>
+              <tr><td><strong>Rielaborazione in caso di lacune di commit</strong></td><td>Un arresto anomalo tra l'elaborazione e il commit dell'offset riconsegna i record</td><td>Previsto in at-almeno-once, rende l'elaborazione idempotente (sez 9)</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="box gotcha"><span class="tag">Avere sempre una strategia lettera morta</span>
+          <p>Un singolo messaggio malformato non deve mai essere in grado di fermare un'intera partizione indefinitamente, questo è a
+            pillola avvelenata ed è una causa comune di interruzione. Avvolgi l'elaborazione per record nella gestione degli errori: su un file persistente
+            in caso di fallimento, pubblicare il record offensivo (più l'errore e i metadati) su a <strong>argomento lettera morta</strong>,
+            impegnati a superarlo e mantieni il flusso del flusso. Investigherai più tardi sull'argomento della lettera non recapitata invece di lasciare che lo faccia
+            un record errato blocca tutti, la stessa disciplina DLQ applicata dal capitolo sulle code di attività ai lavori non riusciti.</p>
+        </div>
+      </section>
+
+      <!-- 19 -->
+      <section id="s19">
+        <div class="sec-head"><div class="sec-num">19</div><h2>Operazioni e monitoraggio</h2></div>
+        <p>Gestire bene Kafka significa osservare alcuni segnali e valutare correttamente alcune cose. Non è necessario
+          memorizza ogni metrica, ma devi conoscere quelle che prevedono i problemi.</p>
+
+        <div class="tbl-wrap">
+          <table>
+            <thead><tr><th>Guarda</th><th>Perché è importante</th></tr></thead>
+            <tbody>
+              <tr><td><strong>Ritardo del consumatore</strong></td><td>La metrica principale sulla salute (sezione 8): un ritardo crescente significa che i consumatori non riescono a tenere il passo, i dati stanno diventando obsoleti. Avvertimento su di esso.</td></tr>
+              <tr><td><strong>Partizioni sottoreplicate</strong></td><td>Repliche che escono dall'ISR (sez. 5), la durabilità è a rischio; un broker potrebbe essere in difficoltà.</td></tr>
+              <tr><td><strong>Disco broker e throughput</strong></td><td>Conservazione (sez. 11) significa che gli argomenti consumano disco reale; il disco o la rete saturi limitano il cluster.</td></tr>
+              <tr><td><strong>Frequenza di riequilibrio</strong></td><td>Ribilanciamenti frequenti (sez. 18) indicano consumatori instabili e causano stalli.</td></tr>
+              <tr><td><strong>Richiedi latenza ed errori</strong></td><td>La latenza di produzione/recupero e i tassi di errore fanno emergere tempestivamente i problemi del broker o del client.</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h4>Decisioni di dimensionamento che prendi effettivamente</h4>
+        <ul>
+          <li><strong>Conteggio delle partizioni</strong>: imposta il parallelismo e il throughput massimo del consumatore (sec 4, sec 7).
+            Stima dal throughput target e dal conteggio dei picchi di consumo; erra leggermente alto, ma non eccessivamente (ogni partizione
+            ha spese generali e migliaia di danni per broker). Difficile cambiare in seguito, quindi pensa al futuro (sez. 20).</li>
+          <li><strong>Fattore di replica</strong>: solitamente 3 in produzione: tollera la perdita di un broker con spazio per
+            ricambio. Accoppia con <code>min.insync.replicas=2</code> e <code>acks=all</code> (sez. 5).</li>
+          <li><strong>Conservazione</strong>: quanto durano gli eventi (e quindi l'utilizzo del disco e la finestra di riproduzione). Imposta per
+            argomento in base a quanto indietro i consumatori potrebbero aver bisogno di leggere.</li>
+        </ul>
+
+        <div class="box note"><span class="tag">Utensileria</span>
+          <p>Osservabilità standard: esportazione delle metriche JMX del broker e del client in Prometheus + Grafana (lo stesso stack
+            code di attività e utilizzo dei capitoli di registrazione) e osserva il ritardo del consumatore in modo specifico con un esportatore di ritardo o un'interfaccia utente simile
+            Kafka UI/Conduttore/AKHQ. <code>kafka-consumer-groups.sh --describe</code> fornisce una rapida lettura CLI di a
+            il ritardo del gruppo per partizione durante il debug di live.</p>
+        </div>
+      </section>
+
+      <!-- 20 -->
+      <section id="s20">
+        <div class="sec-head"><div class="sec-num">20</div><h2>Progettare con Kafka</h2></div>
+        <p>Trasformare il manuale nel giudizio progettuale. Kafka è uno strumento potente e acuto; usato dove si adatta
+          trasformativo, utilizzato come bus di messaggi generico è una responsabilità. Alcuni principi separano i buoni progetti di Kafka
+          da quelli dolorosi.</p>
+
+        <h4>Principi di progettazione</h4>
+        <ul>
+          <li><strong>Modella gli argomenti attorno a eventi/fatti, non a comandi o RPC.</strong> Un argomento è un flusso di &quot;cose che
+            è successo&quot; (<code>PaymentSettled</code>), consumato da chi se ne frega, non è un modo per raccontare un servizio specifico
+            cosa fare Se ti ritrovi a desiderare una richiesta/risposta, vuoi gRPC/REST, non Kafka.</li>
+          <li><strong>Scegli la chiave di partizione in base al limite dell'ordine.</strong> Chiave dell'entità i cui eventi devono
+            rimani ordinato (account, ordine, utente), ma con una granularità che distribuisce comunque il carico, per evitare problemi
+            partizioni (sez 10, sec 18). La chiave è la singola decisione più consequenziale per argomento.</li>
+          <li><strong>Assumi almeno una volta; costruire consumatori idempotenti.</strong> Non inseguire end-to-end esattamente una volta
+            attraverso sistemi esterni (sez. 9). Deduplica in base all'ID evento o utilizza gli upserts in modo che i duplicati siano innocui e più economici
+            e più robusto.</li>
+          <li><strong>Gestisci gli schemi fin dal primo giorno.</strong> Utilizzare il registro degli schemi con compatibilità con le versioni precedenti (sez. 12)
+            in modo che i team indipendenti possano evolversi in sicurezza. Lo schema di un argomento è un contratto.</li>
+          <li><strong>Utilizza la posta in uscita per le scritture DB ed eventi.</strong> Non eseguire mai la doppia scrittura; rendi l'evento atomico con il
+            dati e trasmetterli (sez 15).</li>
+          <li><strong>Partizioni dimensionali per il picco in primo piano.</strong> Il ripartizionamento interrompe l'ordine delle chiavi (sez. 4), quindi pianifica
+            per la crescita piuttosto che reagire ad essa.</li>
+        </ul>
+
+        <div class="box key"><span class="tag">Quando Kafka e quando no</span>
+          <p><strong>Raggiungi Kafka</strong> quando si dispone di un flusso di eventi consumati da molti sistemi, è necessario un throughput elevato
+            o riproduzione, stanno eseguendo un'architettura basata sugli eventi, l'approvvigionamento di eventi, pipeline di analisi o l'inserimento di log/metriche.
+            <strong>Non farlo</strong> raggiungerlo per una semplice richiesta/risposta (utilizzare gRPC/REST, il capitolo gRPC), per
+            lavori in background discreti con instradamento o priorità per messaggio (utilizzare una coda di attività, cap.10) o come unico
+            archivio dati per ricerche di punti (utilizzare un database). Abbinare lo strumento alla forma del problema è l'intera abilità.</p>
+        </div>
+      </section>
+
+      <!-- 21 -->
+      <section id="s21">
+        <div class="sec-head"><div class="sec-num">21</div><h2>Cheat-Sheet</h2></div>
+        <p>L'intero manuale compresso in ciò che raggiungi sotto pressione.</p>
+        <div class="tbl-wrap">
+          <table>
+            <thead><tr><th>Concetto</th><th>Una riga</th></tr></thead>
+            <tbody>
+              <tr><td>Kafka</td><td>Un registro di eventi di commit distribuito, durevole e di sola aggiunta che molti consumatori leggono con il proprio offset.</td></tr>
+              <tr><td>Coda vs registro</td><td>Coda: consumata una volta ed eliminata. Registro: conservato, riproducibile, ogni gruppo legge tutto.</td></tr>
+              <tr><td>Registro dei commit</td><td>I/O sequenziale di sola aggiunta, immutabile, indirizzato in offset, la base di tutto.</td></tr>
+              <tr><td>Argomento</td><td>Un flusso con nome, suddiviso in partizioni.</td></tr>
+              <tr><td>Partizione</td><td>Unità di parallelismo, ordinamento e memorizzazione. Stessa chiave -&gt; stessa partizione.</td></tr>
+              <tr><td>Broker/replica</td><td>Cluster di server; ogni partizione ha una replica leader + follower (ISR).</td></tr>
+              <tr><td>acks/ISR</td><td><code>acks=all</code> + <code>min.insync.replicas=2</code> = nessuna perdita di dati in caso di guasto di un broker.</td></tr>
+              <tr><td>Produttore</td><td>Aggiunge record con chiave; partizione dei set di chiavi; l'idempotenza evita il dup al nuovo tentativo.</td></tr>
+              <tr><td>Gruppo di consumatori</td><td>Divide le partizioni tra i membri. Stesso gruppo = condivisione del lavoro; gruppi diversi = trasmissione.</td></tr>
+              <tr><td>Tappo di parallelismo</td><td>Consumatori utili massimi per gruppo = conteggio delle partizioni.</td></tr>
+              <tr><td>Offset/ritardo</td><td>La tua posizione per partizione; ritardo = coda - posizione = la metrica chiave della salute.</td></tr>
+              <tr><td>Impegnati nei tempi</td><td>Impegno dopo l'elaborazione = almeno una volta; prima = al massimo una volta.</td></tr>
+              <tr><td>Consegna</td><td>Al massimo/almeno/esattamente una volta. Scegli almeno una volta + consumatori idempotenti.</td></tr>
+              <tr><td>Ordinare</td><td>Garantito solo all'interno di una partizione. Chiave in base al limite dell'ordine.</td></tr>
+              <tr><td>Conservazione</td><td>Elimina per ora/dimensione o compatta per mantenere il valore più recente per chiave.</td></tr>
+              <tr><td>Compattazione</td><td>Latest-per-key -&gt; un'istantanea durevole e riproducibile dello stato corrente (una tabella).</td></tr>
+              <tr><td>Registro degli schemi</td><td>Schemi con versione (Avro/Protobuf) con compatibilità con le versioni precedenti applicata.</td></tr>
+              <tr><td>EDA</td><td>Emettere eventi; i consumatori reagiscono in modo indipendente, accoppiamento lento, facile da estendere.</td></tr>
+              <tr><td>Origine eventi/CQRS</td><td>Log è la fonte della verità; i modelli di lettura sono proiezioni ricostruibili.</td></tr>
+              <tr><td>Posta in uscita/CDC</td><td>Scrivi dati + evento in un DB txn; relè (Debezium) a Kafka, nessun gap di doppia scrittura.</td></tr>
+              <tr><td>Elaborazione del flusso</td><td>Calcolo continuo (filtro/aggregazione/unione/finestra); Dualità tra KStream e KTable.</td></tr>
+              <tr><td>Insidie</td><td>Riequilibrare tempeste, pillole avvelenate (usa un DLQ), lag, distorsione dei tasti.</td></tr>
+              <tr><td>vs code</td><td>Kafka = streaming/replay/throughput dell'evento; code = lavoro + instradamento/priorità. Usali entrambi.</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="foot">
+          <p><strong>Tutto l'argomento in un fiato:</strong> Kafka è un registro di commit distribuito, durevole e di sola aggiunta
+            (sec 1-3), a differenza di una coda, gli eventi vengono conservati e ogni gruppo di consumatori li legge tutti e può
+            ripetere (sec 2). Un argomento è suddiviso in partizioni, l'unità di parallelismo, ordinamento e archiviazione (sez 4),
+            diffuso tra i broker e replicato per durabilità tramite leader, follower e ISR (sez 5). Produttori
+            aggiungere record con chiave (sez. 6); i gruppi di consumatori dividono le partizioni per espanderle, con il parallelismo limitato
+            conteggio delle partizioni (sez. 7). Ogni consumatore tiene traccia del proprio offset e il ritardo nella coda è il segnale chiave della salute
+            (sez. 8); quando ti impegni decidi la semantica di consegna e la scelta pragmatica è almeno una volta con
+            consumatori idempotenti (sez. 9). L'ordinamento vale solo all'interno di una partizione, quindi la chiave viene eseguita in base al limite di ordinamento
+            e fare attenzione all'inclinazione (sez. 10); la conservazione elimina in base all'età mentre la compattazione mantiene il valore più recente per chiave
+            (sez. 11). Un registro degli schemi governa i carichi utili tra i team (sez. 12); il registro è alla base della gestione degli eventi
+            architettura (sez. 13), sourcing degli eventi e CQRS (sez. 14) e il modello outbox/CDC per DB atomico ed eventi
+            scrive (sez 15). L'elaborazione del flusso viene calcolata continuamente su di esso (sec. 16); scegli Kafka invece di una coda per
+            streaming, riproduzione e throughput (sez. 17), protezione da tempeste di ribilanciamento, pillole avvelenate, ritardi e distorsioni
+            (sez. 18), monitoraggio del ritardo e ISR (sez. 19) e argomenti di progettazione attorno a eventi con chiave sensata, con idempotente
+            consumatori e schemi governati (sez. 20).</p>
+          <p style="margin-top:14px;font-family:'JetBrains Mono', ui-monospace, monospace;font-size:12px;letter-spacing:.05em;">
+            Basato sui documenti Apache Kafka e Confluent / sulla letteratura sulle tabelle log/stream (Kreps) /
+            Debezium per esempi CDC / Go 1.22+ (confluent-kafka-go) / Python 3.11+ (confluent-kafka).</p>
+        </div>
+      </section>
+
+    
+      <footer class="bfp-footer">Backend da Primi Principi / Capitolo 23 / Kafka. Il codice è destinato a Go 1.22+ e Python 3.11+.</footer>
+</main>
+</div>
+<button class="toc-toggle" onclick="document.querySelector('.toc').classList.toggle('open')"> Contenuto</button>
+
+  
+
+  <script>
+    hljs.highlightAll();
+    document.querySelectorAll('[data-cb]').forEach(block => {
+      const btns = block.querySelectorAll('.code-tabs button');
+      const panels = block.querySelectorAll('.code-panel');
+      btns.forEach(btn => btn.addEventListener('click', () => {
+        const lang = btn.dataset.lang;
+        btns.forEach(b => b.classList.toggle('on', b === btn));
+        panels.forEach(p => p.classList.toggle('on', p.dataset.panel === lang));
+      }));
+    });
+</script>
+<!-- CHAPTER NAVIGATION -->
+<nav class="chapter-nav" id="chapterNav">
+  <a href="../../22.Automated-Testing-Unit-Integration-and-E2E/html_notes/notes.html" class="nav-chapter-link"><span class="nav-arrow"><svg class="ico-arrow" width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="13.5" y1="8" x2="3.5" y2="8"/><polyline points="7.5,4 3.5,8 7.5,12"/></svg></span><span class="nav-label"><span class="nav-small">Capitolo 22</span>Test automatizzati</span></a>
+  <a href="../../index.html" class="nav-indicator"><span class="nav-dot"></span> Capitolo 23 <span class="nav-sep">/</span> 24</a>
+  <a href="../../24.Web-Sockets-And-Real-time-Communication-with-WebSockets/html_notes/notes.html" class="nav-chapter-link nav-next"><span class="nav-label"><span class="nav-small">Capitolo 24</span>WebSocket e tempo reale</span><span class="nav-arrow"><svg class="ico-arrow" width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="2.5" y1="8" x2="12.5" y2="8"/><polyline points="8.5,4 12.5,8 8.5,12"/></svg></span></a>
+</nav>
+  <script src="../../assets/copy-button.js"></script>
+  <script src="../../assets/enhancements.js"></script>
+<script src="../../assets/shell.js"></script>
+</body>
+
+</html>

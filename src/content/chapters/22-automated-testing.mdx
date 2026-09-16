@@ -1,0 +1,907 @@
+---
+order: 22
+title: "Test automatizzati"
+navTitle: "Test automatizzati"
+summary: "Una guida dettagliata sui principi primi su come gli ingegneri backend verificano i propri sistemi, da un test di singola unità e dal vocabolario test-double, attraverso test di integrazione contro database reali e gestori HTTP, test di contratto tra servizi, controlli end-to-end, copertura e instabilità, e in TDD, test di carico e test nella pipeline di distribuzione. Scritto per spiegare non solo cosa fa ogni tipo di test, ma perché esiste e come scriverlo bene. Esempi sia in Go ( testing ) che in Python ( pytest )."
+readingTime: "2-3 ore"
+keywords:
+  - "testing"
+  - "unit"
+  - "integration"
+  - "e2e"
+  - "test"
+  - "coverage"
+  - "mocking"
+  - "tdd"
+---
+Parte I / Perché e cosa
+
+## Perché esistono i test
+
+La ragione onesta per scrivere test automatizzati non è la "correttezza" in astratto, è la **sicurezza di modificare il codice senza paura.** Un sistema senza test calcifica: ogni modifica rischia di rompere qualcosa di invisibile, quindi le persone smettono di refactoring, smettono di aggiornare le dipendenze e aggirano le parti spaventose. Un sistema ben testato rimane morbido, puoi ristrutturarlo in modo aggressivo perché una suite di test verde ti dice, in pochi secondi, che il comportamento è ancora valido. I test sono ciò che consente a una base di codice di continuare ad evolversi invece di marcire.
+
+Un test è anche una **specifica eseguibile**. I documenti in prosa si allontanano dalla realtà (lo stesso problema notato nel capitolo gRPC sui contratti REST); un test che afferma `Divide(10, 2) == 5` non può mentire, o va contro il codice attuale oppure no. Leggi una buona suite di test e imparerai esattamente cosa promette il codice, con esempi. E i test sono una **rete di regressione**: una volta scritto un test per un bug, quel bug non potrà mai più ripresentarsi silenziosamente, la rete lo rileva ad ogni esecuzione futura.
+
+Il test manuale consiste nel controllare il tuo lavoro rileggendolo una volta. I test automatizzati stanno assumendo un instancabile correttore di bozze che ricontrolla l'_intero_ documento, istantaneamente, ogni volta che cambi una singola parola, e non si annoia mai né perde una riga.
+
+<Diagram caption="The economics">
+<svg viewBox="0 0 720 230" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Una curva di costo crescente che mostra un bug è economica da risolvere se rilevata da un test unitario e notevolmente più costosa se rilevata in produzione"><line x1="60" y1="180" x2="680" y2="180" stroke="var(--dg-line)" stroke-width="1.5"></line><line x1="60" y1="180" x2="60" y2="30" stroke="var(--dg-line)" stroke-width="1.5"></line><text x="40" y="40" class="mono" font-size="10" fill="var(--dg-accent-2)" transform="rotate(-90 40 100)" text-anchor="middle">costo da sistemare -&gt;</text><path d="M80 172 C220 168 320 150 440 110 C540 78 600 50 660 40" fill="none" stroke="var(--dg-accent)" stroke-width="2.5"></path><g font-size="10" fill="var(--dg-ink-2)" text-anchor="middle"><circle cx="100" cy="170" r="5" fill="var(--dg-ok)"></circle><text x="100" y="200" fill="var(--dg-ink)">durante la codifica</text><text x="100" y="158" class="mono" font-size="9" fill="var(--dg-ok)">$</text><circle cx="260" cy="160" r="5" fill="var(--dg-ok)"></circle><text x="260" y="200" fill="var(--dg-ink)">test unitario (CI)</text><text x="260" y="148" class="mono" font-size="9" fill="var(--dg-ok)">$</text><circle cx="430" cy="115" r="5" fill="var(--dg-warn)"></circle><text x="430" y="200" fill="var(--dg-ink)">revisione/staging del codice</text><text x="430" y="103" class="mono" font-size="9" fill="var(--dg-warn)">$$$</text><circle cx="650" cy="42" r="5" fill="var(--dg-accent-2)"></circle><text x="640" y="200" fill="var(--dg-ink)">nella produzione</text><text x="650" y="30" class="mono" font-size="9" fill="var(--dg-accent-2)">$$$$$$</text></g><text x="370" y="222" class="serif" font-size="12.5" font-style="italic" fill="var(--dg-ink-2)" text-anchor="middle">I test automatizzati spostano il rilevamento a sinistra, nel momento più economico possibile, ad ogni modifica.</text></svg>
+</Diagram>
+
+Quali test ti comprano davvero
+
+**Fiducia nel cambiamento** (refactoring senza timore), **specifiche eseguibili** (documenti che non possono andare alla deriva), **protezione dalla regressione** (i bug risolti rimangono fissi) e **feedback più rapido** (secondi, non un clic manuale). La correttezza è un effetto collaterale; la mutevolezza è il premio.
+
+## La Piramide dei Test
+
+Non tutti i test sono uguali e la decisione strategica più importante è il _mix_. La **piramide dei test** è l'euristica guida: avere **molti unit test rapidi ed economici** alla base, **meno test di integrazione** nel mezzo e **pochissimi test end-to-end lenti e costosi** in alto. La forma deriva da un compromesso che attraversa l'intero manuale: man mano che si sale, i test diventano più _realistici_ (utilizzano maggiormente il sistema reale) ma anche più lenti, più fragili e più difficili da eseguire il debug.
+
+<Diagram caption="The pyramid">
+<svg viewBox="0 0 720 280" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Una piramide con un'ampia base di test unitari, una parte centrale di integrazione più stretta e una parte superiore end-to-end piccola, con assi di velocità e realismo"><polygon points="360,30 470,120 250,120" fill="var(--dg-accent-surface)" stroke="var(--dg-accent)"></polygon><text x="360" y="95" font-size="13" font-weight="700" fill="var(--dg-accent-2)" text-anchor="middle">E2E</text><text x="360" y="112" class="mono" font-size="8.5" fill="var(--dg-accent-2)" text-anchor="middle">pochi/lenti</text><polygon points="250,122 470,122 540,210 180,210" fill="var(--dg-warn-surface)" stroke="var(--dg-warn)"></polygon><text x="360" y="160" font-size="13" font-weight="700" fill="var(--dg-warn)" text-anchor="middle">Integrazione</text><text x="360" y="178" class="mono" font-size="8.5" fill="var(--dg-warn)" text-anchor="middle">alcuni/medi</text><polygon points="180,212 540,212 610,295 110,295" fill="var(--dg-ok-surface)" stroke="var(--dg-ok)"></polygon><text x="360" y="250" font-size="13" font-weight="700" fill="var(--dg-ok)" text-anchor="middle">Unità</text><text x="360" y="268" class="mono" font-size="8.5" fill="var(--dg-ok)" text-anchor="middle">molti/veloci/isolati</text><defs><marker id="pyu" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0 0 L6 3 L0 6 Z" fill="var(--dg-ink-2)"></path></marker></defs><line x1="650" y1="290" x2="650" y2="40" stroke="var(--dg-ink-2)" stroke-width="1.2" marker-end="url(#pyu)"></line><text x="668" y="170" class="mono" font-size="10" fill="var(--dg-ink-2)" transform="rotate(-90 668 170)" text-anchor="middle">più lento/più realistico -&gt;</text><line x1="70" y1="40" x2="70" y2="290" stroke="var(--dg-ink-2)" stroke-width="1.2" marker-end="url(#pyu)"></line><text x="52" y="170" class="mono" font-size="10" fill="var(--dg-ink-2)" transform="rotate(-90 52 170)" text-anchor="middle">altri test -&gt;</text></svg>
+</Diagram>
+
+| Strato | Prove | Velocità | Realismo | Utilizzare per |
+| --------------- | --------------------------------------- | --------------- | ------- | ---------------------------------------- |
+| **Unità** | Una unità, dipendenze false | Millisecondi | Basso | Logica, casi limite, rami |
+| **Integrazione** | Diverse unità + dipendenze reali (DB, cache) | Secondi | Medio | Cablaggio: query, gestori, serializzazione |
+| **E2E** | L'intero sistema tramite la sua interfaccia reale | Secondi-minuti | Alto | Solo percorsi utente critici |
+
+L’anti-pattern del cono gelato
+
+Invertire la piramide, molti test E2E lenti, pochi test unitari e ottieni il "cono gelato": una suite che impiega anni per essere eseguita, fallisce in modo intermittente (sec 14) e fornisce segnali vaghi (un errore potrebbe essere _ovunque_ nello stack). I team in questa trappola smettono di fidarsi della suite e smettono di eseguirla. Spingi i dettagli verso test unitari rapidi; utilizzare E2E con parsimonia per avere la certezza che i pezzi si colleghino.
+
+## Anatomia di un test
+
+Ogni buon test, ad ogni livello, ha la stessa struttura a tre battute, **Arrange, Act, Assert** (AAA; il mondo BDD lo chiama Dato-Quando-Allora). _Arrange_ imposta il mondo e gli input; _Act_ esegue l'operazione sotto test; _Assert_ verifica che il risultato sia quello previsto. Mantenere distinte queste fasi e testare _un_ comportamento per test è ciò che rende immediatamente leggibile un fallimento: sai esattamente quale comportamento ha rotto.
+
+<Diagram caption="Arrange / Act / Assert">
+<svg viewBox="0 0 720 150" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Tre blocchi sequenziali: disporre gli input, agire richiamando il codice, dichiarare che il risultato corrisponde alle aspettative"><defs><marker id="aaa" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0 0 L7 3 L0 6 Z" fill="var(--dg-accent-2)"></path></marker></defs><rect x="30" y="40" width="190" height="64" rx="11" fill="var(--dg-ok-surface)" stroke="var(--dg-ok)"></rect><text x="125" y="66" font-size="13" font-weight="700" fill="var(--dg-ok)" text-anchor="middle">1 / Disporre</text><text x="125" y="86" class="mono" font-size="9.5" fill="var(--dg-ink-2)" text-anchor="middle">costruire input e raddoppiare</text><rect x="265" y="40" width="190" height="64" rx="11" fill="var(--dg-accent-surface)" stroke="var(--dg-accent)"></rect><text x="360" y="66" font-size="13" font-weight="700" fill="var(--dg-accent-2)" text-anchor="middle">2 / Atto</text><text x="360" y="86" class="mono" font-size="9.5" fill="var(--dg-ink-2)" text-anchor="middle">chiamare l'unità UNA VOLTA</text><rect x="500" y="40" width="190" height="64" rx="11" fill="var(--dg-warn-surface)" stroke="var(--dg-warn)"></rect><text x="595" y="66" font-size="13" font-weight="700" fill="var(--dg-warn)" text-anchor="middle">3/Affermare</text><text x="595" y="86" class="mono" font-size="9.5" fill="var(--dg-ink-2)" text-anchor="middle">verificare l'esito</text><path d="M222 72 H263" stroke="var(--dg-accent-2)" stroke-width="1.8" marker-end="url(#aaa)"></path><path d="M457 72 H498" stroke="var(--dg-accent-2)" stroke-width="1.8" marker-end="url(#aaa)"></path><text x="360" y="132" class="serif" font-size="12.5" font-style="italic" fill="var(--dg-ink-2)" text-anchor="middle">Un comportamento per test/un nome descrittivo/un chiaro messaggio di errore.</text></svg>
+</Diagram>
+
+______
+
+● Vai ● Python
+
+```go
+// File naming convention: foo.go is tested by foo_test.go in the same package.
+// Test functions are func TestXxx(t *testing.T), the `go test` tool finds them.
+func TestDiscount_AppliesPercentage(t *testing.T) {
+    // Arrange, set up inputs (and any doubles)
+    cart := Cart{Subtotal: 200}
+    coupon := Coupon{Percent: 10}
+
+    // Act, the ONE operation under test
+    total := ApplyDiscount(cart, coupon)
+
+    // Assert, state the expectation; a good message explains the failure
+    if total != 180 {
+        t.Errorf("ApplyDiscount(200, 10%%) = %d; want 180", total)
+    }
+}
+```
+
+```python
+# pytest discovers files named test_*.py and functions named test_*.
+# A bare `assert` is enough, pytest rewrites it to show a rich failure diff.
+def test_discount_applies_percentage():
+    # Arrange, set up inputs (and any doubles)
+    cart = Cart(subtotal=200)
+    coupon = Coupon(percent=10)
+
+    # Act, the ONE operation under test
+    total = apply_discount(cart, coupon)
+
+    # Assert, pytest prints actual vs expected automatically on failure
+    assert total == 180
+```
+
+#### Ciò che rende buona un'affermazione
+
+- **Testare il comportamento, non l'implementazione.** Affermare il risultato osservabile (_viene applicato lo sconto_), non la meccanica interna (_è stato chiamato questo aiutante privato_). I test accoppiati all'implementazione si interrompono su ogni refactoring e vanificano l'intero scopo (sez 1, sec 20).
+- **Un motivo per fallire.** Un test che asseri cinque cose non correlate ti dice poco quando diventa rosso. Preferisci test mirati con nomi descrittivi, il nome dovrebbe leggere come una frase sul comportamento.
+- **Deterministico.** Stessi input, stesso risultato, ogni esecuzione, in qualsiasi ordine, la proprietà sec 14 riguarda la protezione.
+
+<Callout type="info" title="Gli strumenti standard">
+Questo manuale utilizza lo stack principale di ogni lingua: quello integrato di Go `testing` pacchetto con `go test` (non è necessario alcun framework; la libreria standard è il framework) e **pytest** di Python, lo standard de facto con dispositivi, parametrizzazione e plain-`assert` riscrittura. Entrambi sono ciò che troverai nei repository backend reali.
+</Callout>
+
+Parte II / Test unitari
+
+## Test unitari
+
+Un **test unitario** verifica un piccolo pezzo di logica, una funzione o un metodo, _in isolamento_ dal resto del sistema. Nessun database, nessuna rete, nessun filesystem, nessun orologio: solo input, output controllato. Questo isolamento è ciò che li rende veloci (migliaia di operazioni in pochi secondi) e precisi (un guasto punta esattamente a un'unità). Costituiscono l'ampia base della piramide (sezione 2) e dove dovrebbe risiedere la maggior parte del caso limite e della copertura dei rami.
+
+L'obiettivo naturale per i test unitari è la tua **logica di dominio/aziendale**: i calcoli e le decisioni puri che non necessitano intrinsecamente di I/O: regole di prezzo, convalida, transizioni di stato, analisi. (Questo si mappa direttamente sul livello _service_ dal capitolo controller-servizi-repository; spingendo la logica in funzioni pure c'è esattamente ciò che lo rende testabile dall'unità qui.)
+
+<Diagram caption="Isolation">
+<svg viewBox="0 0 720 170" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Una singola unità sotto test con ingressi e uscite, mentre il database, la rete e l'orologio sono barrati come non coinvolti"><rect x="40" y="60" width="120" height="50" rx="9" fill="var(--dg-accent)"></rect><text x="100" y="82" font-size="11" font-weight="700" fill="var(--dg-on-accent)" text-anchor="middle">input</text><defs><marker id="ua4" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0 0 L7 3 L0 6 Z" fill="var(--dg-accent-2)"></path></marker></defs><path d="M162 85 H238" stroke="var(--dg-accent-2)" stroke-width="1.8" marker-end="url(#ua4)"></path><rect x="240" y="50" width="200" height="70" rx="12" fill="var(--dg-ok-surface)" stroke="var(--dg-ok)" stroke-width="2"></rect><text x="340" y="80" font-size="13" font-weight="700" fill="var(--dg-ok)" text-anchor="middle">unità in prova</text><text x="340" y="100" class="mono" font-size="9" fill="var(--dg-ink-2)" text-anchor="middle">logica pura</text><path d="M442 85 H518" stroke="var(--dg-accent-2)" stroke-width="1.8" marker-end="url(#ua4)"></path><rect x="520" y="60" width="160" height="50" rx="9" fill="var(--dg-warn-surface)" stroke="var(--dg-warn)"></rect><text x="600" y="82" font-size="11" font-weight="700" fill="var(--dg-warn)" text-anchor="middle">affermare l'output</text><g font-size="10" fill="var(--dg-accent-2)" font-style="italic"><text x="200" y="150" fill="var(--dg-ink)">✗ senza DB</text><text x="320" y="150" fill="var(--dg-ink)">✗ nessuna rete</text><text x="450" y="150" fill="var(--dg-ink)">✗ nessun vero orologio</text></g></svg>
+</Diagram>
+
+______
+
+● Vai ● Python
+
+```go
+// The unit: pure logic, no I/O, trivially testable.
+func IsStrongPassword(p string) bool {
+    if len(p) < 8 { return false }
+    var hasDigit, hasUpper bool
+    for _, r := range p {
+        if r >= '0' && r <= '9' { hasDigit = true }
+        if r >= 'A' && r <= 'Z' { hasUpper = true }
+    }
+    return hasDigit && hasUpper
+}
+
+func TestIsStrongPassword(t *testing.T) {
+    if IsStrongPassword("short1A") {            // 7 chars -> too short
+        t.Error("expected short password to be rejected")
+    }
+    if !IsStrongPassword("longEnough9") {        // meets all rules
+        t.Error("expected valid password to be accepted")
+    }
+}
+
+// Run:  go test ./...        (-v for verbose, -run TestIsStrong to filter)
+```
+
+```python
+# The unit: pure logic, no I/O, trivially testable.
+def is_strong_password(p: str) -> bool:
+    if len(p) < 8:
+        return False
+    return any(c.isdigit() for c in p) and any(c.isupper() for c in p)
+
+def test_rejects_short_password():
+    assert is_strong_password("short1A") is False    # 7 chars -> too short
+
+def test_accepts_valid_password():
+    assert is_strong_password("longEnough9") is True  # meets all rules
+
+# Run:  pytest            (-v verbose, -k strong to filter by name)
+```
+
+Se un'unità è difficile da testare, il design ne è l'odore
+
+Quando una funzione è difficile da testare unitariamente, raggiunge un globale, apre una connessione, legge l'orologio o fa dieci cose, il test ti sta dicendo che il _codice_ è mal fattorizzato, non che il test sia difficile. La soluzione consiste quasi sempre nel separare la logica pura dall'I/O e nell'inserire le dipendenze (sez. 6). Testabilità e buona progettazione sono la stessa proprietà vista da due angolazioni.
+
+## Prova del doppio
+
+Le unità reali dipendono da altre cose, un repository, un gateway di pagamento, un mittente di posta elettronica. Per testare un'unità in isolamento, sostituisci quei collaboratori con **test doppi**: controfigure che controlli. "Mock" è usato vagamente nelle conversazioni, ma il vocabolario preciso (di Gerard Meszaros / Martin Fowler) distingue cinque tipi e conoscere la differenza migliora il modo in cui esegui i test.
+
+| Doppio | Cos'è | Lo usi per... |
+| --------- | -------------------------------------------- | ------------------------------------------------------------- |
+| **Manichino** | Un segnaposto passato ma mai utilizzato | soddisfare un parametro richiesto |
+| **Stub** | Restituisce risposte predefinite alle chiamate | alimentare l'unità con input fissi (ad esempio "il DB restituisce questo utente") |
+| **Spia** | Uno stub che registra anche come è stato chiamato | affermare in seguito che qualcosa _è stato_ chiamato e come |
+| **Fintura** | Preprogrammato con aspettative verifica | affermare che è avvenuta un'_interazione_ (ad esempio "l'e-mail è stata inviata una volta") |
+| **Falso** | Un'implementazione funzionante ma leggera | sostituire una dipendenza reale a buon mercato (ad esempio un DB in memoria) |
+
+#### Verifica dello stato e verifica dell'interazione
+
+La distinzione più profonda: **stub/falsi** supportano la verifica dello _stato_ (affermi il _risultato_), mentre i **mock/spies** supportano la verifica dell'_interazione_ (affermi che è avvenuta una _chiamata_). Preferisci la verifica dello stato, è robusto per il refactoring. Richiedi la verifica dell'interazione solo quando l'interazione _è_ il comportamento (un'e-mail deve essere effettivamente inviata, un addebito deve essere emesso esattamente una volta). Le interazioni eccessivamente beffarde sono una delle principali cause di test fragili (sez. 20).
+
+______
+
+● Vai ● Python
+
+```go
+// The unit depends on an interface, the seam that lets us substitute a double (sec 6).
+type UserRepo interface{ FindByID(id string) (*User, error) }
+
+type Notifier interface{ Send(to, msg string) error }
+
+func Greet(repo UserRepo, n Notifier, id string) error {
+    u, err := repo.FindByID(id)        // collaborator 1
+    if err != nil { return err }
+    return n.Send(u.Email, "Hi "+u.Name) // collaborator 2 (interaction we care about)
+}
+
+// STUB: returns a canned user. SPY: also records what Send received.
+type stubRepo struct{ user *User }
+func (s stubRepo) FindByID(string) (*User, error) { return s.user, nil }
+
+type spyNotifier struct{ calls int; lastTo string }
+func (s *spyNotifier) Send(to, msg string) error { s.calls++; s.lastTo = to; return nil }
+
+func TestGreet_SendsEmail(t *testing.T) {
+    repo := stubRepo{user: &User{Email: "a@x.com", Name: "Ada"}} // arrange (stub)
+    spy := &spyNotifier{}
+
+    _ = Greet(repo, spy, "u1")                                   // act
+
+    if spy.calls != 1 || spy.lastTo != "a@x.com" {               // assert the interaction
+        t.Errorf("expected one email to a@x.com, got %d to %q", spy.calls, spy.lastTo)
+    }
+}
+```
+
+```python
+from unittest.mock import Mock
+
+# The unit depends on injected collaborators (sec 6).
+def greet(repo, notifier, user_id):
+    user = repo.find_by_id(user_id)          # collaborator 1
+    notifier.send(user.email, f"Hi {user.name}")  # collaborator 2 (the interaction)
+
+def test_greet_sends_email():
+    # STUB: a Mock configured to return a canned user
+    repo = Mock()
+    repo.find_by_id.return_value = User(email="a@x.com", name="Ada")
+    notifier = Mock()                        # will record calls (acts as spy/mock)
+
+    greet(repo, notifier, "u1")              # act
+
+    # assert the INTERACTION happened exactly as expected
+    notifier.send.assert_called_once_with("a@x.com", "Hi Ada")
+```
+
+Go tende a scrivere a mano piccoli doppi su un'interfaccia (esplicito, senza magia); Di Pitone `unittest.mock` genera doppi flessibili che restituiscono sia stub che chiamate registrate. Stesso concetto, diversa ergonomia.
+
+Non deridere ciò che non possiedi
+
+Evita di prendere in giro direttamente librerie di terze parti o API HTTP esterne, il tuo mock codifica _la tua ipotesi_ su come si comportano, il che può essere sbagliato, quindi il test passa mentre la produzione si interrompe. Avvolgi invece la dipendenza dietro la tua stessa interfaccia e deridi _quello_, oppure usa un test falso/contratto (sez 11, sec 17). Deridi le tue cuciture, non le parti interne di qualcun altro.
+
+## Iniezione di dipendenze per testabilità
+
+L'unica tecnica che rende possibile il testing unitario è la **dependency injection (DI)**: invece di un'unità che _crea_ o _raggiunge_ i suoi collaboratori, li _riceve_ dall'esterno. Quel punto di passaggio è una **cucitura**: il luogo in cui un test può scivolare in un doppio (sez. 5). Nessuna cucitura, nessun isolamento. Questo è il motivo per cui l'architettura controller-servizi-repository insiste nel trasmettere le dipendenze: non è una cerimonia, è ciò che mantiene il codice testabile.
+
+<Diagram caption="The seam">
+<svg viewBox="0 0 720 200" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="In alto: un servizio che costruisce internamente un vero e proprio database, non testabile. In basso: un servizio che riceve un'interfaccia repository, consentendo un falso nei test"><text x="20" y="22" class="mono" font-size="11" font-weight="700" fill="var(--dg-accent-2)">codificato, non testabile</text><rect x="20" y="32" width="200" height="56" rx="10" fill="var(--dg-accent-border)" stroke="var(--dg-accent-2)"></rect><text x="120" y="55" font-size="11" font-weight="700" fill="var(--dg-accent-2)" text-anchor="middle">Servizio</text><text x="120" y="74" class="mono" font-size="8.5" fill="var(--dg-ink-2)" text-anchor="middle">db := openRealPostgres()</text><defs><marker id="dia" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0 0 L6 3 L0 6 Z" fill="var(--dg-accent-2)"></path></marker></defs><path d="M222 60 H300" stroke="var(--dg-accent-2)" stroke-width="1.6" marker-end="url(#dia)"></path><rect x="302" y="38" width="160" height="44" rx="9" fill="var(--dg-inverse)"></rect><text x="382" y="64" font-size="10.5" fill="var(--dg-on-inverse)" text-anchor="middle">solo Postgres reale</text><text x="480" y="64" font-size="10.5" font-style="italic" fill="var(--dg-accent-2)">nessun modo per sostituirlo -&gt; necessita di un vero DB da testare</text><text x="20" y="120" class="mono" font-size="11" font-weight="700" fill="var(--dg-ok)">iniettato, testabile</text><rect x="20" y="130" width="200" height="56" rx="10" fill="var(--dg-ok-surface)" stroke="var(--dg-ok)"></rect><text x="120" y="153" font-size="11" font-weight="700" fill="var(--dg-ok)" text-anchor="middle">Servizio(repo Repo)</text><text x="120" y="172" class="mono" font-size="8.5" fill="var(--dg-ink-2)" text-anchor="middle">utilizza l'interfaccia</text><defs><marker id="dia2" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0 0 L6 3 L0 6 Z" fill="var(--dg-ok)"></path></marker></defs><path d="M222 150 C260 140 270 122 300 118" stroke="var(--dg-ok)" stroke-width="1.5" fill="none" marker-end="url(#dia2)"></path><path d="M222 166 C260 176 270 192 300 196" stroke="var(--dg-ok)" stroke-width="1.5" fill="none" marker-end="url(#dia2)"></path><rect x="302" y="104" width="160" height="28" rx="7" fill="var(--dg-ok-surface)" stroke="var(--dg-ok)"></rect><text x="382" y="123" font-size="9.5" fill="var(--dg-ok)" text-anchor="middle">DB reale (produzione)</text><rect x="302" y="182" width="160" height="28" rx="7" fill="var(--dg-warn-surface)" stroke="var(--dg-warn)"></rect><text x="382" y="201" font-size="9.5" fill="var(--dg-warn)" text-anchor="middle">falso/in memoria (test)</text><text x="500" y="160" font-size="10.5" font-style="italic" fill="var(--dg-ok)">stessa interfaccia -&gt; scambia un falso nei test, reale nel prod</text></svg>
+</Diagram>
+
+______
+
+● Vai ● Python
+
+```go
+// Depend on an INTERFACE, not a concrete type, that interface is the seam.
+type OrderRepo interface{ Save(o Order) error }
+
+type OrderService struct{ repo OrderRepo } // injected, not constructed inside
+
+func NewOrderService(r OrderRepo) *OrderService { return &OrderService{repo: r} }
+
+func (s *OrderService) Place(o Order) error {
+    if o.Total <= 0 { return errors.New("invalid total") } // pure logic, easily tested
+    return s.repo.Save(o)
+}
+
+// In tests: a FAKE in-memory repo (no real DB needed)
+type fakeRepo struct{ saved []Order }
+func (f *fakeRepo) Save(o Order) error { f.saved = append(f.saved, o); return nil }
+
+func TestPlace_RejectsInvalidTotal(t *testing.T) {
+    svc := NewOrderService(&fakeRepo{})
+    if err := svc.Place(Order{Total: 0}); err == nil {
+        t.Error("expected error for non-positive total")
+    }
+}
+// In production:  NewOrderService(postgresRepo), same code, real dependency.
+```
+
+```python
+# Accept the collaborator as a constructor argument, that parameter is the seam.
+class OrderService:
+    def __init__(self, repo):        # injected, not created inside
+        self.repo = repo
+
+    def place(self, order):
+        if order.total <= 0:
+            raise ValueError("invalid total")   # pure logic, easily tested
+        self.repo.save(order)
+
+# In tests: a FAKE in-memory repo (no real DB needed)
+class FakeRepo:
+    def __init__(self): self.saved = []
+    def save(self, order): self.saved.append(order)
+
+def test_place_rejects_invalid_total():
+    svc = OrderService(FakeRepo())
+    with pytest.raises(ValueError):
+        svc.place(Order(total=0))
+
+# In production:  OrderService(postgres_repo), same code, real dependency.
+```
+
+Progettare per la testabilità = buon design
+
+DI, piccole interfacce e separazione della logica pura dall'I/O non sono "trucchi di prova", sono gli stessi principi che rendono il codice modulare e manutenibile. Una base di codice facile da testare è, quasi per definizione, ben strutturata. La suite di test è un segnale continuo di qualità del design.
+
+## Test guidati da tabelle e parametrizzati
+
+La maggior parte della logica deve essere verificata rispetto a _molte_ coppie input/output, percorso felice, casi limite, confini, casi di errore. Copiare e incollare un test per caso è rumore. Entrambi i linguaggi hanno un idioma per "stesso corpo di test, molti casi": **test guidati da tabelle** di Go e **parametrizza** di pytest. È qui che si ottiene una copertura economica e densa di rami e bordi, il vero cavallo di battaglia dello strato unitario.
+
+______
+
+● Vai ● Python
+
+```go
+func TestApplyDiscount(t *testing.T) {
+    // The TABLE: each row is one case with a name.
+    cases := []struct {
+        name     string
+        subtotal int
+        percent  int
+        want     int
+    }{
+        {"ten percent off 200", 200, 10, 180},
+        {"zero discount",       100, 0,  100},
+        {"full discount",       100, 100, 0},
+        {"rounds down",          99, 10,  90}, // boundary/edge case
+    }
+    for _, c := range cases {
+        // t.Run makes each row a named subtest, failures report the case name.
+        t.Run(c.name, func(t *testing.T) {
+            got := ApplyDiscount(Cart{Subtotal: c.subtotal}, Coupon{Percent: c.percent})
+            if got != c.want {
+                t.Errorf("got %d, want %d", got, c.want)
+            }
+        })
+    }
+}
+// `go test -run TestApplyDiscount/rounds_down` runs just one case.
+```
+
+```python
+import pytest
+
+# Each tuple is one case; ids give readable names in the output.
+@pytest.mark.parametrize(
+    "subtotal, percent, expected",
+    [
+        (200, 10, 180),
+        (100, 0,  100),
+        (100, 100, 0),
+        (99,  10, 90),     # boundary/edge case
+    ],
+    ids=["ten-off-200", "zero", "full", "rounds-down"],
+)
+def test_apply_discount(subtotal, percent, expected):
+    got = apply_discount(Cart(subtotal=subtotal), Coupon(percent=percent))
+    assert got == expected
+
+# `pytest -k rounds-down` runs just one case; each shows up as its own test.
+```
+
+<Callout type="info" title="Dai un nome a ogni caso">
+Il vantaggio di questi idiomi non è solo meno codice, ma è che ogni caso diventa un test _con nome indipendente ed eseguibile_ in modo indipendente. Quando uno si interrompe, il rapporto nomina il caso esatto ("arrotondamento per difetto non riuscito") ed è possibile eseguirlo nuovamente. Assegnare sempre nomi descrittivi ai casi; una riga anonima che fallisce dice semplicemente "caso 3", il che non aiuta nessuno.
+</Callout>
+
+Parte III/Test di integrazione
+
+## Test di integrazione
+
+I test unitari dimostrano che ogni pezzo funziona da solo; I **test di integrazione** dimostrano che i pezzi funzionano _insieme_ e, soprattutto, che si integrano correttamente con i sistemi esterni _reali_ che hai deriso a livello di unità: il database, la cache, il broker di messaggi, un altro servizio. Si trovano al centro della piramide (sec 2): sono più lenti degli unit test perché è coinvolto l'I/O reale, ma rilevano un'intera categoria di bug che gli unit test strutturalmente non possono.
+
+Ciò che rilevano solo i test di integrazione
+
+Una query SQL con una colonna digitata, una mappatura ORM che non corrisponde allo schema, una mancata corrispondenza della serializzazione tra i servizi, una migrazione non eseguita, una stringa di connessione errata, una transazione senza commit. Ognuno di questi vive nella _giunzione_ tra il tuo codice e un sistema reale, esattamente la cucitura che un test unitario traccia. Deridere il DB non può rivelare che la tua query non è un SQL valido; solo eseguirlo su un database reale può farlo.
+
+<Diagram caption="Wider scope">
+<svg viewBox="0 0 720 170" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Un test di integrazione che abbraccia un gestore, un servizio e un repository, comunicando con un database reale in un contenitore"><rect x="30" y="40" width="430" height="90" rx="14" fill="none" stroke="var(--dg-warn)" stroke-width="2" stroke-dasharray="6 4"></rect><text x="44" y="60" class="mono" font-size="10" font-weight="700" fill="var(--dg-warn)">sotto test (reale, cablato insieme)</text><rect x="50" y="72" width="120" height="44" rx="9" fill="var(--dg-ok-surface)" stroke="var(--dg-ok)"></rect><text x="110" y="98" font-size="10.5" font-weight="700" fill="var(--dg-ok)" text-anchor="middle">gestore</text><rect x="190" y="72" width="120" height="44" rx="9" fill="var(--dg-ok-surface)" stroke="var(--dg-ok)"></rect><text x="250" y="98" font-size="10.5" font-weight="700" fill="var(--dg-ok)" text-anchor="middle">servizio</text><rect x="330" y="72" width="120" height="44" rx="9" fill="var(--dg-ok-surface)" stroke="var(--dg-ok)"></rect><text x="390" y="98" font-size="10.5" font-weight="700" fill="var(--dg-ok)" text-anchor="middle">deposito</text><defs><marker id="ia8" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0 0 L6 3 L0 6 Z" fill="var(--dg-accent-2)"></path></marker></defs><path d="M170 94 H188" stroke="var(--dg-accent-2)" stroke-width="1.5" marker-end="url(#ia8)"></path><path d="M310 94 H328" stroke="var(--dg-accent-2)" stroke-width="1.5" marker-end="url(#ia8)"></path><path d="M452 94 H520" stroke="var(--dg-accent-2)" stroke-width="1.8" marker-end="url(#ia8)"></path><rect x="522" y="68" width="160" height="52" rx="10" fill="var(--dg-inverse)"></rect><text x="602" y="90" font-size="11" font-weight="700" fill="var(--dg-on-inverse)" text-anchor="middle">REAL Postgres</text><text x="602" y="108" class="mono" font-size="8.5" fill="var(--dg-on-inverse-info)" text-anchor="middle">in un contenitore (sez 9)</text><text x="370" y="152" class="serif" font-size="12.5" font-style="italic" fill="var(--dg-ink-2)" text-anchor="middle">Invia una richiesta, afferma ciò che ritorna <tspan font-style="italic" fill="var(--dg-ink)">e</tspan> cosa è arrivato nel database.</text></svg>
+</Diagram>
+
+Mantienili isolati e ripetibili
+
+I test di integrazione toccano lo stato condiviso, quindi sono inclini a instabilità (sez. 14) se si confondono l'uno con l'altro. Ogni test deve iniziare da uno stato noto e ripulire se stesso, un nuovo schema, una transazione ripristinata o una tabella troncata (sez. 9). I test che dipendono da un database condiviso manualmente o dall'esecuzione in un ordine particolare prima o poi ti tradiranno.
+
+## Test con un database reale
+
+La domanda ricorrente: come si ottiene un database "reale" in un test senza dipendere da un server condiviso gestito manualmente? La risposta moderna è **Testcontainers**: una libreria che crea un vero database in un contenitore Docker usa e getta (i contenitori del capitolo 21) al momento del test, fornisce la sua stringa di connessione e lo smonta dopo. Esegui il test rispetto al motore _attuale_ (la stessa versione Postgres del prodotto), completamente isolato, senza nulla da installare. Per mantenere i test indipendenti l'uno dall'altro, le due tattiche standard sono il **rollback della transazione** (racchiudere ogni test in una transazione, eseguire il rollback alla fine) o il **troncare** le tabelle tra i test.
+
+______
+
+● Vai ● Python
+
+```go
+// Build tag keeps slow integration tests out of the fast unit run:
+//   //go:build integration      -> run with:  go test -tags=integration ./...
+func TestUserRepo_SaveAndFind(t *testing.T) {
+    ctx := context.Background()
+
+    // Arrange: start a REAL Postgres in a throwaway container (testcontainers-go)
+    pg, err := postgres.Run(ctx, "postgres:16",
+        postgres.WithDatabase("app"), postgres.WithUsername("u"), postgres.WithPassword("p"))
+    if err != nil { t.Fatal(err) }
+    t.Cleanup(func() { pg.Terminate(ctx) }) // torn down automatically after the test
+
+    dsn, _ := pg.ConnectionString(ctx, "sslmode=disable")
+    db, _ := sql.Open("postgres", dsn)
+    runMigrations(t, db)                    // apply the same schema as production
+
+    repo := NewUserRepo(db)
+
+    // Act: exercise the REAL query path
+    _ = repo.Save(User{ID: "u1", Email: "a@x.com"})
+    got, err := repo.FindByID("u1")
+
+    // Assert: round-trips correctly through actual SQL
+    if err != nil || got.Email != "a@x.com" {
+        t.Fatalf("round-trip failed: %v / %+v", err, got)
+    }
+}
+```
+
+```python
+import pytest
+from testcontainers.postgres import PostgresContainer
+
+# A fixture spins up a REAL Postgres once per module, then tears it down.
+@pytest.fixture(scope="module")
+def db_url():
+    with PostgresContainer("postgres:16") as pg:   # throwaway container
+        url = pg.get_connection_url()
+        run_migrations(url)                         # same schema as production
+        yield url
+        # container stopped automatically on exit
+
+@pytest.fixture
+def repo(db_url):
+    # function-scoped: clean state per test (truncate / rollback)
+    r = UserRepo(db_url)
+    yield r
+    r.truncate_all()                                # keep tests independent (sec 8)
+
+@pytest.mark.integration            # marker: pytest -m integration
+def test_save_and_find(repo):
+    repo.save(User(id="u1", email="a@x.com"))       # act through REAL SQL
+    got = repo.find_by_id("u1")
+    assert got.email == "a@x.com"                   # round-trips correctly
+```
+
+Entrambi isolano i test lenti dietro un flag/marker (tag Go build, marcatori pytest) in modo che la suite di unità di millisecondi rimanga veloce e i test DB più pesanti vengano eseguiti su richiesta o in CI (sec 19).
+
+Prova con il motore reale, non con un sostituto
+
+Scambiare in SQLite "perché è veloce" quando la produzione esegue Postgres è una trappola classica: i dialetti differiscono (tipi, vincoli, JSON, upsert, blocchi), quindi un test può passare su SQLite e la stessa query fallisce su Postgres. Testcontainers esiste proprio per consentirti di utilizzare il motore di produzione _attuale_ a buon mercato e testare ciò che spedisci.
+
+## Test di gestori e API HTTP
+
+I tuoi gestori (i capitoli HTTP e REST) sono un obiettivo di integrazione primario: vuoi inviare una richiesta reale al tuo routing + gestore + stack di serializzazione e affermare sulla risposta reale, codice di stato, intestazioni, corpo, _senza_ associare un socket o eseguire un server sulla rete. Entrambi gli ecosistemi forniscono un client di test in-process che guida direttamente il gestore: Go's `net/http/httptest` e il `TestClient` fornito con FastAPI/Starlette (e l'equivalente di Flask).
+
+______
+
+● Vai ● Python
+
+```go
+import (
+    "net/http"
+    "net/http/httptest"
+    "strings"
+    "testing"
+)
+
+func TestCreateUser_Returns201(t *testing.T) {
+    handler := NewRouter(deps)  // the REAL router + handlers (deps may use a fake repo sec 6)
+
+    // Arrange: build a request and an in-memory response recorder (no network)
+    body := strings.NewReader(`{"email":"a@x.com","name":"Ada"}`)
+    req := httptest.NewRequest(http.MethodPost, "/api/v1/users", body)
+    req.Header.Set("Content-Type", "application/json")
+    rec := httptest.NewRecorder()
+
+    // Act: drive the handler directly
+    handler.ServeHTTP(rec, req)
+
+    // Assert: on the real response, status, then body
+    if rec.Code != http.StatusCreated {
+        t.Fatalf("status = %d; want 201; body=%s", rec.Code, rec.Body.String())
+    }
+    if ct := rec.Header().Get("Content-Type"); !strings.Contains(ct, "application/json") {
+        t.Errorf("content-type = %q", ct)
+    }
+}
+```
+
+```python
+from fastapi.testclient import TestClient
+from app import app   # the REAL FastAPI app (dependencies may be overridden with fakes sec 6)
+
+client = TestClient(app)   # drives the app in-process, no network, no running server
+
+def test_create_user_returns_201():
+    # Act: fire a real request through routing + handler + serialization
+    resp = client.post("/api/v1/users", json={"email": "a@x.com", "name": "Ada"})
+
+    # Assert: on the real response, status, headers, body
+    assert resp.status_code == 201
+    assert resp.headers["content-type"].startswith("application/json")
+    assert resp.json()["email"] == "a@x.com"
+
+# FastAPI tip: override real dependencies with fakes via app.dependency_overrides
+# so the handler runs but the repo is in-memory, an integration test of the web layer.
+```
+
+<Callout type="info" title="Scegli il raggio dell'esplosione">
+Questi test sono flessibili: collega un repository _fake_ e stai testando l'integrazione solo del livello web (routing, decodifica, codici di stato, inviluppi di errore) in modo rapido e deterministico; collega in un DB _real_ tramite testcontainers (sec 9) e hai un test di integrazione più ampio dell'intero percorso della richiesta. Scegli deliberatamente il mirino per test, più stretto è più veloce e più preciso; più ampio è più realistico.
+</Callout>
+
+## Test del contratto
+
+Nel mondo dei microservizi (i capitoli gRPC e API-design), un servizio raramente vive da solo, ne _consuma_ altri e viene _consumato_ da altri. Il pericolo: un fornitore cambia la sua forma di risposta, tutti i suoi test passano, ma distrugge silenziosamente ogni consumatore. Il test end-to-end di ogni combinazione è proibitivamente lento. Il **test del contratto** risolve questo problema verificando che entrambe le parti siano d'accordo sull'_interfaccia_, senza eseguirle insieme.
+
+<Diagram caption="Consumer-driven contracts">
+<svg viewBox="0 0 720 200" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Un consumatore definisce le richieste e le risposte attese come un contratto, che viene poi verificato in modo indipendente rispetto al fornitore"><rect x="20" y="60" width="160" height="70" rx="11" fill="var(--dg-accent-surface)" stroke="var(--dg-accent)"></rect><text x="100" y="88" font-size="12" font-weight="700" fill="var(--dg-accent-2)" text-anchor="middle">Consumatore</text><text x="100" y="108" class="mono" font-size="8.5" fill="var(--dg-ink-2)" text-anchor="middle">&quot;Invio X, aspetto Y&quot;</text><defs><marker id="cta" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0 0 L7 3 L0 6 Z" fill="var(--dg-accent-2)"></path></marker></defs><path d="M182 95 H268" stroke="var(--dg-accent-2)" stroke-width="1.8" marker-end="url(#cta)"></path><text x="225" y="87" class="mono" font-size="8.5" fill="var(--dg-accent-2)" text-anchor="middle">genera</text><rect x="270" y="58" width="180" height="74" rx="11" fill="var(--dg-inverse)"></rect><text x="360" y="86" font-size="12" font-weight="700" fill="var(--dg-on-inverse)" text-anchor="middle">il Contratto</text><text x="360" y="106" class="mono" font-size="8.5" fill="var(--dg-on-inverse)" text-anchor="middle">coppie richiesta/risposta attese</text><path d="M452 95 H538" stroke="var(--dg-accent-2)" stroke-width="1.8" marker-end="url(#cta)"></path><text x="495" y="87" class="mono" font-size="8.5" fill="var(--dg-accent-2)" text-anchor="middle">verificato rispetto a</text><rect x="540" y="60" width="160" height="70" rx="11" fill="var(--dg-ok-surface)" stroke="var(--dg-ok)"></rect><text x="620" y="88" font-size="12" font-weight="700" fill="var(--dg-ok)" text-anchor="middle">Fornitore</text><text x="620" y="108" class="mono" font-size="8.5" fill="var(--dg-ink-2)" text-anchor="middle">&quot;restituisco comunque Y?&quot;</text><text x="360" y="168" class="serif" font-size="12.5" font-style="italic" fill="var(--dg-ink-2)" text-anchor="middle">Ciascuna parte viene testata in modo indipendente rispetto al contratto condiviso, non è necessario eseguirli entrambi insieme.</text><text x="360" y="188" class="serif" font-size="12" font-style="italic" fill="var(--dg-accent-2)" text-anchor="middle">Se il fornitore rompe il contratto, la sua costruzione fallisce, prima di poter rompere il consumatore nella produzione.</text></svg>
+</Diagram>
+
+Strumenti come **Pact** implementano questo: i test del consumatore registrano le richieste che fa e le risposte che si aspetta in un file contrattuale; l'elemento della configurazione del fornitore riproduce quel contratto contro il fornitore reale e fallisce se non regge più. Per i servizi gRPC/Protobuf, il file `.proto` inoltre il rilevamento delle modifiche che interrompono lo schema (lo strumento buf del capitolo gRPC) svolge un ruolo simile, lo schema _è_ un contratto controllato dalla macchina e CI rifiuta le modifiche incompatibili.
+
+<Callout type="info" title="Dove si adattano i test contrattuali">
+Sono la via di mezzo pragmatica tra "deridere l'altro servizio e sperare che la tua simulazione sia accurata" (veloce ma può allontanarsi dalla realtà, l'avvertimento del sec 5) e "far girare tutto e testare end-to-end" (realistico ma lento e fragile). I test a contratto danno sicurezza tra servizi alla velocità dei test unitari, motivo per cui si adattano a flotte di servizi di grandi dimensioni dove l'E2E completo per tutti i servizi non è pratico.
+</Callout>
+
+Parte IV/E2E, Copertura e affidabilità
+
+## Test end-to-end
+
+Un **test end-to-end (E2E)** esercita il sistema completamente assemblato attraverso la sua vera interfaccia esterna, esattamente come farebbe un utente o un cliente, senza stub interni, tutto in esecuzione: l'API, il database, la cache, i servizi dipendenti. Risponde all'unica domanda che nessun livello inferiore può: _tutti i pezzi, collegati insieme per davvero, forniscono effettivamente il risultato rivolto all'utente?_ È la punta della piramide (sezione 2): massimo realismo, massimo costo.
+
+<Diagram caption="Full stack">
+<svg viewBox="0 0 720 150" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Un client di prova che effettua richieste reali tramite un ingresso a un'API, che utilizza un database reale, una cache e un servizio downstream"><rect x="20" y="55" width="110" height="44" rx="9" fill="var(--dg-accent)"></rect><text x="75" y="82" font-size="11" font-weight="700" fill="var(--dg-on-accent)" text-anchor="middle">cliente di prova</text><defs><marker id="ea" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0 0 L6 3 L0 6 Z" fill="var(--dg-accent-2)"></path></marker></defs><path d="M132 77 H188" stroke="var(--dg-accent-2)" stroke-width="1.8" marker-end="url(#ea)"></path><rect x="190" y="40" width="430" height="74" rx="14" fill="none" stroke="var(--dg-ok)" stroke-width="2"></rect><text x="205" y="58" class="mono" font-size="9.5" font-weight="700" fill="var(--dg-ok)">il REALE sistema distribuito</text><rect x="206" y="68" width="90" height="36" rx="8" fill="var(--dg-ok-surface)" stroke="var(--dg-ok)"></rect><text x="251" y="90" font-size="10" fill="var(--dg-ok)" text-anchor="middle">API</text><rect x="306" y="68" width="90" height="36" rx="8" fill="var(--dg-ok-surface)" stroke="var(--dg-ok)"></rect><text x="351" y="90" font-size="10" fill="var(--dg-ok)" text-anchor="middle">DB</text><rect x="406" y="68" width="90" height="36" rx="8" fill="var(--dg-ok-surface)" stroke="var(--dg-ok)"></rect><text x="451" y="90" font-size="10" fill="var(--dg-ok)" text-anchor="middle">cache</text><rect x="506" y="68" width="100" height="36" rx="8" fill="var(--dg-ok-surface)" stroke="var(--dg-ok)"></rect><text x="556" y="90" font-size="10" fill="var(--dg-ok)" text-anchor="middle">svc B</text><path d="M622 77 H660" stroke="var(--dg-accent-2)" stroke-width="1.8" marker-end="url(#ea)"></path><rect x="662" y="55" width="50" height="44" rx="9" fill="var(--dg-warn-surface)" stroke="var(--dg-warn)"></rect><text x="687" y="82" font-size="10" font-weight="700" fill="var(--dg-warn)" text-anchor="middle">Sì</text><text x="370" y="138" class="serif" font-size="12" font-style="italic" fill="var(--dg-ink-2)" text-anchor="middle">Niente di falso, afferma il risultato visibile all'utente di un viaggio completo.</text></svg>
+</Diagram>
+
+Usateli con parsimonia, di proposito
+
+I test E2E sono lenti, costosi da mantenere e i più soggetti a problemi (sez. 14): un singhiozzo ovunque, rete, tempistica, dipendenza, li fallisce e un fallimento non ti dice _dove_ è il problema. Quindi prenota E2E per una manciata di **viaggi critici** ("l'utente si registra -&gt; accede -&gt; effettua un ordine -&gt; il pagamento ha esito positivo"). Non testare i casi limite o ogni ramo qui, quelli appartengono ai test unitari veloci (sez. 4). E2E conferma che il sistema _si connette_; gli strati inferiori confermano che è _corretto_.
+
+<Callout type="info" title="Prove di fumo e test in produzione">
+Un cugino stretto è lo **smoke test**: un piccolo insieme di controlli E2E viene eseguito subito dopo l'implementazione per confermare che il sistema è attivo ("è `/health` verde? posso accedere?"), accoppiandosi naturalmente con le indagini sulla salute e le implementazioni del capitolo 21. I team maturi estendono questo con _test in produzione_: monitoraggio sintetico, analisi canary (sez 20 lì) e flag di funzionalità, perché alcune proprietà si rivelano solo sotto traffico reale.
+</Callout>
+
+## Copertura di prova
+
+La **Copertura** misura la quantità di codice eseguita dai test, in genere come percentuale di linee o rami eseguiti durante la suite. È utile come _torcia_ per trovare codice che non esegue alcun test, ma è pericolosamente facile da interpretare erroneamente come misura della _qualità_ del test. Non lo è. La copertura ti dice cosa è stato _eseguito_, mai cosa è stato _affermato_ in modo significativo.
+
+______
+
+● Vai ● Python
+
+```bash
+# Built into the toolchain, no extra dependency.
+go test -cover ./...                       # prints % per package
+
+go test -coverprofile=cover.out ./...      # write a detailed profile
+go tool cover -func=cover.out              # per-function breakdown
+go tool cover -html=cover.out              # open an annotated, line-by-line HTML view
+```
+
+```text
+# Via the coverage.py / pytest-cov plugin.
+pip install pytest-cov
+
+pytest --cov=app                           # coverage for the `app` package
+pytest --cov=app --cov-report=term-missing # show exactly which lines are UNcovered
+pytest --cov=app --cov-report=html         # browsable htmlcov/ report
+pytest --cov=app --cov-branch              # branch coverage, not just line
+```
+
+#### Copertura linea vs filiale
+
+**Copertura della linea** chiede "questa linea funzionava?" **Copertura delle filiali** pone la domanda più difficile: "è stata presa ciascuna _direzione_ di ciascuna decisione?" Un singolo test può colpire il 100% delle linee in un file `if` prendendo sempre e solo il ramo vero, il `else` il percorso non è eseguito e non è stato testato sebbene la copertura della linea sembri completa. La copertura delle filiali è il numero più onesto; lo preferisco.
+
+La copertura è un limite, non un obiettivo, e Goodhart morde
+
+Puoi raggiungere una copertura del 100% con test che non asseriscono _niente_, basta chiamare ogni funzione e non controllare alcuna eccezione. Completamente coperto, totalmente inutile. Nel momento in cui una _percentuale_ di copertura diventa un obiettivo, le persone la giocano con test privi di asserzioni (legge di Goodhart: una misura che diventa un obiettivo smette di essere una buona misura). Usa la copertura per trovare aree non testate che meritano attenzione; giudicare la qualità in base al fatto che i test affermino un comportamento significativo (sez. 3, sez. 20). Una copertura elevata con asserzioni deboli è una falsa fiducia.
+
+## Test traballanti
+
+Un **test instabile** a volte riesce e altre volte fallisce _senza alcuna modifica al codice_. La fragilità è corrosiva: addestra il team a ignorare le build rosse ("basta rieseguirlo"), e una volta che le persone smettono di fidarsi della suite, la suite è morta, una corsa verde non significa più nulla. I test inadeguati sono probabilmente peggiori dell’assenza di test, perché costano tempo ed erodono la fiducia che dà ai test il loro valore (sez. 1).
+
+| Causa di desquamazione | Correzione |
+| ----------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| **Ora/orologio**: "adesso", timeout, ore di sonno, limiti di data | Iniettare l'orologio; affermare intervalli non istanti esatti (sez. 17). Mai `sleep` "aspettare"; interrogare una condizione.  |
+| **Dipendenza dall'ordine dei test**: un test si basa sugli avanzi di un altro | Imposta e smonta ogni test nel proprio stato (sez. 9, sez. 15). Esegui in ordine casuale per stanarli. |
+| **Stato mutabile condiviso**: una riga DB globale, condivisa, un singleton | Isolare per test; evitare lo stato globale; utilizzare infissi nuovi.                                                |
+| **Concorrenza/gare**: goroutine, thread, timing asincrono | Sincronizza su segnali non sincronizzati; correre con il rilevatore di gare (`go test -race`).                         |
+| **Rete reale/API esterna**: latenza, limiti di velocità, tempi di inattività | Deridere il confine (sec 17); mantieni le chiamate reali a un set E2E piccolo e tollerante.                                 |
+| **Dati non ordinati**: iterazione della mappa, righe DB senza `ORDER BY`     | Ordina prima del confronto o asserisci l'appartenenza a un insieme e non una sequenza.                                            |
+
+La cura è il determinismo
+
+Ogni test instabile è un non determinismo nascosto, tempo, ordinamento, concorrenza o stato condiviso che trapelano. La soluzione è sempre quella di rimuovere la fonte della casualità: controllare l'orologio, isolare lo stato, sincronizzarsi sugli eventi invece che sulle sospensioni e interrompere la rete. **Messa in quarantena** un test instabile (contrassegna e salta dall'esecuzione del gating) solo come misura temporanea mentre trovi la vera causa, non coprirlo mai con una coperta "riprova fino al verde", che nasconde semplicemente il bug.
+
+## Infissi e fabbriche
+
+I test necessitano di dati e di uno stato iniziale noto, e il modo in cui li costruisci decide se la tua suite rimane leggibile o marcisce in una zuppa di configurazione. Due strumenti correlati: **fixtures** gestiscono _setup e smontare_ (il mondo in cui viene eseguito un test, una connessione DB, una directory temporanea, un client registrato) e **fabbriche** costruiscono _oggetti di test_ con valori predefiniti sensati in modo che ogni test indichi solo i campi che gli interessano effettivamente.
+
+______
+
+● Vai ● Python
+
+```go
+// Go favors explicit helpers over magic. t.Helper() keeps failure line numbers useful.
+// A "factory" with functional options: specify only the fields that matter to the test.
+func newUser(t *testing.T, opts ...func(*User)) User {
+    t.Helper()
+    u := User{ID: "u1", Email: "default@x.com", Active: true} // sensible defaults
+    for _, o := range opts { o(&u) }
+    return u
+}
+func withEmail(e string) func(*User) { return func(u *User) { u.Email = e } }
+
+// A "fixture" via t.Cleanup: setup returns the thing + auto-teardown.
+func newTempStore(t *testing.T) *Store {
+    t.Helper()
+    dir := t.TempDir()                 // auto-removed after the test
+    s := OpenStore(dir)
+    t.Cleanup(func() { s.Close() })    // teardown runs even if the test fails
+    return s
+}
+
+func TestSignup(t *testing.T) {
+    store := newTempStore(t)
+    u := newUser(t, withEmail("ada@x.com")) // only the relevant field is stated
+    _ = store.Save(u)
+    // ...assert...
+}
+```
+
+```python
+import pytest
+
+# pytest FIXTURES: setup before `yield`, teardown after. Injected by parameter name.
+@pytest.fixture
+def temp_store(tmp_path):           # tmp_path is a built-in fixture (auto-cleaned dir)
+    store = Store(tmp_path)
+    yield store                     # the test runs here
+    store.close()                   # teardown, runs even if the test fails
+
+# A FACTORY: defaults + overrides, so tests state only what they care about.
+def make_user(**overrides):
+    return User(**{"id": "u1", "email": "default@x.com", "active": True, **overrides})
+
+def test_signup(temp_store):
+    user = make_user(email="ada@x.com")   # only the relevant field is stated
+    temp_store.save(user)
+    # ...assert...
+
+# Libraries like factory_boy / model_bakery scale this up for complex object graphs.
+```
+
+Mantieni visibili i dati rilevanti
+
+Lo scopo delle fabbriche è nascondere la configurazione _irrilevante_, non nascondere i dati da cui dipende un test. Se un test afferma qualcosa su un utente premium, la parola "premium" dovrebbe apparire _in quel test_ (`make_user(tier="premium")`), non essere sepolto in un dispositivo condiviso a tre file di distanza. Un lettore dovrebbe comprendere la premessa di un test senza fare speleologia. Dispositivi eccessivamente condivisi e opachi (l '"ospite misterioso") rendono difficile diagnosticare i guasti e difficile fidarsi dei test.
+
+Parte V / Pratica e pipeline
+
+## TDD: Rosso/Verde/Refactoring
+
+**Sviluppo basato sui test** inverte il solito ordine: scrivi prima un test _fallito_, poi il codice minimo per superarlo, quindi pulisci, ripetendo in piccoli cicli. La disciplina è il famoso ciclo di tre battute: **Rosso** (scrivere un test, guardarlo fallire), **Verde** (farlo passare nel modo più semplice possibile), **Refactoring** (migliorare la progettazione mentre il test rimane verde). Scrivere il test prima ti costringe a definire il comportamento desiderato e un'interfaccia pulita _prima_ di essere coinvolto nell'implementazione.
+
+<Diagram caption="The TDD cycle">
+<svg viewBox="0 0 720 200" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Un ciclo di tre passaggi: scrivere un test fallito (rosso), farlo passare (verde), rifattorizzare, quindi ripetere"><circle cx="150" cy="100" r="56" fill="var(--dg-accent-border)" stroke="var(--dg-accent-2)" stroke-width="2"></circle><text x="150" y="96" font-size="13" font-weight="700" fill="var(--dg-accent-2)" text-anchor="middle">ROSSO</text><text x="150" y="114" class="mono" font-size="8.5" fill="var(--dg-accent-2)" text-anchor="middle">prima il test fallito</text><circle cx="360" cy="100" r="56" fill="var(--dg-ok-surface)" stroke="var(--dg-ok)" stroke-width="2"></circle><text x="360" y="96" font-size="13" font-weight="700" fill="var(--dg-ok)" text-anchor="middle">VERDE</text><text x="360" y="114" class="mono" font-size="8.5" fill="var(--dg-ok)" text-anchor="middle">passaggio più semplice</text><circle cx="570" cy="100" r="56" fill="var(--dg-warn-surface)" stroke="var(--dg-warn)" stroke-width="2"></circle><text x="570" y="96" font-size="12.5" font-weight="700" fill="var(--dg-warn)" text-anchor="middle">RAFFATTORE</text><text x="570" y="114" class="mono" font-size="8.5" fill="var(--dg-warn)" text-anchor="middle">pulito, rimani verde</text><defs><marker id="tda" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0 0 L7 3 L0 6 Z" fill="var(--dg-accent-2)"></path></marker></defs><path d="M208 90 H300" stroke="var(--dg-accent-2)" stroke-width="1.8" marker-end="url(#tda)"></path><path d="M418 90 H510" stroke="var(--dg-accent-2)" stroke-width="1.8" marker-end="url(#tda)"></path><path d="M566 158 C420 196 300 196 154 158" stroke="var(--dg-accent-2)" stroke-width="1.6" fill="none" marker-end="url(#tda)"></path><text x="360" y="186" class="serif" font-size="12" font-style="italic" fill="var(--dg-ink-2)" text-anchor="middle">ripeti, ogni ciclo aggiunge un piccolo comportamento completamente testato</text></svg>
+</Diagram>
+
+I reali vantaggi di TDD sono di secondo ordine: produce codice che è _testabile per costruzione_ (non puoi scrivere un'unità non testabile se il test è arrivato prima), ti mantiene concentrato su un piccolo comportamento alla volta e il passaggio di "refactoring" è sicuro proprio perché il test che hai appena scritto lo protegge. È una tecnica di _progettazione_ tanto quanto di sperimentazione.
+
+<Callout type="info" title="Uno strumento, non una religione">
+Il TDD brilla quando i requisiti sono chiari e la logica non è banale (parser, regole aziendali, algoritmi). Si adatta in modo strano quando stai _esplorando_, sviluppando un prototipo, disegnando un'interfaccia utente, sondando un'API sconosciuta, dove il design non è ancora noto. Molti eccellenti ingegneri scrivono i test immediatamente _dopo_ il codice anziché rigorosamente prima. Ciò che conta è che il comportamento risulti ben testato; test-first è un percorso efficace per raggiungere questo obiettivo, non l'unico valido.
+</Callout>
+
+## Tempo di simulazione, casualità e API esterne
+
+Tre fonti di test di naufragio del non determinismo se lasciate reali, l'orologio, il generatore casuale e la rete, e sono i soliti sospettati dietro l'instabilità (sezione 14). La cura per tutti e tre è la stessa: trasformare la dipendenza nascosta in una dipendenza _iniettata_ (sez. 6) in modo che il test la controlli.
+
+#### Tempo e casualità: iniettateli
+
+Codice che chiama `time.Now()` o `random()` direttamente non è testabile e instabile, il suo output cambia ad ogni esecuzione. Crea l'orologio e le dipendenze RNG che l'unità riceve, quindi passa un orologio fisso (restituisce sempre lo stesso istante) o un RNG seminato nei test. Ora "il token scade tra 1 ora" o "scegli un frammento casuale" è completamente deterministico e asseribile.
+
+#### HTTP esterno: stub il confine
+
+Non utilizzare mai una vera API di terze parti in un test di unità/integrazione, è lenta, instabile, con velocità limitata e potrebbe avere effetti collaterali. Entrambi gli ecosistemi ti consentono di intercettare HTTP localmente: Go's `httptest.Server` attiva un server falso a cui indichi il tuo cliente; Di Pitone `responses`/`respx` applicare una patch al livello HTTP per restituire risposte predefinite. (E ricorda la sezione 5: preferisci racchiudere l'API dietro la tua interfaccia in modo che la maggior parte dei test si burli di _quello_, riservando stub a livello HTTP per testare l'adattatore client stesso.)
+
+______
+
+● Vai ● Python
+
+```go
+// 1) Injected clock, deterministic time.
+type Clock interface{ Now() time.Time }
+type fixedClock struct{ t time.Time }
+func (f fixedClock) Now() time.Time { return f.t }
+
+func TestTokenExpiry(t *testing.T) {
+    clk := fixedClock{t: time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)} // frozen
+    tok := NewToken(clk, time.Hour)
+    if tok.ExpiresAt != clk.Now().Add(time.Hour) {
+        t.Error("expiry not computed from the injected clock")
+    }
+}
+
+// 2) Stub an external HTTP API with httptest.Server, no real network.
+func TestFetchRate(t *testing.T) {
+    srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+        w.Write([]byte(`{"usd_inr": 83.2}`)) // canned response
+    }))
+    defer srv.Close()
+
+    client := NewRatesClient(srv.URL) // point the client at the fake server's URL
+    rate, _ := client.USDINR()
+    if rate != 83.2 { t.Errorf("got %v", rate) }
+}
+```
+
+```python
+import responses
+from datetime import datetime, timezone
+
+# 1) Injected clock, deterministic time (freezegun is a popular alternative).
+def test_token_expiry():
+    frozen = datetime(2026, 1, 1, 12, 0, tzinfo=timezone.utc)
+    tok = make_token(now=lambda: frozen, ttl=3600)  # clock injected as a callable
+    assert tok.expires_at == frozen.timestamp() + 3600
+
+# 2) Stub external HTTP with `responses`, patches the HTTP layer, no real network.
+@responses.activate
+def test_fetch_rate():
+    responses.add(
+        responses.GET, "https://api.rates.com/usd-inr",
+        json={"usd_inr": 83.2}, status=200,           # canned response
+    )
+    client = RatesClient("https://api.rates.com")
+    assert client.usd_inr() == 83.2
+```
+
+Il determinismo non è negoziabile
+
+Un test deve produrre lo stesso risultato su ogni esecuzione, su ogni macchina, in qualsiasi ordine. Nell'istante in cui si insinua il tempo reale, la reale casualità o una vera rete, hai piantato un futuro traballante fallimento. Inietta e controlla tutti e tre, è la stessa cucitura DI del sec 6 applicata alle tre cose che cambiano da sole.
+
+## Test di prestazioni e carico
+
+I test funzionali dimostrano che il codice è _corretto_; i test sulle prestazioni dimostrano che è _abbastanza veloce_, un asse completamente diverso e che conta molto per le preoccupazioni di ridimensionamento dei capitoli 18-19. Due versioni distinte: **benchmark** (micro: quanto è veloce questa funzione/endpoint?) e **test di carico** (macro: come si comporta l'intero sistema con N utenti simultanei?).
+
+| Gentile | Domanda | Strumento |
+| --------------- | -------------------------------------------------------- | ----------------------------------------- |
+| **Parametro di riferimento** | Quanto velocemente/quante allocazioni per questo percorso di codice?      | Vai `testing.B`; Pitone `pytest-benchmark` |
+| **Test di carico** | Throughput e latenza in caso di traffico simultaneo sostenuto? | k6, Locusta, Gatling, vegeta |
+| **Test di stress** | Dove si rompe e come fallisce?               | stessi strumenti, hanno superato la capacità |
+| **Soak test** | Si degrada nel corso delle ore (perdite, frammentazione)?       | stessi strumenti, lunga durata |
+
+______
+
+● Vai ● Python
+
+```go
+// Benchmarks live beside tests; the tool tunes b.N until timing is stable.
+func BenchmarkParseEvent(b *testing.B) {
+    payload := []byte(`{"type":"click","ts":1717000000}`)
+    b.ReportAllocs()                 // also report allocations/op
+    for i := 0; i < b.N; i++ {       // the loop the framework times
+        _, _ = ParseEvent(payload)
+    }
+}
+
+// Run:  go test -bench=. -benchmem
+//   BenchmarkParseEvent-8   3142051   382 ns/op   96 B/op   2 allocs/op
+// Compare runs with `benchstat` to catch performance REGRESSIONS over time.
+```
+
+```python
+# pip install pytest-benchmark, the `benchmark` fixture times the callable.
+def test_parse_event_perf(benchmark):
+    payload = b'{"type":"click","ts":1717000000}'
+    result = benchmark(parse_event, payload)   # runs it many times, reports stats
+    assert result.type == "click"              # still assert correctness
+
+# Output reports min/mean/median/stddev; --benchmark-compare flags regressions.
+```
+
+```python title="load_test.js / a k6 load test (language-agnostic, hits the running service)"
+import http from 'k6/http';
+import { check } from 'k6';
+
+export const options = {
+  stages: [
+    { duration: '30s', target: 100 },  // ramp up to 100 virtual users
+    { duration: '1m',  target: 100 },  // hold
+    { duration: '30s', target: 0 },    // ramp down
+  ],
+  thresholds: {
+    http_req_duration: ['p(95)<300'],  // 95th-percentile latency must stay < 300ms
+    http_req_failed:   ['rate<0.01'],  // error rate must stay under 1%
+  },
+};
+export default function () {
+  const res = http.get('https://staging.example.com/api/v1/health');
+  check(res, { 'status 200': (r) => r.status === 200 });
+}
+# Run:  k6 run load_test.js, fails the build if a threshold is breached.
+```
+
+Misura i percentili rispetto a un obiettivo, non al tuo laptop
+
+Le medie mentono: una media di 50 ms può nascondere un p99 di 2 secondi che sta distruggendo gli utenti reali. Tieni sempre traccia della latenza della coda (p95/p99). Ed esegui test di carico su un ambiente di tipo produttivo, mai sulla tua macchina di sviluppo, e giudica i risultati rispetto a uno SLO esplicito (la soglia), non a un'atmosfera. Un benchmark o un test di carico senza un numero target è solo banalità.
+
+## Test in CI/CD
+
+Una suite di test ha valore solo se viene eseguita _automaticamente_, ad ogni modifica, come un cancello. È qui che i test incontrano la pipeline del capitolo 21 (sez. 19 lì): a ogni push, CI esegue i test e un errore **blocca l'unione o la distribuzione**. Lo scopo centrale del gradiente di velocità della piramide (sec 2) è fornire un feedback rapido qui, eseguire i test unitari in millisecondi su ogni commit, i test di integrazione/E2E più pesanti nella fase giusta.
+
+<Diagram caption="Tests as gates">
+<svg viewBox="0 0 720 150" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Fasi della pipeline: test lint e unitari su ogni push, test di integrazione su merge, E2E e test del fumo prima o dopo la distribuzione"><defs><marker id="cia" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0 0 L7 3 L0 6 Z" fill="var(--dg-accent-2)"></path></marker></defs><rect x="14" y="50" width="150" height="54" rx="10" fill="var(--dg-ok-surface)" stroke="var(--dg-ok)"></rect><text x="89" y="72" font-size="11" font-weight="700" fill="var(--dg-ok)" text-anchor="middle">ogni spinta</text><text x="89" y="90" class="mono" font-size="8.5" fill="var(--dg-ink-2)" text-anchor="middle">lanugine + unità (veloce)</text><path d="M166 77 H204" stroke="var(--dg-accent-2)" stroke-width="1.6" marker-end="url(#cia)"></path><rect x="206" y="50" width="150" height="54" rx="10" fill="var(--dg-warn-surface)" stroke="var(--dg-warn)"></rect><text x="281" y="72" font-size="11" font-weight="700" fill="var(--dg-warn)" text-anchor="middle">sulla fusione/PR</text><text x="281" y="90" class="mono" font-size="8.5" fill="var(--dg-ink-2)" text-anchor="middle">integrazione + DB</text><path d="M358 77 H396" stroke="var(--dg-accent-2)" stroke-width="1.6" marker-end="url(#cia)"></path><rect x="398" y="50" width="150" height="54" rx="10" fill="var(--dg-accent-surface)" stroke="var(--dg-accent)"></rect><text x="473" y="72" font-size="11" font-weight="700" fill="var(--dg-accent-2)" text-anchor="middle">pre-distribuzione</text><text x="473" y="90" class="mono" font-size="8.5" fill="var(--dg-ink-2)" text-anchor="middle">E2E (percorsi critici)</text><path d="M550 77 H588" stroke="var(--dg-accent-2)" stroke-width="1.6" marker-end="url(#cia)"></path><rect x="590" y="50" width="116" height="54" rx="10" fill="var(--dg-ok)"></rect><text x="648" y="72" font-size="11" font-weight="700" fill="var(--dg-on-accent)" text-anchor="middle">post-distribuzione</text><text x="648" y="90" class="mono" font-size="8.5" fill="var(--dg-on-accent)" text-anchor="middle">fumo (sez 12)</text><text x="360" y="134" class="serif" font-size="12" font-style="italic" fill="var(--dg-ink-2)" text-anchor="middle">Qualsiasi cancello rosso ferma la linea, il guasto viene colto prima che raggiunga gli utenti.</text></svg>
+</Diagram>
+
+```yaml title=".github/workflows/test.yaml / the test gate"
+name: tests
+on: [push, pull_request]
+jobs:
+  unit:                          # fast, runs on every push
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: go test -race -cover ./...          # Go: race detector + coverage
+      # - run: pytest -m "not integration" --cov  # Python: skip slow tests here
+
+  integration:                   # heavier, real DB via services / testcontainers
+    runs-on: ubuntu-latest
+    needs: unit                  # only if unit tests passed
+    services:
+      postgres:
+        image: postgres:16
+        env: { POSTGRES_PASSWORD: p }
+        ports: ["5432:5432"]
+    steps:
+      - uses: actions/checkout@v4
+      - run: go test -tags=integration ./...     # or: pytest -m integration
+# A failed job fails the check -> branch protection blocks the merge.
+```
+
+<Callout type="info" title="Rendi la suite veloce e parallela">
+Se i test sono lenti, le persone li saltano, quindi la velocità è una caratteristica. Esegui test in parallelo (Go lo fa tra i pacchetti per impostazione predefinita e all'interno di un test tramite `t.Parallel()`; pytest via `pytest-xdist`), dividere il fast unit gate dalle fasi di integrazione lenta/E2E e dalle dipendenze della cache. Una suite che ritorna in meno di pochi minuti viene eseguita; uno che ne richiede trenta viene ignorato e un test non eseguito non protegge nulla.
+</Callout>
+
+## Una strategia di test
+
+I test hanno un costo da scrivere, eseguire e mantenere man mano che il codice cambia, quindi l'obiettivo non è mai "testare tutto" ma **massima sicurezza per unità di sforzo**. Una strategia coerente è principalmente un insieme di giudizi su _cosa_ testare, a quale livello e cosa lasciare stare.
+
+#### Cosa testare pesantemente
+
+- **Logica e regole di business**: prezzi, convalida, macchine a stati, qualsiasi cosa con filiali e casi limite. Unit test economici e veloci; il profitto più alto (sez. 4, sez. 7).
+- **Bug che hai corretto**: ogni correzione riceve un test di regressione quindi non può restituire (sec 1).
+- **Percorsi critici e denaro**: autenticazione, pagamenti e integrità dei dati ottengono copertura a più livelli, incluso un sottile E2E (sez. 12).
+- **Concimi di integrazione**: le tue query, la serializzazione e i contratti tra servizi (sez. 8-11), dove si nascondono i bug sottili.
+
+#### Cosa testare leggermente o per niente
+
+- **Codice banale**: getter semplici, colla per framework, codice generato. Metterli alla prova è uno sforzo senza intuizione.
+- **Librerie di terze parti**: presumono che funzionino; testa il _tuo_ utilizzo di essi, non i loro componenti interni (sez. 5).
+- **Dettagli di implementazione**: aiutanti privati e sequenze esatte delle chiamate. Testare il comportamento osservabile in modo che i refactoring non causino errori spuri.
+
+La regola d'oro: testare il comportamento, non l'implementazione
+
+L'unico principio che separa una suite che _aiuta_ da una che _fa male_: affermare _cosa fa il codice_ (i suoi input osservabili-&gt;output ed effetti collaterali), mai _come lo fa_ internamente. I test incentrati sul comportamento sopravvivono al refactoring, diventano verdi finché vale il contratto, che è esattamente la fiducia nel cambiamento che ha giustificato i test in primo luogo (sez. 1). I test accoppiati all'implementazione si interrompono a ogni ristrutturazione, penalizzano i miglioramenti e vengono lentamente eliminati. Scrivi test per i quali il tuo sé futuro ti ringrazierà, non imprecare.
+
+## Cheat-Sheet
+
+L'intero manuale compresso in ciò che raggiungi sotto pressione.
+
+| Concetto | Una riga |
+| ------------------ | ------------------------------------------------------------------------------------- |
+| Perché testare | Fiducia nel cambiamento, specifiche eseguibili, rete di regressione, feedback rapido.                 |
+| Piramide | Molte unità (veloci) / qualche integrazione / pochi E2E (lenti). Non invertirlo.                |
+| AAA | Organizza, Agisci, Asserisci, un comportamento per test, nome descrittivo.                        |
+| Prova unitaria | Un'unità isolata, nessun I/O, millisecondi, precisa.                                 |
+| Prova raddoppia | Falso / Stub / Spia / Finto / Falso. Preferisci la verifica dello stato rispetto alla verifica dell'interazione.         |
+| Non prendere in giro | Ciò che non possiedi, avvolgilo dietro la tua interfaccia e deridilo.                  |
+| DI | Iniettare collaboratori -&gt; la cucitura in cui si inserisce un doppio. Non testabile = odore di design.  |
+| Tabella/parametrizzare | Un corpo di prova, molti casi nominati, una fitta copertura di casi limite.                            |
+| Integrazione | DB/dip reali collegati insieme, rileva bug SQL, mappatura e serializzazione.                |
+| DB reale | Testcontainer: motore vero, usa e getta, isolato. Non SQLite per Postgres.            |
+| Test HTTP | `httptest` / `TestClient`, gestori di unità in corso, nessun socket.                      |
+| Prova contrattuale | Verificare l'accordo fornitore/consumatore sull'interfaccia, senza eseguire entrambi (Pact, buf).    |
+| E2E | Intero sistema tramite interfaccia reale, solo viaggi critici; prova del fumo dopo la distribuzione.     |
+| Copertura | Trova codice non testato; non una misura di qualità. Preferisci il ramo; mai un bersaglio (Goodhart). |
+| Traballante | Non determinismo: tempo, ordine, stato condiviso, concorrenza, rete. Cura = determinismo. |
+| Impianti/stabilimenti | Gestisci configurazione/smontaggio e crea dati con le impostazioni predefinite; mantenere visibili i dati rilevanti.         |
+| TDD | Rosso -&gt; Verde -&gt; Refactoring. Uno strumento di progettazione; utilizzare dove si adatta, non dogmaticamente.         |
+| Determinismo | Iniettare l'orologio, seminare l'RNG, interrompere la rete, controllarli tutti e tre.                  |
+| Perf | Benchmark (micro) + test di carico (macro). Traccia p95/p99 rispetto a uno SLO, non le medie.       |
+| Porta CI | I test vengono eseguiti su ogni push e blocco di unione/distribuzione. Mantienili veloci e paralleli.            |
+| Strategia | Fiducia per sforzo. Prova logica, bug, denaro, cuciture; salta curiosità e dettagli interni.       |
+| Regola d'oro | **Comportamento del test, non implementazione**: sopravvive al refactoring.                          |
+
+**L'intero argomento in un fiato:** i test automatizzati esistono per darti la sicurezza necessaria per modificare il codice (sec 1) e la forma strategica è una piramide, molti test unitari veloci, meno integrazione, un sottile strato E2E (sec 2). Ogni test è Arrange-Act-Assert su un comportamento (sez. 3). I test unitari isolano un'unità (sez 4) utilizzando test doppi (sez 5) resi possibili dall'iniezione di dipendenza (sez 6), con casi guidati da tabelle e parametrizzati per una copertura densa (sez 7). I test di integrazione collegano insieme le dipendenze reali (sez. 8), un database reale tramite testcontainer (sez. 9), gestori tramite client in-process (sez. 10) e un accordo tra servizi tramite test contrattuali (sez. 11). E2E copre solo i viaggi critici (sez. 12); la copertura è una torcia e non un obiettivo (sez. 13); la desquamazione è il non determinismo da eliminare (sez 14); e gli impianti e le fabbriche mantengono l'allestimento pulito (sez. 15). TDD guida la progettazione in cicli rosso/verde/refactoring (sec 16), il determinismo deriva dall'iniezione di tempo, casualità e rete (sec 17), le prestazioni sono il proprio asse di benchmark e test di carico rispetto a uno SLO (sec 18) e la suite si guadagna da vivere solo eseguendo come un gate veloce in CI/CD (sec 19). Soprattutto: comportamento del test, non implementazione (sez. 20).
+
+Radicato in movimento `testing` documenti e documenti pytest / Testcontainers / letteratura sulla piramide dei test (Cohn, Fowler) / Go 1.22+ / Python 3.11+ esempi.
+
+Backend dai Primi Principi / Capitolo 22 / Test. Il codice è destinato a Go 1.22+ e Python 3.11+.

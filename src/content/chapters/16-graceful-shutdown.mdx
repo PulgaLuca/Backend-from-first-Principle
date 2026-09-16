@@ -1,0 +1,684 @@
+---
+order: 16
+title: "Spegnimento grazioso"
+navTitle: "Spegnimento grazioso"
+summary: "Insegnare le buone maniere al tuo backend, come finire il lavoro in corso, ripulirlo e chiudere educatamente la porta invece di sbatterla."
+readingTime: "2-3 ore"
+keywords:
+  - "graceful"
+  - "shutdown"
+  - "signals"
+  - "sigterm"
+  - "sigint"
+  - "sigkill"
+  - "process"
+  - "lifecycle"
+---
+## Lo scenario
+
+Immaginiamo uno scenario molto realistico. Stai elaborando una **transazione di pagamento critica** e all'improvviso il tuo server deve essere riavviato per una distribuzione. Qualcuno ha inviato qualcosa all'ambiente di produzione e il tuo server deve distribuirsi.
+
+### La distribuzione senza tempi di inattività non elimina il problema
+
+Naturalmente, disponiamo di tecniche come l'implementazione senza tempi di inattività che garantisce che il nostro server esistente non si interrompa prima che il nostro nuovo server (il server con il nostro nuovo codice) si attivi e sia pronto a ricevere traffico. Quei meccanismi ci sono.
+
+Ma ecco il problema: a un certo punto, quando il nostro nuovo server è pronto per andare online e a ricevere traffico, **il nostro vecchio server deve spegnersi**. Deve smettere di ricevere traffico e la transizione avverrà al nuovo server. Stiamo parlando di quel momento critico in cui ti trovi nel bel mezzo di una transazione.
+
+<Callout type="info" title="La questione dei pagamenti nell’e-commerce">
+Supponiamo che tu stia effettuando una transazione di e-commerce, acquistando qualcosa da Amazon o Flipkart e che il server Amazon/Flipkart debba essere riavviato per una distribuzione. La domanda diventa:\
+\
+**1.** Cosa succede esattamente a quel pagamento? Si perde nel mondo digitale?\
+**2.** Il cliente (tu) viene **addebitato due volte** a causa di qualche tipo di condizione di competizione?\
+\
+Questi sono scenari a cui devi pensare come ingegnere di backend.
+</Callout>
+
+Questo non è un problema nuovo. Esiste dall'inizio dei server e dei backend. E ovviamente abbiamo già una soluzione, quella soluzione si chiama grazioso shutdown, ed è esattamente come suona il nome: vogliamo fermare il nostro server _graziatamente_. Non vogliamo fermarci bruscamente o all'improvviso. Questa è l'idea.
+
+<Callout type="ok" title="Perché lo spegnimento graduale è importante">
+Preoccuparsi dell'arresto regolare offre alla tua applicazione un'esperienza utente molto positiva ed evita problemi come il **corruzione dei dati**. Se sei nel mezzo di un'operazione di pagamento, ti permette di evitare:\
+\
+\- Doppio addebito al cliente\
+\- La transazione viene persa\
+\- Dovere elaborare i rimborsi per addebiti non riusciti/duplicati
+</Callout>
+
+## Cos'è lo spegnimento grazioso?
+
+Vogliamo insegnare al nostro backend le buone maniere, non possiamo semplicemente sbattere la porta quando è il momento di andarsene.
+
+Se semplifichiamo eccessivamente cosa significa "arresto regolare" per il nostro server, possiamo sostanzialmente dire che vogliamo insegnare al nostro server, insegnare al nostro backend, le **buone maniere**. Non può interrompersi bruscamente quando si trova nel mezzo di una transizione verso una nuova distribuzione. Deve eseguire alcuni tipi di passaggi.
+
+### L'analogia delle "buone maniere".
+
+Pensalo come se avessi degli ospiti. Quando sono le 21:00 ed è ora di andare a dormire, non puoi semplicemente spingere i tuoi ospiti fuori dalla porta e sbattergli la porta in faccia. Ci sono dei passaggi che devi eseguire. Allo stesso modo, il tuo backend educatamente:
+
+- **Termina le conversazioni in corso**: completa qualunque cosa stia attualmente facendo
+- **Saluta tutti gli ospiti**: chiude correttamente le interazioni esistenti
+- **Pulisce dopo se stesso**: riordina le risorse che stava utilizzando
+- **Poi finalmente chiude la porta**: solo allora esce effettivamente
+
+Questa è l'arte e la scienza di rendere le tue applicazioni backend quanto più educate ed efficienti possibile. Il resto di questo capitolo getta le basi: _perché_ lo facciamo, i concetti circostanti e come viene effettivamente implementato.
+
+## Gestione del ciclo di vita del processo
+
+Il primo concetto da capire. Il tuo backend è un'applicazione che viene eseguita come un processo in una sorta di server, in una sorta di computer. Questo è importante: **tutto ciò che viene eseguito in un sistema operativo viene eseguito come un processo**.
+
+Se hai familiarità con i concetti del sistema operativo, questo avrà senso. In caso contrario, non è un grosso problema, impara semplicemente il termine: _process_. Qualunque cosa esegui, viene eseguita all'interno di un processo.
+
+### Ogni processo ha un ciclo di vita
+
+Come tutti gli esseri viventi, ogni processo ha un ciclo di vita, quando inizia, come inizia, quando finisce e come finisce. In un certo senso:
+
+<Diagram caption="Fig 1.1: The three phases of a process lifecycle: born -&gt; living -&gt; dies">
+<svg width="100%" viewBox="0 0 720 110" role="img"><title>Ciclo di vita del processo in tre fasi</title><defs><marker id="lc" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path></marker></defs><rect x="40" y="35" width="180" height="50" rx="8" fill="var(--dg-ok-surface)" stroke="var(--dg-ok)" stroke-width="0.8"></rect><text x="130" y="56" text-anchor="middle" font-size="13" font-weight="600" fill="var(--dg-ink)">Nato</text><text x="130" y="73" text-anchor="middle" font-size="10" fill="var(--dg-ok)">il processo inizia</text><line x1="222" y1="60" x2="258" y2="60" stroke="var(--dg-ink-3)" stroke-width="1.2" marker-end="url(#lc)"></line><rect x="260" y="35" width="180" height="50" rx="8" fill="var(--dg-warn-surface)" stroke="var(--dg-warn)" stroke-width="0.8"></rect><text x="350" y="56" text-anchor="middle" font-size="13" font-weight="600" fill="var(--dg-ink)">Vivere</text><text x="350" y="73" text-anchor="middle" font-size="10" fill="var(--dg-warn)">processo in esecuzione</text><line x1="442" y1="60" x2="478" y2="60" stroke="var(--dg-ink-3)" stroke-width="1.2" marker-end="url(#lc)"></line><rect x="480" y="35" width="180" height="50" rx="8" fill="var(--dg-accent-surface)" stroke="var(--dg-accent)" stroke-width="0.8"></rect><text x="570" y="56" text-anchor="middle" font-size="13" font-weight="600" fill="var(--dg-ink)">Muore</text><text x="570" y="73" text-anchor="middle" font-size="10" fill="var(--dg-accent)">processo terminato</text></svg>
+</Diagram>
+
+Essi **nascono** quando il processo inizia, **vivono** durante l'esecuzione del processo e **muoiono** quando il processo termina. Tutta questa faccenda è chiamata il ciclo di vita di un processo. Comprenderlo è essenziale perché è strettamente connesso al modo in cui viene implementato lo spegnimento graduale.
+
+### Il sistema operativo non si limita a staccare la spina
+
+Quando il tuo sistema operativo decide che è ora che l'applicazione smetta di funzionare, **non** si limita a staccare la spina o ad interrompere il processo. Ne consegue un **protocollo di comunicazione stabilito**: come comunicare con il processo per dire "è ora che ti fermi, seguiremo questi passaggi e poi lo fermeremo".
+
+Puoi immaginarlo come una conversazione tra il tuo sistema operativo e la tua applicazione (che è in esecuzione all'interno di un processo nel tuo sistema operativo):
+
+<Callout type="info" title="La conversazione (semplificata)">
+**OS:** "Ehi, è ora che ti fermi."\
+**Applicazione:** "Okay, dammi qualche secondo (realisticamente), poi mi fermerò, oppure puoi fermarmi tu."\
+\
+Naturalmente questa conversazione non avviene tramite testo, stiamo parlando di programmi che non capiscono il testo. L'intera comunicazione avviene attraverso un concetto chiamato **segnali**.
+</Callout>
+
+## Segnali e comunicazione tra processi
+
+I segnali sono un concetto importante nei **sistemi operativi Unix**. Quando diciamo Unix intendiamo tutti i sistemi operativi Linux (Arch, Ubuntu, ecc.) e anche i Mac, i Mac hanno avuto origine da un core Unix, un kernel Unix.
+
+<Callout type="ok" title="Perché Linux è importante per i server">
+Principalmente quando parliamo di server, intendiamo solo Linux, perché il 99% delle volte, ogni volta che distribuisci la tua applicazione a un provider cloud, seleziona un sistema operativo Linux e distribuisce lì la tua applicazione. Non vedrai mai Windows tranne che per alcuni casi d'uso specializzati come Windows Server. Per l'implementazione dei server utilizziamo prevalentemente sistemi operativi basati su Linux.
+</Callout>
+
+### I segnali vengono utilizzati per IPC
+
+I sistemi operativi Unix hanno questo concetto chiamato segnali, che viene utilizzato per IPC (Inter-Process Communication). In parole povere, IPC è una tecnica mediante la quale due processi possono comunicare tra loro utilizzando un protocollo stabilito (di cui non devi preoccuparti delle parti interne).
+
+### Come funzionano i gestori
+
+La tua applicazione viene eseguita all'interno di un processo e **registra alcuni gestori**. Cosa intendiamo per gestori?
+
+I gestori sono fondamentalmente codice che:
+
+- Aspetta e corre continuamente dietro le quinte
+- Sta aspettando qualche tipo di comunicazione, qualche tipo di **segnale**: dal sistema operativo
+- Rileva ogni volta che arrivano questi segnali e poi fa qualcosa (pulizia, richieste di finitura, ecc.)
+
+Questi gestori essenzialmente dicono al tuo sistema operativo: _"Quando vuoi che mi fermi, inviami questo messaggio specifico e lo gestirò in modo appropriato. Mi fermerò utilizzando protocolli e passaggi predefiniti."_ Non puoi semplicemente dire "stop", è testo leggibile dall'uomo. Deve essere un segnale specifico.
+
+<Diagram caption="Fig 2.1: The OS sends a signal; the application's registered handler detects it and runs the shutdown steps">
+<svg width="100%" viewBox="0 0 720 160" role="img"><title>Comunicazione dal sistema operativo al gestore del segnale dell'applicazione</title><defs><marker id="sg" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path></marker></defs><rect x="30" y="50" width="170" height="60" rx="8" fill="var(--dg-warn-surface)" stroke="var(--dg-warn)" stroke-width="0.8"></rect><text x="115" y="76" text-anchor="middle" font-size="13" font-weight="600" fill="var(--dg-ink)">Sistema operativo</text><text x="115" y="93" text-anchor="middle" font-size="10" fill="var(--dg-warn)">invia il segnale</text><rect x="300" y="25" width="380" height="115" rx="10" fill="var(--dg-paper)" stroke="var(--dg-ink-2)" stroke-width="0.8" stroke-dasharray="5 4"></rect><text x="490" y="45" text-anchor="middle" font-size="11" fill="var(--dg-ink-2)" font-style="italic">Processo</text><rect x="330" y="58" width="150" height="56" rx="8" fill="var(--dg-ok-surface)" stroke="var(--dg-ok)" stroke-width="0.8"></rect><text x="405" y="82" text-anchor="middle" font-size="12" font-weight="600" fill="var(--dg-ink)">Applicazione</text><text x="405" y="98" text-anchor="middle" font-size="10" fill="var(--dg-ok)">il tuo back-end</text><rect x="500" y="58" width="160" height="56" rx="8" fill="var(--dg-accent-surface)" stroke="var(--dg-accent)" stroke-width="0.8"></rect><text x="580" y="82" text-anchor="middle" font-size="12" font-weight="600" fill="var(--dg-ink)">Gestore del segnale</text><text x="580" y="98" text-anchor="middle" font-size="10" fill="var(--dg-accent)">aspetta + reagisce</text><line x1="200" y1="80" x2="328" y2="86" stroke="var(--dg-ink-3)" stroke-width="1.2" marker-end="url(#sg)"></line><text x="262" y="72" text-anchor="middle" font-size="9" fill="var(--dg-ink-3)">SIGTERM</text><line x1="480" y1="86" x2="498" y2="86" stroke="var(--dg-ok)" stroke-width="1.2" marker-end="url(#sg)"></line><text x="490" y="135" text-anchor="middle" font-size="10" fill="var(--dg-ink-2)" font-style="italic">il gestore esegue la pulizia e termina il lavoro, quindi il processo esce</text></svg>
+</Diagram>
+
+### I tre segnali
+
+Il prefisso `SIG` in tutti questi significa semplicemente **segnale**. La seconda parte è il comando vero e proprio. Ci sono tre segnali a cui teniamo:
+
+### 4.1: SIGTERM (Terminare)
+
+`SIG` significa segnale, `TERM` significa terminare. SIGTERM è un **modo cortese** con cui il tuo sistema operativo chiede alla tua applicazione di spegnersi. Non è un modo estremo, è solo una spintarella.
+
+<Callout type="info" title="L'analogia del colpo di spalla">
+Immagina di stare in piedi e qualcuno arriva da dietro e ti colpisce delicatamente la spalla, "ehi, scusami, potresti finire e andartene?" Questo è SIGTERM. È una richiesta molto gentile e, per questo motivo, il tuo backend ha l'**opportunità di completare ciò che sta già facendo**. Non è necessario che parta in quel momento esatto, ha una finestra di pochi secondi.
+</Callout>
+
+Cosa potrebbe fare il tuo backend quando riceve SIGTERM? Dato che stiamo parlando di un backend HTTP, potrebbe trattarsi di **elaborare richieste**: questa è la cosa principale che fa il tuo backend. Il tuo client (front-end, app Web, estensione Chrome, qualunque cosa) invia richieste HTTP e il tuo back-end le elabora e restituisce risposte.
+
+In un momento casuale, il tuo backend potrebbe elaborare 10-12 richieste o, se la tua applicazione è abbastanza grande, centinaia o addirittura 500-600 richieste contemporaneamente. Quando riceve un segnale SIGTERM, è il momento di eseguire questi tre passaggi:
+
+<Diagram caption="Fig 2.2: The three SIGTERM steps: finish requests -&gt; clean up -&gt; exit">
+<svg width="100%" viewBox="0 0 720 100" role="img"><title>SIGTERM tre passi</title><defs><marker id="st" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path></marker></defs><rect x="30" y="30" width="190" height="48" rx="8" fill="var(--dg-ok-surface)" stroke="var(--dg-ok)" stroke-width="0.8"></rect><text x="125" y="50" text-anchor="middle" font-size="12" font-weight="600" fill="var(--dg-ink)">1. Completa le richieste esistenti</text><text x="125" y="66" text-anchor="middle" font-size="10" fill="var(--dg-ok)">completare il lavoro in volo</text><line x1="222" y1="54" x2="248" y2="54" stroke="var(--dg-ink-3)" stroke-width="1.2" marker-end="url(#st)"></line><rect x="250" y="30" width="190" height="48" rx="8" fill="var(--dg-warn-surface)" stroke="var(--dg-warn)" stroke-width="0.8"></rect><text x="345" y="50" text-anchor="middle" font-size="12" font-weight="600" fill="var(--dg-ink)">2. Pulisci le risorse</text><text x="345" y="66" text-anchor="middle" font-size="10" fill="var(--dg-warn)">DB, file, connessioni</text><line x1="442" y1="54" x2="468" y2="54" stroke="var(--dg-ink-3)" stroke-width="1.2" marker-end="url(#st)"></line><rect x="470" y="30" width="190" height="48" rx="8" fill="var(--dg-accent-surface)" stroke="var(--dg-accent)" stroke-width="0.8"></rect><text x="565" y="50" text-anchor="middle" font-size="12" font-weight="600" fill="var(--dg-ink)">3. Esci</text><text x="565" y="66" text-anchor="middle" font-size="10" fill="var(--dg-accent)">chiudere la porta</text></svg>
+</Diagram>
+
+#### Chi utilizza SIGTERM?
+
+SIGTERM è utilizzato principalmente da **sistemi di distribuzione, gestori di processi o piattaforme di orchestrazione**: praticamente qualsiasi sistema stabilito per la gestione del processo:
+
+- **Kubernetes**: orchestrazione dei contenitori
+- **systemd**: gestore dei servizi Linux
+- **PM2**: gestore del processo Node.js
+
+Questi sistemi e strumenti utilizzano SIGTERM per consentire alla tua applicazione di completare correttamente qualsiasi cosa stia facendo, ripulire e uscire con garbo.
+
+### 4.2: SIGINT (interruzione)
+
+`SIG` significa segnale, `INT` significa interrompere. Il caso d'uso più famoso di questo segnale, che quasi sicuramente hai utilizzato come sviluppatore, è **Ctrl + C**.
+
+Se hai lavorato con applicazioni da riga di comando o basate su terminale, hai utilizzato questo, alcuni processi o attività sono in esecuzione e se desideri chiuderli bruscamente, premi `Ctrl + C` e quel processo viene immediatamente interrotto.
+
+<Callout type="ok" title="Demo dal vivo dalla conferenza">
+Nella conferenza, un backend basato su Go era in esecuzione localmente, pronto ad accettare richieste. Premendo `Ctrl + C` sulla tastiera ha registrato: _"è stato ricevuto un segnale e il tipo di segnale è un segnale di interruzione."_ Poiché è stato implementato lo spegnimento regolare, l'app ha registrato ogni passaggio allo spegnimento, anziché morire all'istante.
+</Callout>
+
+SIGINT richiede che un **utente/sviluppatore prema un tasto** (Ctrl + C utilizzando una tastiera). Pertanto viene utilizzato principalmente durante gli ambienti di sviluppo ed è anche chiamato arresto avviato dall'utente. Nella comunicazione da processo a processo, SIGINT normalmente non viene utilizzato, poiché richiede la pressione di un tasto.
+
+#### Gestire SIGINT allo stesso modo di SIGTERM
+
+Praticamente in tutti i casi, vuoi gestire SIGINT nello **stesso modo** in cui gestisci SIGTERM. Se ci pensi, ha senso:
+
+| Segnale | In genere avviato da | Contesto di esempio |
+| ------- | ---------------------- | ------------------------------------------------------------------ |
+| SIGINT | Un essere umano (pressione del tasto) | Lo sviluppatore preme Ctrl+C localmente per arrestare il server di sviluppo |
+| SIGTERM | Un programma | PM2 su un'istanza AWS EC2 che segnala al backend distribuito di arrestare |
+
+Non importa se il tuo backend è in esecuzione in un ambiente di sviluppo e lo interrompi con Ctrl + C, anziché in esecuzione all'interno di un'istanza AWS EC2 gestita da PM2 (un gestore di processi) che invia un SIGTERM. In entrambi i casi, l'**intenzione è la stessa**: vogliamo chiudere. E vogliamo chiudere in modo pulito e aggraziato. Ciò che conta è l’intenzione, non se un essere umano o un programma l’ha avviata.
+
+### 4.3: SIGKILL (L'opzione nucleare)
+
+`SIG` significa segnale, `KILL` è il comando vero e proprio, ed è esattamente come sembra. Vogliamo **uccidere istantaneamente l'applicazione**.
+
+<Callout type="info" title="SIGKILL non può essere catturato o ignorato">
+La cosa interessante (e pericolosa) di SIGKILL è che **non può essere catturato** e **non può essere ignorato**:\
+\
+**Non può essere catturato**: la tua applicazione non può registrare un gestore che esegue la pulizia quando riceve SIGKILL. All'applicazione semplicemente non viene concessa la capacità/autorizzazione per rilevarla.\
+\
+**Non può essere ignorato**: non puoi dire "poiché non sono riuscito a rilevarlo, lo ignorerò e non mi fermerò". Nemmeno questo accade.
+</Callout>
+
+Se alla tua applicazione viene inviato un SIGKILL, non sarà in grado di rilevarlo e dovrà interrompersi in quell'esatto momento. Non succede nient'altro, tutto si ferma. Ecco perché si chiama segnale di uccisione.
+
+<Callout type="ok" title="L'analogia del staccare la spina">
+Immagina la differenza tra due modi per spegnere il computer:\
+\
+**Graceful (SIGTERM/SIGINT):** Facendo clic sull'icona del sistema -&gt; facendo clic su "Arresta il sistema" -&gt; il sistema operativo chiude le app correttamente.\
+\
+**SIGKILL:** Andare direttamente alla presa di corrente e **staccarla**. Il tuo computer semplicemente muore. Nessuna pulizia, nessun addio.
+</Callout>
+
+### Perché questo rende importante lo spegnimento regolare
+
+Ecco la catena critica di conseguenze. I **segnali cortesi** sono SIGTERM e SIGINT, questi ti consentono di finire qualunque cosa tu stia facendo, ripulire e uscire con garbo. Se **non rispetti** i segnali educati, alla fine _riceverai_ un SIGKILL. Dovrai fermarti e non avrai nemmeno l'opportunità di ripulirti.
+
+<Diagram caption="Fig 2.3: Ignore the polite signals and the OS escalates to SIGKILL, which gives you no chance to clean up">
+<svg width="100%" viewBox="0 0 720 130" role="img"><title>Escalation del segnale da educato a forzato</title><defs><marker id="es" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path></marker></defs><rect x="30" y="40" width="240" height="56" rx="8" fill="var(--dg-ok-surface)" stroke="var(--dg-ok)" stroke-width="0.8"></rect><text x="150" y="63" text-anchor="middle" font-size="12" font-weight="600" fill="var(--dg-ink)">Gentile: SIGTERM / SIGINT</text><text x="150" y="80" text-anchor="middle" font-size="10" fill="var(--dg-ok)">finestra da finire + pulire</text><text x="350" y="60" text-anchor="middle" font-size="10" fill="var(--dg-accent)" font-style="italic">se ignorato /</text><text x="350" y="74" text-anchor="middle" font-size="10" fill="var(--dg-accent)" font-style="italic">timeout superato</text><line x1="272" y1="68" x2="428" y2="68" stroke="var(--dg-accent)" stroke-width="1.2" marker-end="url(#es)" stroke-dasharray="5 3"></line><rect x="430" y="40" width="240" height="56" rx="8" fill="var(--dg-accent-surface)" stroke="var(--dg-accent)" stroke-width="1.2"></rect><text x="550" y="63" text-anchor="middle" font-size="12" font-weight="600" fill="var(--dg-accent)">Forzato: SIGKILL</text><text x="550" y="80" text-anchor="middle" font-size="10" fill="var(--dg-accent)">arresto immediato, nessuna pulizia</text></svg>
+</Diagram>
+
+Questo è il motivo principale per cui lo spegnimento graduale è un concetto importante: è la tua occasione per gestire lo spegnimento _prima_ che il sistema operativo ricorra all'opzione nucleare.
+
+## Connessione Drenante
+
+Ora approfondiamo le due cose importanti che accadono durante un arresto regolare: **completamento delle richieste esistenti** (questa sezione) e **pulizia delle risorse** (sezione successiva). La prima parte importante è fermare le richieste al volo.
+
+### Cosa sono le richieste al volo?
+
+Il tuo server HTTP elabora più richieste contemporaneamente. Quando è il momento di fermare il tuo server, è possibile che il tuo backend stia già elaborando un numero di richieste, 10, 12, centinaia o migliaia a seconda della scala. Le richieste già in elaborazione in quel momento sono le richieste al volo (in volo).
+
+### L'analogia del ristorante
+
+Immagina di essere andato in un ristorante con gli amici e che il ristorante debba chiudere (sono le 22:30-23 o per qualche altro motivo). Che succede? I proprietari **non possono** semplicemente spegnere tutte le luci e buttarti fuori. Invece:
+
+<Diagram caption="Fig 3.1: Restaurant closing maps directly onto connection draining">
+<svg width="100%" viewBox="0 0 720 110" role="img"><title>Analogia di chiusura del ristorante in tre passaggi</title><defs><marker id="rs" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path></marker></defs><rect x="20" y="32" width="205" height="50" rx="8" fill="var(--dg-accent-surface)" stroke="var(--dg-accent)" stroke-width="0.8"></rect><text x="122" y="52" text-anchor="middle" font-size="12" font-weight="600" fill="var(--dg-ink)">1. Blocca nuovi clienti</text><text x="122" y="68" text-anchor="middle" font-size="10" fill="var(--dg-accent)">-&gt; smetti di accettare nuovi collegamenti</text><line x1="227" y1="57" x2="251" y2="57" stroke="var(--dg-ink-3)" stroke-width="1.2" marker-end="url(#rs)"></line><rect x="253" y="32" width="205" height="50" rx="8" fill="var(--dg-warn-surface)" stroke="var(--dg-warn)" stroke-width="0.8"></rect><text x="355" y="52" text-anchor="middle" font-size="12" font-weight="600" fill="var(--dg-ink)">2. Lascia che i commensali finiscano</text><text x="355" y="68" text-anchor="middle" font-size="10" fill="var(--dg-warn)">-&gt; completare le richieste in volo</text><line x1="460" y1="57" x2="484" y2="57" stroke="var(--dg-ink-3)" stroke-width="1.2" marker-end="url(#rs)"></line><rect x="486" y="32" width="205" height="50" rx="8" fill="var(--dg-ok-surface)" stroke="var(--dg-ok)" stroke-width="0.8"></rect><text x="588" y="52" text-anchor="middle" font-size="12" font-weight="600" fill="var(--dg-ink)">3. Paga e parti</text><text x="588" y="68" text-anchor="middle" font-size="10" fill="var(--dg-ok)">-&gt; chiudi la connessione</text></svg>
+</Diagram>
+
+- **Smetti di accogliere nuovi clienti**: qualcuno alla reception/al cancello smette di far entrare nuove persone. Non vuoi nuovi clienti a cui dovresti dire di no.
+- **Annuncia ai clienti esistenti**: Di' a tutti quelli che stanno già mangiando: "È ora di chiudere, hai 15-20 minuti per finire il pasto. Prenditi il tuo tempo." 15-20 minuti sono più che sufficienti.
+- **Paga i conti e se ne va**: finiscono, pagano i conti (e le mance!) e lasciano il ristorante.
+
+### La stessa idea per il tuo backend
+
+Chiamiamo questo drenaggio della connessione al processo. Quando la tua applicazione riceve un segnale di spegnimento (SIGTERM da un processo, o SIGINT dal Ctrl+C di uno sviluppatore), la prima cosa che deve fare è **smettere di accettare nuove connessioni**: esattamente come impedire l'ingresso di nuovi clienti. Ciò impedisce che la situazione diventi più complicata e difficile da gestire. Quindi lascia che le connessioni esistenti finiscano il prima possibile.
+
+### Connessione Drenante Per Architettura
+
+L'implementazione varia a seconda dell'architettura dell'applicazione, ma l'idea di alto livello è sempre lo stesso processo in tre fasi: **smettere di accettare il nuovo -&gt; terminare l'esistente -&gt; chiudere la connessione**.
+
+| Architettura | Cosa significa "drenante" |
+| -------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| Back-end HTTP | Smettere di accettare nuove richieste HTTP da qualsiasi client; consentire il completamento delle richieste in volo |
+| Database (anche backend!) | Completare tutte le query/transazioni esistenti; interrompere l'esecuzione di nuove query prima di chiudere la connessione |
+| Connessioni WebSocket | Per prima cosa avvisa i client che si sta chiudendo, quindi chiudi il socket, non chiuderlo mai bruscamente |
+
+<Callout type="info" title="Anche un database è un backend">
+Come discusso nei capitoli precedenti, un database è anche un backend, può essere immaginato come un backend. Non nel senso HTTP, ma è comunque un'applicazione che viene eseguita come un processo e segue gli stessi principi di chiusura graduale: terminare le transazioni esistenti, smettere di accettarne di nuove, quindi chiudere.
+</Callout>
+
+### 5.1: Il compromesso del timeout
+
+La sfida con il drenaggio della connessione è la **tempistica**. Vuoi dare alle connessioni esistenti abbastanza tempo per completare il loro lavoro, ma non puoi aspettare tutto il tempo necessario. Ci deve essere un limite.
+
+La maggior parte dei sistemi di produzione implementa un **meccanismo di timeout**: comunemente **30 secondi** (a volte 60). Questa è la durata massima di attesa del sistema. Dopodiché, si ferma. Nella maggior parte dei casi, se non accetti nuove richieste, 30 secondi sono più che sufficienti per completare tutte le richieste esistenti. Ma se qualche operazione di blocco non riesce a terminare entro la finestra temporale, verrai **fermato forzatamente**: questo è il piano di riserva. Non puoi lasciare che il tuo backend impieghi tutto il tempo che vuole; il timeout è il limite rigido.
+
+<Callout type="ok" title="La considerazione del design / Quanto tempo dovresti aspettare?">
+**Troppo breve** -&gt; rischi di interrompere le operazioni legittime effettive (un pagamento reale durante il volo viene interrotto).\
+\
+**Troppo lungo** -&gt; l'intero processo di arresto diventa lento, con un impatto negativo sulla velocità di distribuzione e sulla reattività del sistema.\
+\
+Non esiste una regola ferrea. Il timeout corretto dipende dalla **durata tipica della richiesta** della tua applicazione e dai tuoi **requisiti operativi**. Per un backend tradizionale/normale, 30 secondi sono più che sufficienti. Per i WebSocket o le architetture più complicate, devi comprendere il tuo sistema e scegliere di conseguenza.
+</Callout>
+
+### Coordinamento con bilanciatori di carico e rilevamento dei servizi
+
+L'esaurimento della connessione richiede anche il coordinamento tra i **sistemi di bilanciamento del carico** e i **sistemi di rilevamento dei servizi**. Deve funzionare con i tuoi sistemi di controllo dello stato e con la registrazione/annullamento della registrazione con il rilevamento del servizio.
+
+Questo è leggermente avanzato: l'individuazione del servizio significa che se hai distribuito una serie di applicazioni (il tuo backend, il tuo database, la tua istanza Elasticsearch), l'individuazione del servizio è il meccanismo responsabile del modo in cui si trovano, si connettono e comunicano tra loro dopo la distribuzione. Durante l'arresto, l'istanza deve annullare la registrazione in modo che il sistema di bilanciamento del carico interrompa l'instradamento di nuovo traffico verso di essa.
+
+## Pulizia delle risorse
+
+Il secondo passo importante. Pensa a lavorare alla scrivania: quando è il momento di uscire di casa o di andare a dormire, fai prima un po' di pulizia. Se hai preso il caffè, porti la tazza nel lavandino; gestisci i tuoi cavi, ecc. Tutti noi abbiamo piccoli compiti di pulizia prima di lasciare le nostre scrivanie. Lo stesso vale per il tuo backend.
+
+### Cosa conta come "risorsa"?
+
+Quando diciamo risorse, intendiamo cose che l'applicazione ha acquisito durante la sua esecuzione e che ora deve lasciare andare:
+
+- **Gestioni di file**
+- **Connessioni di rete**
+- **Connessioni al database**
+- **File temporanei**
+- **Cache**
+- **Qualsiasi altra risorsa di sistema**
+
+### Maniglie dei file
+
+Quando il tuo backend era in esecuzione e tentava di accedere a una posizione particolare nel file system, il modo in cui funziona è questo: invii un segnale al tuo sistema operativo e questo ti fornisce un **handle** per quel file. Esiste un protocollo per il modo in cui un processo accede al file system sottostante, ma ad alto livello ottieni un handle che **devi lasciare andare/ripulire** ad un certo punto.
+
+<Callout type="info" title="Perché le maniglie non chiuse sono pericolose">
+Se non ripulisci un handle di file, quell'handle continua a funzionare e acquisirai sempre più memoria, il che significa che continuerai a consumare la tua **RAM (memoria ad accesso casuale)** e ad un certo punto la finirai. I sistemi operativi inoltre **limitano il numero di handle di file** (e connessioni di rete) che un singolo processo può avere aperto contemporaneamente, quindi la loro perdita alla fine danneggia l'app.
+</Callout>
+
+### Connessioni di rete (la pulizia più comune)
+
+Il tipo più comune di pulizia delle risorse è la pulizia delle connessioni di rete. Il tuo sistema operativo è il **mediatore**: tutte le richieste provenienti da Internet passano attraverso il tuo sistema operativo prima di raggiungere la tua applicazione. Il sistema operativo è il vero driver che riceve tutte le richieste dalla tua scheda di rete e te le trasmette, quindi ha piena conoscenza di tutte le tue connessioni di rete.
+
+<Diagram caption="Fig 4.1: All network traffic passes through the OS before reaching your application">
+<svg width="100%" viewBox="0 0 720 130" role="img"><title>Il sistema operativo come mediatore tra Internet e l'applicazione</title><defs><marker id="nw" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path></marker></defs><rect x="30" y="42" width="170" height="50" rx="8" fill="var(--dg-ok-surface)" stroke="var(--dg-ok)" stroke-width="0.8"></rect><text x="115" y="63" text-anchor="middle" font-size="12" font-weight="600" fill="var(--dg-ink)">Internet</text><text x="115" y="79" text-anchor="middle" font-size="10" fill="var(--dg-ok)">richieste in arrivo</text><line x1="202" y1="67" x2="258" y2="67" stroke="var(--dg-ink-3)" stroke-width="1.2" marker-end="url(#nw)"></line><rect x="260" y="42" width="200" height="50" rx="8" fill="var(--dg-warn-surface)" stroke="var(--dg-warn)" stroke-width="0.8"></rect><text x="360" y="63" text-anchor="middle" font-size="12" font-weight="600" fill="var(--dg-ink)">Sistema operativo</text><text x="360" y="79" text-anchor="middle" font-size="10" fill="var(--dg-warn)">mediatore/autista</text><line x1="462" y1="67" x2="518" y2="67" stroke="var(--dg-ink-3)" stroke-width="1.2" marker-end="url(#nw)"></line><rect x="520" y="42" width="170" height="50" rx="8" fill="var(--dg-accent-surface)" stroke="var(--dg-accent)" stroke-width="0.8"></rect><text x="605" y="63" text-anchor="middle" font-size="12" font-weight="600" fill="var(--dg-ink)">Il tuo back-end</text><text x="605" y="79" text-anchor="middle" font-size="10" fill="var(--dg-accent)">l'applicazione</text></svg>
+</Diagram>
+
+Proprio come gli handle di file, se non rinunci a una connessione di rete dopo averla gestita, alla fine rimarrai senza memoria o dovrai affrontare problemi di prestazioni, perché il sistema operativo limita il numero di connessioni che un processo può tenere aperte.
+
+### Connessioni al database: commit o rollback
+
+Questa è la parte direttamente collegata al nostro scenario di pagamento fin dall'inizio. Prima che l'applicazione/il processo di backend venga arrestato, le transazioni del database con cui aveva a che fare devono essere **commit** o **rollback esplicite** dall'applicazione.
+
+<Callout type="ok" title="Cosa succede se non lo fai">
+Se non esegui il commit o il rollback delle transazioni aperte, queste potrebbero entrare in uno **stato incoerente**, che può portare a:\
+\
+\- **Stallo di stallo**\
+\- **Corruzione dei dati**\
+\- Tutti i tipi di altri problemi\
+\
+Questo è esattamente il problema del doppio addebito/mancato pagamento dello scenario di apertura, risolto dalla gestione esplicita delle transazioni durante la chiusura.
+</Callout>
+
+### Ripulire in ordine inverso di acquisizione
+
+Una regola importante: quando pulisci le risorse durante l'arresto regolare, vuoi pulirle nell'**ordine inverso** di come le hai acquisite, Last In, First Out (LIFO), come una pila.
+
+<Diagram caption="Fig 4.2: Acquire Redis -&gt; DB -&gt; HTTP, but release in reverse: HTTP -&gt; DB -&gt; Redis (LIFO)">
+<svg width="100%" viewBox="0 0 720 175" role="img"><title>LIFO pulizia delle risorse in ordine inverso</title><defs><marker id="ro" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path></marker></defs><text x="175" y="22" text-anchor="middle" font-size="11" font-weight="600" fill="var(--dg-ok)">ACQUISTA (in ordine)</text><rect x="90" y="32" width="170" height="34" rx="6" fill="var(--dg-ok-surface)" stroke="var(--dg-ok)" stroke-width="0.8"></rect><text x="175" y="54" text-anchor="middle" font-size="11" fill="var(--dg-ink)">1. Connessione Redis</text><rect x="90" y="72" width="170" height="34" rx="6" fill="var(--dg-ok-surface)" stroke="var(--dg-ok)" stroke-width="0.8"></rect><text x="175" y="94" text-anchor="middle" font-size="11" fill="var(--dg-ink)">2. Connessione DB</text><rect x="90" y="112" width="170" height="34" rx="6" fill="var(--dg-ok-surface)" stroke="var(--dg-ok)" stroke-width="0.8"></rect><text x="175" y="134" text-anchor="middle" font-size="11" fill="var(--dg-ink)">3. ServerHTTP</text><line x1="175" y1="66" x2="175" y2="70" stroke="var(--dg-ok)" stroke-width="1.2" marker-end="url(#ro)"></line><line x1="175" y1="106" x2="175" y2="110" stroke="var(--dg-ok)" stroke-width="1.2" marker-end="url(#ro)"></line><line x1="270" y1="89" x2="445" y2="89" stroke="var(--dg-ink-3)" stroke-width="1" marker-end="url(#ro)" stroke-dasharray="5 3"></line><text x="357" y="80" text-anchor="middle" font-size="10" fill="var(--dg-ink-3)" font-style="italic">lo spegnimento lo inverte</text><text x="555" y="22" text-anchor="middle" font-size="11" font-weight="600" fill="var(--dg-accent)">RILASCIO (retromarcia)</text><rect x="470" y="32" width="170" height="34" rx="6" fill="var(--dg-accent-surface)" stroke="var(--dg-accent)" stroke-width="0.8"></rect><text x="555" y="54" text-anchor="middle" font-size="11" fill="var(--dg-ink)">1. ServerHTTP</text><rect x="470" y="72" width="170" height="34" rx="6" fill="var(--dg-accent-surface)" stroke="var(--dg-accent)" stroke-width="0.8"></rect><text x="555" y="94" text-anchor="middle" font-size="11" fill="var(--dg-ink)">2. Connessione DB</text><rect x="470" y="112" width="170" height="34" rx="6" fill="var(--dg-accent-surface)" stroke="var(--dg-accent)" stroke-width="0.8"></rect><text x="555" y="134" text-anchor="middle" font-size="11" fill="var(--dg-ink)">3. Connessione Redis</text><line x1="555" y1="66" x2="555" y2="70" stroke="var(--dg-accent)" stroke-width="1.2" marker-end="url(#ro)"></line><line x1="555" y1="106" x2="555" y2="110" stroke="var(--dg-accent)" stroke-width="1.2" marker-end="url(#ro)"></line></svg>
+</Diagram>
+
+Ad esempio, supponiamo di aver stabilito una connessione Redis, quindi una connessione DB, quindi avviato il server HTTP. Quando rinunci alle risorse, procedi al contrario. **Perché?** Per evitare situazioni in cui stai ripulendo una risorsa o un'operazione che _dipende da un'operazione precedente_. L'eliminazione al contrario garantisce che le dipendenze siano ancora vive quando le cose che ne hanno bisogno vengono chiuse.
+
+## Esempi di codici
+
+In genere evitiamo di esaminare il codice in questa serie, ma un esempio pratico aiuta a evitare una comprensione vuota. Non è necessario capire ogni riga, basta seguire la narrazione. In pratica la maggior parte dei framework (Node.js, Go, Rust, Python, Spring) forniscono questo codice pronto per il copia-incolla; ciò che conta è capire _cosa succede_ e _perché_. Le cinque schede seguenti fanno le stesse quattro cose nello stesso ordine e cambia solo la sintassi: registrare un gestore per SIGINT e SIGTERM, bloccare finché non ne arriva uno, drenare le richieste in volo con una scadenza rigorosa, quindi rilasciare le risorse in ordine inverso rispetto all'acquisizione.
+
+### 7.1: Spegnimento ordinato
+
+Ciò rispecchia la demo live della lezione: registrare un gestore in attesa di segnali, quindi, una volta ricevuti, eseguire la funzione di shutdown che chiude il server HTTP, quindi il lavoratore del lavoro in background, quindi il database, in ordine inverso rispetto all'acquisizione.
+
+Vai a Python JavaScript TypeScript Java
+
+prendere il segnale, scaricare, rilasciare in retromarcia
+
+```go title="main.go / Go / net/http + signal.NotifyContext"
+package main
+
+import (
+    "context"
+    "errors"
+    "log"
+    "net/http"
+    "os"
+    "os/signal"
+    "syscall"
+    "time"
+)
+
+func main() {
+    // --- Startup phase: acquire resources in order ---
+    db := connectDatabase()           // 1. acquire DB (TCP pool)
+    jobs := startBackgroundJobs()     // 2. acquire Redis-backed worker
+
+    srv := &http.Server{Addr: ":8080", Handler: router()}
+
+    // Register a handler that waits for SIGINT (Ctrl+C) or SIGTERM (PM2/k8s).
+    // We handle BOTH the same way, the intention is identical: shut down.
+    ctx, stop := signal.NotifyContext(context.Background(),
+        os.Interrupt, syscall.SIGTERM)
+    defer stop()
+
+    // Run the server in a goroutine so main can wait for the signal.
+    go func() {
+        log.Println("server started, ready to accept requests")
+        if err := srv.ListenAndServe(); err != nil &&
+            !errors.Is(err, http.ErrServerClosed) {
+            log.Fatalf("listen error: %v", err)
+        }
+    }()
+
+    // Block here until a signal arrives (the "living" phase).
+    <-ctx.Done()
+    log.Println("signal received, starting graceful shutdown")
+
+    // Hard limit: give in-flight work up to 30 seconds, then force stop.
+    shutdownCtx, cancel := context.WithTimeout(
+        context.Background(), 30*time.Second)
+    defer cancel()
+
+    gracefulShutdown(shutdownCtx, srv, db, jobs)
+    log.Println("server exited properly")
+}
+
+// gracefulShutdown releases resources in REVERSE order of acquisition.
+// Acquired: DB -> jobs -> HTTP server. Released: HTTP -> jobs -> DB.
+func gracefulShutdown(
+    ctx context.Context,
+    srv *http.Server,
+    db *Database,
+    jobs *JobServer,
+) {
+    // 1. CONNECTION DRAINING: srv.Shutdown stops accepting NEW
+    //    connections and waits for in-flight requests to finish
+    //    (or until the 30s ctx deadline forces it).
+    log.Println("draining HTTP connections...")
+    if err := srv.Shutdown(ctx); err != nil {
+        log.Printf("forced HTTP shutdown: %v", err)
+    }
+
+    // 2. Stop the background job server (closes Redis connections,
+    //    waits for workers to finish current jobs).
+    log.Println("stopping background job server...")
+    jobs.Shutdown()
+
+    // 3. Close the database LAST, finish/commit open transactions,
+    //    then close all pooled TCP connections one by one.
+    log.Println("closing database connection...")
+    if err := db.Close(); err != nil {
+        log.Printf("db close error: %v", err)
+    }
+}
+```
+
+```python title="server.py / Python / signal + asyncio"
+import asyncio
+import signal
+import logging
+
+logging.basicConfig(level=logging.INFO)
+log = logging.getLogger("app")
+
+SHUTDOWN_TIMEOUT = 30  # hard limit in seconds
+
+class Application:
+    def __init__(self):
+        self._shutdown = asyncio.Event()
+
+    async def startup(self):
+        # Acquire resources IN ORDER
+        self.redis = await connect_redis()       # 1
+        self.db = await connect_database()      # 2
+        self.server = await start_http_server()  # 3
+        log.info("server started, ready to accept requests")
+
+    def install_signal_handlers(self):
+        # Handle SIGINT (Ctrl+C, dev) and SIGTERM (PM2/k8s, prod)
+        # the SAME way, both mean "shut down gracefully".
+        loop = asyncio.get_running_loop()
+        for sig in (signal.SIGINT, signal.SIGTERM):
+            loop.add_signal_handler(sig, self._on_signal, sig)
+
+    def _on_signal(self, sig):
+        # NOTE: SIGKILL can never reach here, it cannot be
+        # caught or ignored. Only the polite signals arrive.
+        log.info(f"signal received: {sig.name}, shutting down")
+        self._shutdown.set()
+
+    async def graceful_shutdown(self):
+        # 1. CONNECTION DRAINING: stop accepting new requests,
+        #    let in-flight requests finish within the timeout.
+        log.info("draining HTTP connections...")
+        self.server.stop_accepting_new()
+        try:
+            await asyncio.wait_for(
+                self.server.wait_for_inflight(),
+                timeout=SHUTDOWN_TIMEOUT,
+            )
+        except asyncio.TimeoutError:
+            log.warning("timeout exceeded, forcing shutdown")
+
+        # 2 & 3. Release resources in REVERSE order of acquisition.
+        #    Acquired redis -> db -> server; release server -> db -> redis.
+        log.info("committing/rolling back open transactions...")
+        await self.db.close()     # commit or rollback, then close pool
+        log.info("closing redis connection...")
+        await self.redis.close()
+        log.info("server exited properly")
+
+async def main():
+    app = Application()
+    await app.startup()
+    app.install_signal_handlers()
+    await app._shutdown.wait()   # the "living" phase, block until signal
+    await app.graceful_shutdown()
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
+```js title="server.js / Node 20+ + Express"
+import express from 'express'
+
+const SHUTDOWN_TIMEOUT = 30_000 // hard limit in ms
+
+// --- Startup phase: acquire resources in order ---
+const db = await connectDatabase()      // 1. acquire DB (TCP pool)
+const jobs = await startBackgroundJobs() // 2. acquire Redis-backed worker
+
+const app = express()
+const server = app.listen(8080, () =>
+  console.log('server started, ready to accept requests'))
+
+let shuttingDown = false
+
+async function gracefulShutdown(signal) {
+  // A second Ctrl+C while draining must not restart the sequence.
+  if (shuttingDown) return
+  shuttingDown = true
+  console.log(`signal received: ${signal}, starting graceful shutdown`)
+
+  // Hard limit: if draining hangs, exit anyway. Without this the process
+  // sits forever on one keep-alive connection and the orchestrator ends
+  // up SIGKILLing it, which is the exact outcome we are avoiding.
+  const forceExit = setTimeout(() => {
+    console.warn('timeout exceeded, forcing shutdown')
+    process.exit(1)
+  }, SHUTDOWN_TIMEOUT)
+  forceExit.unref() // do not keep the loop alive just for this timer
+
+  // 1. CONNECTION DRAINING: stop accepting NEW connections, and let
+  //    in-flight requests finish. The callback fires when the last one has.
+  await new Promise((resolve) => server.close(resolve))
+  console.log('HTTP connections drained')
+
+  // 2 & 3. Release in REVERSE order of acquisition.
+  console.log('stopping background job server...')
+  await jobs.shutdown()
+  console.log('closing database connection...')
+  await db.end()
+
+  clearTimeout(forceExit)
+  console.log('server exited properly')
+  process.exit(0)
+}
+
+// Handle BOTH the same way: the intention is identical.
+process.on('SIGINT', () => gracefulShutdown('SIGINT'))   // Ctrl+C, dev
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM')) // PM2 / k8s, prod
+
+// Node caveat worth knowing: server.close() waits for idle KEEP-ALIVE
+// sockets too. Set `server.closeIdleConnections()` (Node 18.2+) right
+// after, or a browser tab holding an idle connection blocks the drain.
+```
+
+```ts title="server.ts / TypeScript 5+ + Express"
+import express from 'express'
+import type { Server } from 'node:http'
+
+const SHUTDOWN_TIMEOUT = 30_000 // hard limit in ms
+
+// Naming the contract every resource must satisfy is what makes the
+// reverse-order rule enforceable rather than a comment somebody has to
+// remember. Push in acquisition order, release by walking backwards.
+interface Closeable {
+  name: string
+  close: () => Promise<void>
+}
+
+const acquired: Closeable[] = []
+
+const db = await connectDatabase()
+acquired.push({ name: 'database', close: () => db.end() })       // 1
+
+const jobs = await startBackgroundJobs()
+acquired.push({ name: 'job server', close: () => jobs.shutdown() }) // 2
+
+const app = express()
+const server: Server = app.listen(8080, () =>
+  console.log('server started, ready to accept requests'))
+
+let shuttingDown = false
+
+async function gracefulShutdown(signal: NodeJS.Signals): Promise<void> {
+  if (shuttingDown) return // a second Ctrl+C must not restart the sequence
+  shuttingDown = true
+  console.log(`signal received: ${signal}, starting graceful shutdown`)
+
+  const forceExit = setTimeout(() => {
+    console.warn('timeout exceeded, forcing shutdown')
+    process.exit(1)
+  }, SHUTDOWN_TIMEOUT)
+  forceExit.unref()
+
+  // 1. CONNECTION DRAINING
+  console.log('draining HTTP connections...')
+  await new Promise<void>((resolve) => server.close(() => resolve()))
+  server.closeIdleConnections() // idle keep-alives would otherwise block
+
+  // 2 & 3. REVERSE order of acquisition, by construction
+  for (const resource of acquired.reverse()) {
+    console.log(`closing ${resource.name}...`)
+    await resource.close()
+  }
+
+  clearTimeout(forceExit)
+  console.log('server exited properly')
+  process.exit(0)
+}
+
+process.on('SIGINT', () => void gracefulShutdown('SIGINT'))
+process.on('SIGTERM', () => void gracefulShutdown('SIGTERM'))
+```
+
+```java title="Application.java / Java 17+ + Spring Boot"
+// Spring Boot does almost all of this for you, and the important part is
+// knowing WHICH parts, so you only write what is missing.
+//
+// application.yml:
+//   server.shutdown: graceful          # drain instead of cutting off
+//   spring.lifecycle.timeout-per-shutdown-phase: 30s   # the hard limit
+//
+// With those two lines, SIGTERM makes Tomcat stop accepting new
+// connections and wait for in-flight requests, exactly like srv.Shutdown.
+
+@SpringBootApplication
+public class Application {
+    public static void main(String[] args) {
+        SpringApplication.run(Application.class, args);
+    }
+}
+
+// Resource cleanup is @PreDestroy, and Spring already calls it in REVERSE
+// dependency order: a bean is destroyed before the beans it depends on.
+// That is the reverse-order-of-acquisition rule, enforced by the container
+// rather than by a shutdown function you have to keep in sync.
+@Component
+class JobServer {
+    @PreDestroy
+    void shutdown() {
+        log.info("stopping background job server...");
+        // closes Redis connections, waits for workers to finish current jobs
+    }
+}
+
+@Component
+class Database implements AutoCloseable {
+    @Override
+    @PreDestroy
+    public void close() {
+        log.info("closing database connection...");
+        // commit or rollback open transactions, then close the pool
+    }
+}
+
+// The one thing to add by hand is the pre-drain pause, and it matters
+// more than the rest: a load balancer needs a few seconds to notice this
+// instance is going away, and requests routed in during that window are
+// dropped no matter how gracefully the app shuts down afterwards.
+@Component
+class DrainDelay implements ApplicationListener<ContextClosedEvent> {
+    @Override
+    public void onApplicationEvent(ContextClosedEvent event) {
+        try {
+            Thread.sleep(5_000); // let the LB deregister us first
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+    }
+}
+```
+
+## Ulteriori letture e documentazione
+
+#### Segnali Unix
+
+<Callout type="info">
+[man7, signal(7): panoramica dei segnali (SIGTERM, SIGINT, SIGKILL)](https://man7.org/linux/man-pages/man7/signal.7.html) [GNU libc, Segnali di terminazione](https://www.gnu.org/software/libc/manual/html_node/Termination-Signals.html)
+</Callout>
+
+#### Vai
+
+<Callout type="info">
+[Vai alla documentazione, http.Server.Shutdown (drenaggio HTTP semplice)](https://pkg.go.dev/net/http#Server.Shutdown) [Vai a documenti, signal.NotifyContext](https://pkg.go.dev/os/signal#NotifyContext)
+</Callout>
+
+#### Python e Node.js
+
+<Callout type="info">
+[Documenti Python, modulo segnale](https://docs.python.org/3/library/signal.html) [Documenti Node.js, elabora eventi di segnale](https://nodejs.org/api/process.html#signal-events)
+</Callout>
+
+#### Responsabili di orchestrazione e processi
+
+<Callout type="info">
+[Kubernetes, ciclo di vita del contenitore e terminazione (SIGTERM -&gt; periodo di grazia -&gt; SIGKILL)](https://kubernetes.io/docs/concepts/containers/container-lifecycle-hooks/) [PM2, Avvio/spegnimento graduale e segnali](https://pm2.keymetrics.io/docs/usage/signals-clean-restart/) [comportamento systemd, kill e shutdown](https://www.freedesktop.org/software/systemd/man/systemd.kill.html)
+</Callout>
+
+#### Documenti Web MDN
+
+<Callout type="info">
+[MDN, API WebSocket (handshake di chiusura)](https://developer.mozilla.org/en-US/docs/Web/API/WebSockets_API) [MDN, gestione della connessione HTTP](https://developer.mozilla.org/en-US/docs/Web/HTTP/Connection_management_in_HTTP_1.x)
+</Callout>
+
+MANUALE DI INGEGNERIA DEL BACKEND / V2 / CAPITOLO 14 / SPEGNIMENTO GRAZIATO\
+Appunti compilati dalla trascrizione della lezione/Esempi Go, Python, JavaScript, TypeScript e Java/Segnali Unix e riferimenti all'orchestrazione in linea
+
+Backend da Primi Principi / Capitolo 16 / Arresto. Il codice è destinato a Go 1.22+, Python 3.11+, Node.js 20+, TypeScript 5+ e Java 17+ (Spring Boot).

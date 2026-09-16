@@ -1,0 +1,1404 @@
+---
+order: 18
+title: "Padroneggiare scalabilità e prestazioni"
+navTitle: "Scalabilità e prestazioni (Parte 1)"
+summary: "Cosa significa effettivamente \"veloce\" e come renderlo tale: percentili di latenza, throughput e accodamento, individuazione del vero collo di bottiglia con profiler e tracce, quindi le quattro correzioni che rappresentano la maggior parte dei successi, query N+1, indici, pooling di connessioni e memorizzazione nella cache. Implementazioni funzionate in Go, Python, JavaScript, TypeScript e Java."
+readingTime: "2-3 ore"
+keywords:
+  - "scaling"
+  - "performance"
+  - "horizontal"
+  - "vertical"
+  - "load"
+  - "balancing"
+  - "sharding"
+---
+Un riferimento dettagliato al backend
+
+L'ingegneria delle prestazioni è la disciplina che mira a comprendere _come_ i sistemi si comportano sotto carico, _dove_ si nascondono i colli di bottiglia e _come_ pensare chiaramente quando tutto sembra andare in pezzi. Questo capitolo sviluppa l'intuizione livello per livello, dalla definizione grezza di "veloce" alla misurazione della latenza, all'ottimizzazione del database, alla strategia di memorizzazione nella cache e alle due modalità fondamentali di scalabilità. Tutto si basa sull'ingegneria pratica del backend.
+
+## Cosa intendiamo per "veloce"?
+
+Quando un utente fa clic su un pulsante sulla tua app Web, si attiva una cascata di eventi: il browser impacchetta una richiesta HTTP, tale richiesta attraversa Internet fino al tuo server, il server la elabora (possibilmente colpendo un database, chiamando un'API esterna o inviando un'e-mail) e infine il server assembla una risposta, in genere JSON, che ritorna attraverso Internet. Il browser quindi analizza la risposta e visualizza il risultato sullo schermo.
+
+Il tempo totale trascorso tra il clic e il rendering finale è ciò che l'utente _percepisce_ come velocità. Quando qualcuno dice "la tua app è lenta", sta descrivendo questa durata end-to-end, anche se non ha mai sentito la parola latenza.
+
+<Diagram caption="Fig 1 / Request lifecycle: every millisecond adds up">
+<svg viewBox="0 0 700 200" xmlns="http://www.w3.org/2000/svg" style="max-width:700px;width:100%"><rect x="20" y="65" width="90" height="65" rx="5" fill="var(--dg-surface)" stroke="var(--dg-ink-2)" stroke-width="1.5"></rect><text x="65" y="95" text-anchor="middle" font-family="var(--font-prose)" font-size="12" font-weight="600" fill="var(--dg-ink)">Utente</text><text x="65" y="112" text-anchor="middle" font-family="var(--font-prose)" font-size="10" fill="var(--dg-ink-2)">Navigatore</text><line x1="110" y1="82" x2="210" y2="82" stroke="var(--dg-accent)" stroke-width="1.5" marker-end="url(#arrowR)"></line><text x="160" y="74" text-anchor="middle" font-family="var(--font-diagram-mono)" font-size="9" fill="var(--dg-ink-2)">Richiesta HTTP</text><rect x="210" y="55" width="110" height="85" rx="5" fill="var(--dg-surface)" stroke="var(--dg-ink-2)" stroke-width="1.5"></rect><text x="265" y="85" text-anchor="middle" font-family="var(--font-prose)" font-size="12" font-weight="600" fill="var(--dg-ink)">Server</text><text x="265" y="102" text-anchor="middle" font-family="var(--font-prose)" font-size="10" fill="var(--dg-ink-2)">Processo</text><text x="265" y="118" text-anchor="middle" font-family="var(--font-prose)" font-size="10" fill="var(--dg-ink-2)">Logica</text><line x1="320" y1="80" x2="400" y2="80" stroke="var(--dg-info)" stroke-width="1.3" marker-end="url(#arrowB)"></line><text x="360" y="72" text-anchor="middle" font-family="var(--font-diagram-mono)" font-size="9" fill="var(--dg-ink-2)">Domanda</text><rect x="400" y="55" width="100" height="50" rx="5" fill="var(--dg-surface)" stroke="var(--dg-info)" stroke-width="1.5"></rect><text x="450" y="82" text-anchor="middle" font-family="var(--font-prose)" font-size="12" font-weight="600" fill="var(--dg-ink)">Banca dati</text><rect x="400" y="120" width="100" height="45" rx="5" fill="var(--dg-surface)" stroke="var(--dg-ok)" stroke-width="1.5"></rect><text x="450" y="147" text-anchor="middle" font-family="var(--font-prose)" font-size="11" font-weight="600" fill="var(--dg-ink)">API esterna</text><line x1="305" y1="140" x2="400" y2="142" stroke="var(--dg-ok)" stroke-width="1.3" marker-end="url(#arrowG)"></line><line x1="210" y1="115" x2="110" y2="115" stroke="var(--dg-accent)" stroke-width="1.5" marker-end="url(#arrowR)"></line><text x="160" y="132" text-anchor="middle" font-family="var(--font-diagram-mono)" font-size="9" fill="var(--dg-ink-2)">Risposta JSON</text><line x1="30" y1="160" x2="30" y2="175" stroke="var(--dg-accent)" stroke-width="1"></line><line x1="30" y1="175" x2="490" y2="175" stroke="var(--dg-accent)" stroke-width="1" stroke-dasharray="4 3"></line><line x1="490" y1="160" x2="490" y2="175" stroke="var(--dg-accent)" stroke-width="1"></line><text x="260" y="192" text-anchor="middle" font-family="var(--font-ui)" font-size="10" font-weight="600" fill="var(--dg-accent)" letter-spacing="0.1em">LATENZA TOTALE</text><defs><marker id="arrowR" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6" fill="var(--dg-accent)"></path></marker><marker id="arrowB" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6" fill="var(--dg-info)"></path></marker><marker id="arrowG" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6" fill="var(--dg-ok)"></path></marker></defs></svg>
+</Diagram>
+
+La prestazione non è una qualità vaga e soggettiva. Può e deve essere espresso in numeri. I tre parametri fondamentali sono **latenza** (quanto tempo impiega una richiesta), **throughput** (quante richieste per unità di tempo) e **utilizzo** (quale percentuale di capacità è in uso). Insieme, formano il vocabolario dell'ingegneria delle prestazioni.
+
+## Approfondimento sulla latenza
+
+La latenza è il tempo trascorso dal momento in cui viene inviata una richiesta al momento in cui viene ricevuta una risposta. È il singolo parametro di prestazione più visibile all'utente, il numero che i tuoi clienti _sentono_ nelle loro dita.
+
+### La latenza non è un singolo numero
+
+Un errore comune è considerare la latenza come un valore fisso come "la nostra API risponde in 200 ms". In realtà, la latenza varia da richiesta a richiesta a causa di molti fattori reali:
+
+**Riscontri positivi e mancati nella cache**: una richiesta servita da una CDN o da una cache in memoria come Redis può restituire in 5 ms, mentre la stessa richiesta che raggiunge il database a freddo richiede 200 ms. **Carico del server**: quando il tuo server è inattivo, raccoglie immediatamente ogni richiesta; quando elabora 50 richieste simultanee, il nuovo arrivato attende in coda. **Condizioni di rete**: perdita di pacchetti, modifiche del percorso e distanza geografica introducono variabilità. **Complessità della richiesta**: il recupero di un profilo utente è più rapido rispetto alla generazione di un report analitico mensile.
+
+<Callout type="info" title="Perché le medie mentono">
+Immagina 1.000 richieste: 990 vengono completate in 50 ms e 10 richiedono 5.000 ms. La media è \~100 ms, il che sembra salutare. Ma quelle 10 richieste anomale rappresentano utenti reali che fissano uno spinner di caricamento per 5 secondi. Con 1 milione di richieste al giorno, si tratta di **10.000 esperienze utente terribili** al giorno, completamente invisibili alla media.
+</Callout>
+
+Poiché le medie assorbono la variazione, sono quasi inutili per l'analisi delle prestazioni. Ciò di cui abbiamo bisogno invece è un modo per parlare di _distribuzione_ delle latenze, che ci porti ai percentili.
+
+## Percentili: P50, P90, P99
+
+Un percentile indica la soglia di latenza al di sotto della quale cade una determinata percentuale di richieste. I tre percentili che incontrerai costantemente sono:
+
+| Percentile | Significato | Esempio |
+| ---------------- | ----------------------------------------------------- | ------------------------------------------- |
+| **P50** (mediana) | Il 50% delle richieste sono più veloci di questo valore | P50 = 80ms -&gt; metà dei tuoi utenti vedono &lt;=80 ms |
+| **P90** | 90% più veloce; Il **10% degli utenti** sperimenta questo o peggio | P90 = 400ms -&gt; 1 utente su 10 attende 400ms+ |
+| **P99** | 99% più veloce; **1% degli utenti** sperimenta questo o peggio | P99 = 2s -&gt; 1 utente su 100 attende 2 secondi+ |
+
+<Diagram caption="Fig 2 / Latency distribution with percentile markers">
+<svg viewBox="0 0 660 260" xmlns="http://www.w3.org/2000/svg" style="max-width:660px;width:100%"><line x1="60" y1="210" x2="620" y2="210" stroke="var(--dg-ink-2)" stroke-width="1.5"></line><line x1="60" y1="210" x2="60" y2="30" stroke="var(--dg-ink-2)" stroke-width="1.5"></line><text x="340" y="250" text-anchor="middle" font-family="var(--font-ui)" font-size="11" fill="var(--dg-ink-2)" letter-spacing="0.05em">Latenza -&gt;</text><text x="22" y="120" text-anchor="middle" font-family="var(--font-ui)" font-size="11" fill="var(--dg-ink-2)" transform="rotate(-90,22,120)">Richieste</text><path d="M80,208 C120,205 140,170 180,80 C200,40 230,38 260,80 C290,130 320,170 360,190 C400,200 450,206 520,208 C560,209 600,209 620,210" fill="none" stroke="var(--dg-accent)" stroke-width="2.5"></path><path d="M80,208 C120,205 140,170 180,80 C200,40 230,38 260,80 C290,130 320,170 360,190 C400,200 450,206 520,208 C560,209 600,209 620,210 L620,210 L80,210 Z" fill="var(--dg-accent-tint)" ></path><line x1="220" y1="210" x2="220" y2="50" stroke="var(--dg-info)" stroke-width="1.2" stroke-dasharray="5 3"></line><text x="220" y="28" text-anchor="middle" font-family="var(--font-ui)" font-size="10" font-weight="700" fill="var(--dg-info)">P50</text><line x1="370" y1="210" x2="370" y2="50" stroke="var(--dg-ok)" stroke-width="1.2" stroke-dasharray="5 3"></line><text x="370" y="28" text-anchor="middle" font-family="var(--font-ui)" font-size="10" font-weight="700" fill="var(--dg-ok)">P90</text><line x1="520" y1="210" x2="520" y2="50" stroke="var(--dg-accent)" stroke-width="1.2" stroke-dasharray="5 3"></line><text x="520" y="28" text-anchor="middle" font-family="var(--font-ui)" font-size="10" font-weight="700" fill="var(--dg-accent)">P99</text><text x="220" y="228" text-anchor="middle" font-family="var(--font-diagram-mono)" font-size="9" fill="var(--dg-info)">80ms</text><text x="370" y="228" text-anchor="middle" font-family="var(--font-diagram-mono)" font-size="9" fill="var(--dg-ok)">400ms</text><text x="520" y="228" text-anchor="middle" font-family="var(--font-diagram-mono)" font-size="9" fill="var(--dg-accent)">2000ms</text></svg>
+</Diagram>
+
+### Perché P99 e P95 contano di più
+
+Gli ingegneri backend si concentrano sulle latenze di coda (P95/P99) per due motivi. Innanzitutto, le richieste che arrivano nella coda sono in genere le più _complesse_, implicano la logica di business più pesante, il maggior numero di join o le chiamate da servizio a servizio. In secondo luogo, queste richieste spesso rappresentano gli utenti più _preziosi_: qualcuno che effettua un acquisto, genera un report o completa un flusso di pagamento, esattamente i flussi di lavoro in cui un blocco di 5 secondi fa perdere entrate e fiducia.
+
+### Misurare i percentili
+
+Alcuni linguaggi forniscono una funzione percentile e altri no, ma l'algoritmo è composto da tre righe in ogni caso: ordinare i campioni, calcolare l'indice, leggerlo. Ciò che conta molto più dell'implementazione è registrare l'**intera distribuzione**, non una media, perché una media nasconde esattamente la coda che ti interessa.
+
+Vai a Python JavaScript TypeScript Java
+
+ordinare, indicizzare, leggere: P50, P90, P99
+
+```go
+package main
+
+import (
+    "fmt"
+    "math"
+    "sort"
+    "time"
+)
+
+// Percentile returns the p-th percentile from a slice of durations.
+// p must be between 0 and 100.
+func Percentile(latencies []time.Duration, p float64) time.Duration {
+    if len(latencies) == 0 {
+        return 0
+    }
+    sorted := make([]time.Duration, len(latencies))
+    copy(sorted, latencies)
+    sort.Slice(sorted, func(i, j int) bool {
+        return sorted[i] < sorted[j]
+    })
+
+    rank := (p / 100.0) * float64(len(sorted)-1)
+    idx  := int(math.Ceil(rank))
+    return sorted[idx]
+}
+
+func main() {
+    // Simulated latency samples
+    samples := []time.Duration{
+        12 * time.Millisecond, 15 * time.Millisecond,
+        22 * time.Millisecond, 48 * time.Millisecond,
+        95 * time.Millisecond, 110 * time.Millisecond,
+        340 * time.Millisecond, 890 * time.Millisecond,
+        1200 * time.Millisecond, 4800 * time.Millisecond,
+    }
+
+    fmt.Printf("P50:  %v\n", Percentile(samples, 50))
+    fmt.Printf("P90:  %v\n", Percentile(samples, 90))
+    fmt.Printf("P99:  %v\n", Percentile(samples, 99))
+}
+```
+
+```python
+import numpy as np
+
+# Simulated latency samples (in milliseconds)
+samples = [12, 15, 22, 48, 95, 110, 340, 890, 1200, 4800]
+
+print(f"P50:  {np.percentile(samples, 50):.0f}ms")
+print(f"P90:  {np.percentile(samples, 90):.0f}ms")
+print(f"P99:  {np.percentile(samples, 99):.0f}ms")
+print(f"P99.9:{np.percentile(samples, 99.9):.0f}ms")
+
+# Without numpy, the standard library has had it since 3.8:
+#   from statistics import quantiles
+#   quantiles(samples, n=100)[98]   # P99
+```
+
+```js
+// Simulated latency samples (in milliseconds)
+const samples = [12, 15, 22, 48, 95, 110, 340, 890, 1200, 4800]
+
+function percentile(values, p) {
+  const sorted = [...values].sort((a, b) => a - b) // NOT .sort(): that is
+  //                                                  lexicographic, so
+  //                                                  1200 would sort
+  //                                                  before 48
+  const index = Math.ceil((p / 100) * sorted.length) - 1
+  return sorted[Math.max(0, index)]
+}
+
+console.log(`P50:  ${percentile(samples, 50)}ms`)
+console.log(`P90:  ${percentile(samples, 90)}ms`)
+console.log(`P99:  ${percentile(samples, 99)}ms`)
+```
+
+```ts
+// The signature is the teaching point: a percentile needs the WHOLE
+// sample set, and taking `number[]` rather than a running average makes
+// that structural. You cannot compute a P99 from a mean, ever, and an
+// API that accepts one is an API that will be asked to.
+function percentile(values: readonly number[], p: number): number {
+  const sorted = [...values].sort((a, b) => a - b)
+  const index = Math.ceil((p / 100) * sorted.length) - 1
+  return sorted[Math.max(0, index)]
+}
+
+const samples: readonly number[] = [12, 15, 22, 48, 95, 110, 340, 890, 1200, 4800]
+
+for (const p of [50, 90, 99] as const) {
+  console.log(`P${p}:  ${percentile(samples, p)}ms`)
+}
+
+// In production you do not hold every sample in memory: Prometheus
+// histograms and t-digest / HDRHistogram compute approximate quantiles
+// in fixed space. The maths below is for understanding, not for scale.
+```
+
+```java
+// Simulated latency samples (in milliseconds)
+long[] samples = {12, 15, 22, 48, 95, 110, 340, 890, 1200, 4800};
+
+static long percentile(long[] values, double p) {
+    long[] sorted = values.clone(); // sort a COPY; Arrays.sort mutates
+    Arrays.sort(sorted);
+    int index = (int) Math.ceil(p / 100.0 * sorted.length) - 1;
+    return sorted[Math.max(0, index)];
+}
+
+System.out.printf("P50:  %dms%n", percentile(samples, 50));
+System.out.printf("P90:  %dms%n", percentile(samples, 90));
+System.out.printf("P99:  %dms%n", percentile(samples, 99));
+
+// In production, Micrometer's Timer does this for you and exports the
+// buckets to Prometheus:
+//   Timer.builder("http.server.requests")
+//        .publishPercentiles(0.5, 0.9, 0.99)
+//        .register(registry);
+```
+
+<Callout type="info">
+**Riferimento:** [Prometheus, istogrammi e riepiloghi](https://prometheus.io/docs/practices/histograms/), lo standard industriale per la raccolta dei dati percentili nella produzione.
+</Callout>
+
+## Produttività
+
+Mentre la latenza descrive la durata di una singola richiesta, la velocità effettiva misura quante richieste il tuo sistema può gestire in un determinato intervallo di tempo, in genere espresso come **richieste al secondo (RPS)** o **richieste al minuto (RPM)**.
+
+I due parametri sono profondamente intrecciati ma non in modo semplice e lineare. Il tuo sistema potrebbe mostrare un'eccellente latenza a 10 RPS, diciamo 50 ms per richiesta. Ma a 5.000 RPS, la latenza potrebbe raggiungere i 2 secondi. Comprendere il throughput e la latenza consente di rispondere a domande operative critiche: possiamo sopravvivere al picco di traffico del Black Friday? Quanti utenti simultanei possiamo supportare prima di aver bisogno di più risorse? Cosa succede se domani venissimo presenti in un podcast popolare?
+
+Throughput = Richieste gestite/Periodo di tempo
+
+### La latenza: curva di throughput
+
+All'aumentare del throughput, la latenza aumenta inizialmente lentamente, ma poi _drammaticamente_ segue una curva, non una linea. Con un throughput basso, il server è per lo più inattivo e ogni richiesta viene servita immediatamente. Man mano che il throughput aumenta verso la capacità, le richieste iniziano ad accodarsi e a contendersi CPU, memoria e I/O. Vicino alla saturazione, la latenza esplode in modo esponenziale.
+
+<Diagram caption="Fig 3 / Latency grows exponentially as throughput approaches capacity">
+<svg viewBox="0 0 560 280" xmlns="http://www.w3.org/2000/svg" style="max-width:560px;width:100%"><line x1="60" y1="230" x2="520" y2="230" stroke="var(--dg-ink-2)" stroke-width="1.5"></line><line x1="60" y1="230" x2="60" y2="30" stroke="var(--dg-ink-2)" stroke-width="1.5"></line><text x="290" y="268" text-anchor="middle" font-family="var(--font-ui)" font-size="11" fill="var(--dg-ink-2)">Produttività (RPS) -&gt;</text><text x="22" y="130" text-anchor="middle" font-family="var(--font-ui)" font-size="11" fill="var(--dg-ink-2)" transform="rotate(-90,22,130)">Latenza -&gt;</text><line x1="60" y1="220" x2="500" y2="60" stroke="var(--dg-info)" stroke-width="1.2" stroke-dasharray="6 4"></line><text x="430" y="55" font-family="var(--font-ui)" font-size="9" fill="var(--dg-info)">Previsto (lineare)</text><path d="M60,220 C120,218 200,215 280,210 C340,205 380,195 420,160 C450,125 470,80 490,40" fill="none" stroke="var(--dg-accent)" stroke-width="2.5"></path><text x="500" y="38" font-family="var(--font-ui)" font-size="9" font-weight="700" fill="var(--dg-accent)">Reale</text><rect x="65" y="195" width="260" height="30" fill="var(--dg-ok-tint)" rx="3"></rect><text x="195" y="215" text-anchor="middle" font-family="var(--font-ui)" font-size="9" fill="var(--dg-ok)">Zona operativa sicura (60-80%)</text><rect x="380" y="35" width="120" height="190" fill="var(--dg-accent-tint)" rx="3"></rect><text x="440" y="230" text-anchor="middle" font-family="var(--font-ui)" font-size="9" fill="var(--dg-accent)">Zona pericolosa</text></svg>
+</Diagram>
+
+Questa relazione è governata dalla **teoria delle code**: in particolare il modello di coda M/M/1 della ricerca operativa. Quando l'utilizzo _rho_ si avvicina a 1,0, il tempo di attesa medio tende all'infinito:
+
+W = S / (1 - rho)   dove S = tempo di servizio, rho = utilizzo
+
+<Callout type="info">
+**Riferimento:** [MDN, Prestazioni Web](https://developer.mozilla.org/en-US/docs/Web/Performance), la guida completa di Mozilla alla misurazione delle prestazioni front-to-back.
+</Callout>
+
+## Utilizzo e code
+
+L'utilizzo è la percentuale della capacità totale del sistema attivamente utilizzata. Allo 0% il sistema è inattivo; al 100% ogni risorsa è satura e non è possibile elaborare nulla di nuovo.
+
+### L'analogia della gelateria
+
+Immagina una gelateria con un lavoratore. In una tranquilla domenica sera, entri, ordini e vieni servito immediatamente, basso utilizzo e bassa latenza. Martedì all'ora di pranzo c'è una lunga coda. L'operaio prepara ogni cono alla _esatta velocità_, ma il tuo tempo di attesa è salito alle stelle perché devi aspettare tutti quelli davanti a te. Il rendimento del lavoratore non è cambiato. La tua latenza percepita ha.
+
+I sistemi backend si comportano in modo identico: quando l'utilizzo della CPU e della memoria è basso, le richieste vengono servite istantaneamente. Man mano che arrivano più richieste, ognuno attende il completamento delle richieste che lo precedono, formando una coda. Maggiore è l'utilizzo, più lunga è la coda e maggiore è l'attesa per ciascuna richiesta.
+
+### L'analogia con l'autostrada
+
+Pensa a un'autostrada con diversi livelli di capacità. Al **50%**, il traffico scorre agevolmente e le auto mantengono la velocità. All'**80%**, i cambi di corsia richiedono maggiore cautela e la velocità inizia a diminuire. Al **90%**, il sistema diventa caotico, a volte fluido, a volte inceppato. Ogni tocco del freno crea un effetto a catena. Al **100%**, stallo totale: nessuno si muove.
+
+### Il rapporto esponenziale
+
+La relazione tra utilizzo e latenza _non_ è lineare. Intuitivamente ci aspettiamo che un raddoppio dell'utilizzo porti a una doppia latenza, ma la realtà è molto peggiore. La latenza rimane relativamente piatta fino a circa il 70% di utilizzo, poi curva bruscamente verso l'alto e vicino al 100% diventa quasi verticale, avvicinandosi all'infinito.
+
+<Callout type="info" title="Chiave da asporto">
+Non puoi **mai** eseguire i tuoi sistemi al 100% di utilizzo e aspettarti che funzionino. I sistemi di produzione in genere mirano al **60-80% di utilizzo**, riservando il 20-40% come margine per i picchi di traffico. Il traffico è _intenso_ per natura, arriva a ondate, non a un ritmo costante, e il tuo buffer è ciò che assorbe questi picchi.
+</Callout>
+
+## Trovare i colli di bottiglia
+
+Quando il tuo sistema è lento, _qualcosa di specifico_ sta causando la lentezza. Quel qualcosa si chiama collo di bottiglia. La disciplina più critica nell'ingegneria delle prestazioni è identificare il vero collo di bottiglia prima di applicare una soluzione, non tirare ad indovinare.
+
+### La trappola di saltare alle soluzioni
+
+Quando gli ingegneri incontrano un'API lenta, l'istinto è quello di ricorrere a rimedi standard da manuale: aggiungere la memorizzazione nella cache Redis, aggiornare Postgres, lanciare più server. A volte sei fortunato. Ma più spesso si trascorrono giorni o settimane per implementare una soluzione a un problema che in realtà non esiste, mentre il vero collo di bottiglia rimane intatto.
+
+### Un esempio del mondo reale
+
+Consideriamo a `GET /products/:id` endpoint che sembra lento. La reazione istintiva: il database deve essere il problema. Trascorri una settimana a creare un livello di memorizzazione nella cache Redis. Tu distribuisci. L'API è ancora lenta.
+
+Ora aggiungi misurazioni temporali in tutto il codice e scopri: la query del database richiede 10 ms, la nuova ricerca Redis richiede 5 ms, ma una _chiamata di registrazione sincrona_ a un servizio Elasticsearch remoto richiede 500 ms, bloccando la richiesta mentre attende una risposta di rete. Il database non è mai stato un problema.
+
+<Callout type="info" title="La regola d'oro">
+**Non indovinare mai. Misura sempre.** I colli di bottiglia nascosti comuni includono: registrazione sincrona a servizi remoti, serializzazione JSON/XML di payload di grandi dimensioni, chiamate API esterne in loop, payload di risposta di grandi dimensioni che causano una trasmissione di rete lenta e middleware che viene eseguito su ogni richiesta.
+</Callout>
+
+### Middleware di temporizzazione
+
+Ecco un pratico middleware che registra i tempi per richiesta, così puoi iniziare a identificare gli endpoint lenti:
+
+Vai a Python JavaScript TypeScript Java
+
+racchiudere ogni richiesta, metodo di registro, percorso, stato e durata
+
+```go
+package middleware
+
+import (
+    "log"
+    "net/http"
+    "time"
+)
+
+// TimingMiddleware logs the duration of every HTTP request.
+func TimingMiddleware(next http.Handler) http.Handler {
+    return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+        start := time.Now()
+
+        // Wrap the ResponseWriter to capture the status code
+        rw := &statusWriter{ResponseWriter: w, status: 200}
+        next.ServeHTTP(rw, r)
+
+        duration := time.Since(start)
+        log.Printf(
+            "method=%s path=%s status=%d duration=%v",
+            r.Method, r.URL.Path, rw.status, duration,
+        )
+    })
+}
+
+type statusWriter struct {
+    http.ResponseWriter
+    status int
+}
+
+func (w *statusWriter) WriteHeader(code int) {
+    w.status = code
+    w.ResponseWriter.WriteHeader(code)
+}
+```
+
+```python
+import time
+import logging
+from fastapi import Request
+from starlette.middleware.base import BaseHTTPMiddleware
+
+logger = logging.getLogger("perf")
+
+class TimingMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        start = time.perf_counter()
+        response = await call_next(request)
+        duration_ms = (time.perf_counter() - start) * 1000
+
+        logger.info(
+            f"method={request.method} path={request.url.path} "
+            f"status={response.status_code} duration={duration_ms:.1f}ms"
+        )
+        return response
+```
+
+```js
+// TimingMiddleware logs the duration of every HTTP request.
+export function timingMiddleware(req, res, next) {
+  const start = process.hrtime.bigint() // monotonic; Date.now() can jump
+                                        // backwards when NTP corrects
+
+  // No wrapper needed: 'finish' fires after the response is written, and
+  // res.statusCode is final by then.
+  res.on('finish', () => {
+    const durationMs = Number(process.hrtime.bigint() - start) / 1e6
+    console.log(
+      `method=${req.method} path=${req.route?.path ?? req.path} ` +
+      `status=${res.statusCode} duration=${durationMs.toFixed(1)}ms`,
+    )
+  })
+
+  next()
+}
+```
+
+```ts
+import type { NextFunction, Request, Response } from 'express'
+
+export function timingMiddleware(req: Request, res: Response, next: NextFunction): void {
+  const start = process.hrtime.bigint()
+
+  // Listen for BOTH: 'finish' means the response was sent, 'close' means
+  // the client hung up first. Timing only 'finish' silently drops every
+  // abandoned request, which is exactly the slow tail you are hunting.
+  const record = (outcome: 'finish' | 'close'): void => {
+    const durationMs = Number(process.hrtime.bigint() - start) / 1e6
+    console.log(
+      `method=${req.method} path=${req.route?.path ?? req.path} ` +
+      `status=${res.statusCode} outcome=${outcome} duration=${durationMs.toFixed(1)}ms`,
+    )
+  }
+
+  res.once('finish', () => record('finish'))
+  res.once('close', () => { if (!res.writableEnded) record('close') })
+
+  next()
+}
+```
+
+```java
+// A servlet Filter logs the duration of every HTTP request.
+@Component
+public class TimingFilter extends OncePerRequestFilter {
+    private static final Logger log = LoggerFactory.getLogger(TimingFilter.class);
+
+    @Override
+    protected void doFilterInternal(HttpServletRequest req, HttpServletResponse res,
+                                    FilterChain chain)
+            throws ServletException, IOException {
+        long start = System.nanoTime(); // nanoTime, not currentTimeMillis:
+                                        // only nanoTime is monotonic
+
+        try {
+            chain.doFilter(req, res);
+        } finally {
+            // In a finally block, so a request that threw is still timed.
+            // Those are usually the interesting ones.
+            long durationMs = (System.nanoTime() - start) / 1_000_000;
+            log.info("method={} path={} status={} duration={}ms",
+                req.getMethod(), req.getRequestURI(), res.getStatus(), durationMs);
+        }
+    }
+}
+
+// Spring Boot Actuator already records this as a Micrometer Timer
+// (http_server_requests_seconds) with percentiles, so in a real service
+// prefer that over hand-rolled logging. See chapter 15.
+```
+
+## Profili e grafici di fiamma
+
+La profilazione è la pratica di misurare esattamente dove trascorre il tempo la tua applicazione. Un profiler si collega all'applicazione in esecuzione, campiona lo stack di chiamate a intervalli regolari e registra quali funzioni sono in esecuzione, per quanto tempo vengono eseguite e quanta CPU o memoria consumano.
+
+### Come funziona un profiler
+
+Profiler CPU (come quelli integrati di Go `pprof` o di Python `cProfile`) interrompono periodicamente il programma e acquisiscono un'istantanea dello stack di chiamate corrente. Dopo migliaia di campioni, emerge un quadro statistico che mostra quali funzioni dominano il tempo di esecuzione.
+
+### Grafici di fiamma
+
+L'output grezzo del profiler può elencare migliaia di funzioni, ciascuna delle quali rappresenta una frazione del tempo totale. I grafici a fiamma rendono visivi questi dati: ogni funzione è una barra orizzontale, le barre più larghe indicano più tempo impiegato e le funzioni chiamate da altre funzioni sono impilate verticalmente. Uno sguardo al grafico delle fiamme ti dice dove sono gli hotspot della tua applicazione.
+
+<Diagram caption="Fig 4 / Flame graph: wider bars = more time; the logging call dominates">
+<svg viewBox="0 0 600 180" xmlns="http://www.w3.org/2000/svg" style="max-width:600px;width:100%"><rect x="10" y="140" width="580" height="28" rx="3" fill="var(--dg-accent-tint)" stroke="var(--dg-accent)" stroke-width="1"></rect><text x="300" y="158" text-anchor="middle" font-family="var(--font-diagram-mono)" font-size="10" fill="var(--dg-ink-2)">main.handleRequest(), 100%</text><rect x="10" y="108" width="90" height="28" rx="3" fill="var(--dg-info-tint)" stroke="var(--dg-info)" stroke-width="1"></rect><text x="55" y="126" text-anchor="middle" font-family="var(--font-diagram-mono)" font-size="8" fill="var(--dg-info-soft)">analizzareJSON</text><text x="55" y="136" text-anchor="middle" font-family="var(--font-diagram-mono)" font-size="7" fill="var(--dg-ink-2)">8%</text><rect x="100" y="108" width="60" height="28" rx="3" fill="var(--dg-ok-tint)" stroke="var(--dg-ok)" stroke-width="1"></rect><text x="130" y="126" text-anchor="middle" font-family="var(--font-diagram-mono)" font-size="8" fill="var(--dg-ok-soft)">aut</text><text x="130" y="136" text-anchor="middle" font-family="var(--font-diagram-mono)" font-size="7" fill="var(--dg-ink-2)">5%</text><rect x="160" y="108" width="140" height="28" rx="3" fill="var(--dg-accent-tint)" stroke="var(--dg-accent)" stroke-width="1"></rect><text x="230" y="126" text-anchor="middle" font-family="var(--font-diagram-mono)" font-size="8" fill="var(--dg-accent-2)">db.QueryProducts</text><text x="230" y="136" text-anchor="middle" font-family="var(--font-diagram-mono)" font-size="7" fill="var(--dg-ink-2)">12%</text><rect x="300" y="108" width="260" height="28" rx="3" fill="var(--dg-accent-surface)" stroke="var(--dg-accent)" stroke-width="1.5"></rect><text x="430" y="126" text-anchor="middle" font-family="var(--font-diagram-mono)" font-size="8" font-weight="600" fill="var(--dg-accent-2)">logging.SendRemote </text><text x="430" y="136" text-anchor="middle" font-family="var(--font-diagram-mono)" font-size="7" fill="var(--dg-accent)" font-weight="600">70% &lt;- COLLO DI BOTTIGLIA</text><rect x="300" y="76" width="180" height="28" rx="3" fill="var(--dg-accent-tint)" stroke="var(--dg-accent-soft)" stroke-width="1"></rect><text x="390" y="94" text-anchor="middle" font-family="var(--font-diagram-mono)" font-size="8" fill="var(--dg-accent-soft)">net.http.Post</text><text x="390" y="104" text-anchor="middle" font-family="var(--font-diagram-mono)" font-size="7" fill="var(--dg-ink-2)">55%</text><rect x="480" y="76" width="80" height="28" rx="3" fill="var(--dg-plum-tint)" stroke="var(--dg-plum)" stroke-width="1"></rect><text x="520" y="94" text-anchor="middle" font-family="var(--font-diagram-mono)" font-size="8" fill="var(--dg-plum)">serializzare</text><text x="520" y="104" text-anchor="middle" font-family="var(--font-diagram-mono)" font-size="7" fill="var(--dg-ink-2)">15%</text><rect x="300" y="44" width="120" height="28" rx="3" fill="var(--dg-accent-tint)" stroke="var(--dg-accent-soft)" stroke-width="1"></rect><text x="360" y="62" text-anchor="middle" font-family="var(--font-diagram-mono)" font-size="8" fill="var(--dg-accent-soft)">tcp.Dial</text><text x="360" y="72" text-anchor="middle" font-family="var(--font-diagram-mono)" font-size="7" fill="var(--dg-ink-2)">40%</text></svg>
+</Diagram>
+
+### Profilazione della CPU
+
+Vai a Python JavaScript TypeScript Java
+
+campionare lo stack, aggregarlo, eseguire il rendering di un grafico di fiamma
+
+```go
+import (
+    "net/http"
+    _ "net/http/pprof"  // side-effect import: registers /debug/pprof/
+)
+
+func main() {
+    // Your normal app setup...
+    // pprof endpoints are now accessible at /debug/pprof/
+    // Collect a 30-second CPU profile:
+    //   go tool pprof http://localhost:6060/debug/pprof/profile?seconds=30
+    //   (pprof) web   <- opens flame graph in browser
+    http.ListenAndServe(":6060", nil)
+}
+```
+
+```python
+import cProfile
+import pstats
+
+# Profile a function and print the top 20 slowest calls
+with cProfile.Profile() as pr:
+    handle_request()  # your function under test
+
+stats = pstats.Stats(pr)
+stats.sort_stats("cumulative")
+stats.print_stats(20)
+
+# For flame graphs, use py-spy (external tool):
+#   pip install py-spy
+#   py-spy record -o profile.svg -- python app.py
+#
+# py-spy's real advantage: it attaches to a RUNNING process by pid, so
+# you can profile the production container that is misbehaving right now
+# without redeploying it:  py-spy dump --pid 1
+```
+
+```js
+// Node has a sampling profiler built into the runtime.
+//
+//   node --cpu-prof --cpu-prof-dir=./profiles app.js
+//     -> writes a .cpuprofile you open in Chrome DevTools (Performance)
+//
+// For a running process, send it the inspector signal and attach:
+//   kill -SIGUSR1 <pid>
+//   then open chrome://inspect
+
+// Programmatically, when you want to profile one specific operation:
+import inspector from 'node:inspector/promises'
+
+const session = new inspector.Session()
+session.connect()
+
+await session.post('Profiler.enable')
+await session.post('Profiler.start')
+
+await handleRequest() // your function under test
+
+const { profile } = await session.post('Profiler.stop')
+await writeFile('profile.cpuprofile', JSON.stringify(profile))
+
+// Node caveat that catches everyone: a CPU profile of an IO-bound server
+// is almost entirely idle, because the time is spent WAITING, not
+// computing. If the flame graph is flat, you have an IO problem, and
+// the next section is the one you want.
+```
+
+```ts
+// The same built-in profiler, plus the one measurement that matters most
+// in Node and has no equivalent in the other tabs: EVENT LOOP LAG.
+//
+// A blocked event loop does not show up as slow code in any single
+// handler; it shows up as EVERY handler getting slower at once, which is
+// the single most confusing production symptom in Node.
+import { monitorEventLoopDelay } from 'node:perf_hooks'
+
+const histogram = monitorEventLoopDelay({ resolution: 10 })
+histogram.enable()
+
+setInterval(() => {
+  // If p99 climbs above a few milliseconds, something synchronous is
+  // hogging the loop: JSON.parse on a huge body, a sync crypto call,
+  // a regex backtracking. Profile THAT, not the handler that looks slow.
+  console.log(`event loop p99: ${(histogram.percentile(99) / 1e6).toFixed(1)}ms`)
+}, 10_000)
+
+// Run with --cpu-prof to find the offender:
+//   node --cpu-prof --cpu-prof-dir=./profiles dist/app.js
+```
+
+```java
+// The JVM ships a production-grade profiler: Java Flight Recorder. It is
+// designed to run continuously with ~1% overhead, so unlike most
+// profilers you can leave it on in production.
+//
+//   java -XX:StartFlightRecording=duration=30s,filename=profile.jfr -jar app.jar
+//
+// Or attach to a running process by pid:
+//   jcmd <pid> JFR.start duration=30s filename=profile.jfr
+//   jcmd <pid> JFR.dump  filename=profile.jfr
+//
+// Open profile.jfr in JDK Mission Control (free) for flame graphs, GC
+// pauses, lock contention and allocation hot spots in one view.
+
+// async-profiler is the other standard choice, and it produces a flame
+// graph directly:
+//   ./profiler.sh -d 30 -f flame.html <pid>
+//
+// It also samples ALLOCATION and LOCK events, not just CPU:
+//   ./profiler.sh -e alloc -d 30 -f alloc.html <pid>
+//   ./profiler.sh -e lock  -d 30 -f lock.html  <pid>
+//
+// That matters because on the JVM the bottleneck is often GC pressure or
+// a contended synchronized block, and a pure CPU profile shows neither.
+```
+
+### Colli di bottiglia legati alla CPU e colli di bottiglia legati all'I/O
+
+I profiler eccellono nel trovare colli di bottiglia **legati alla CPU**, funzioni che consumano cicli di calcolo eccessivi (elaborazione di immagini, inferenza di apprendimento automatico, matematica complessa). Tuttavia, la maggior parte delle applicazioni backend sono **limitate all'I/O**: il tempo viene impiegato in attesa di risposte del database, chiamate API esterne, letture di file o riconoscimenti della coda di messaggi. I profiler della CPU sono meno efficaci qui perché la CPU non funziona, è in _attesa_. Per il lavoro legato all'I/O, è necessaria la traccia distribuita.
+
+## Tracciamento distribuito
+
+La traccia distribuita segue una singola richiesta mentre scorre attraverso l'intero sistema, attraverso servizi, database, cache e API esterne, registrando timestamp ad ogni confine. L'output è un _trace_: un albero di "span", ciascuno dei quali rappresenta un'operazione temporizzata.
+
+Laddove un profiler mostra _cosa ha fatto la CPU_, una traccia mostra _dove ticchettava l'orologio_. Ad esempio, una traccia di `GET /products/5` potrebbe rivelare: 2 ms nella logica API, 800 ms nella query del database e 50 ms nella serializzazione. Ora sai esattamente dove concentrarti.
+
+<Diagram caption="Fig 5 / Distributed trace: the DB query dominates this request's timeline">
+<svg viewBox="0 0 620 210" xmlns="http://www.w3.org/2000/svg" style="max-width:620px;width:100%"><text x="130" y="20" font-family="var(--font-diagram-mono)" font-size="9" fill="var(--dg-ink-2)">0ms</text><text x="230" y="20" font-family="var(--font-diagram-mono)" font-size="9" fill="var(--dg-ink-2)">200ms</text><text x="350" y="20" font-family="var(--font-diagram-mono)" font-size="9" fill="var(--dg-ink-2)">400ms</text><text x="470" y="20" font-family="var(--font-diagram-mono)" font-size="9" fill="var(--dg-ink-2)">600ms</text><text x="570" y="20" font-family="var(--font-diagram-mono)" font-size="9" fill="var(--dg-ink-2)">800ms</text><line x1="130" y1="28" x2="130" y2="190" stroke="var(--dg-line)" stroke-width="0.5" stroke-dasharray="3 3"></line><line x1="250" y1="28" x2="250" y2="190" stroke="var(--dg-line)" stroke-width="0.5" stroke-dasharray="3 3"></line><line x1="370" y1="28" x2="370" y2="190" stroke="var(--dg-line)" stroke-width="0.5" stroke-dasharray="3 3"></line><line x1="490" y1="28" x2="490" y2="190" stroke="var(--dg-line)" stroke-width="0.5" stroke-dasharray="3 3"></line><text x="10" y="52" font-family="var(--font-diagram-mono)" font-size="9" fill="var(--dg-ink-2)">Richiesta</text><rect x="130" y="38" width="480" height="22" rx="3" fill="var(--dg-accent-tint)" stroke="var(--dg-accent)" stroke-width="1"></rect><text x="370" y="53" text-anchor="middle" font-family="var(--font-diagram-mono)" font-size="8" fill="var(--dg-accent-2)">852ms totali</text><text x="10" y="87" font-family="var(--font-diagram-mono)" font-size="9" fill="var(--dg-ink-2)">Aut</text><rect x="130" y="73" width="24" height="22" rx="3" fill="var(--dg-ok-tint)" stroke="var(--dg-ok)" stroke-width="1"></rect><text x="162" y="88" font-family="var(--font-diagram-mono)" font-size="8" fill="var(--dg-ok-soft)">5ms</text><text x="10" y="122" font-family="var(--font-diagram-mono)" font-size="9" fill="var(--dg-ink-2)">Interrogazione DB</text><rect x="154" y="108" width="406" height="22" rx="3" fill="var(--dg-accent-tint)" stroke="var(--dg-accent)" stroke-width="1.5"></rect><text x="357" y="123" text-anchor="middle" font-family="var(--font-diagram-mono)" font-size="8" font-weight="600" fill="var(--dg-accent-2)">800ms &lt;- COLLO DI BOTTIGLIA</text><text x="10" y="157" font-family="var(--font-diagram-mono)" font-size="9" fill="var(--dg-ink-2)">Serializzare</text><rect x="560" y="143" width="50" height="22" rx="3" fill="var(--dg-info-tint)" stroke="var(--dg-info)" stroke-width="1"></rect><text x="585" y="158" text-anchor="middle" font-family="var(--font-diagram-mono)" font-size="8" fill="var(--dg-info-soft)">42ms</text><text x="10" y="190" font-family="var(--font-diagram-mono)" font-size="9" fill="var(--dg-ink-2)">Risposta</text><rect x="560" y="178" width="20" height="16" rx="3" fill="var(--dg-ok-tint)" stroke="var(--dg-ok)" stroke-width="1"></rect><text x="585" y="190" font-family="var(--font-diagram-mono)" font-size="8" fill="var(--dg-ok-soft)">5ms</text></svg>
+</Diagram>
+
+Gli strumenti di tracciamento più diffusi includono **Jaeger**, **Zipkin** e **OpenTelemetry** (lo standard emergente che unifica tracciatura, metriche e registrazione). OpenTelemetry fornisce SDK per Go, Python, Java e la maggior parte dei linguaggi principali.
+
+<Callout type="info">
+**Riferimento:** [Documentazione OpenTelemetry](https://opentelemetry.io/docs/), lo standard indipendente dal fornitore per la traccia, le metriche e i log distribuiti.
+</Callout>
+
+## Il problema delle query N+1
+
+Il problema delle query N+1 è uno degli anti-pattern prestazionali più noti nell'ingegneria del backend. Si verifica quando si effettua 1 query per recuperare un elenco di N elementi, quindi N query aggiuntive per recuperare un dato correlato per ciascun elemento, per un totale di N+1 andata e ritorno del database.
+
+### Come succede
+
+Immagina un'applicazione per blog. Per visualizzare la home page, sono necessari 20 post del blog con il nome dell'autore di ciascun post. L'approccio ingenuo: eseguire una query per tutti i 20 post, quindi scorrere e creare una query separata per l'autore di ciascun post. Sono 21 query sul database. Per 1.000 post, sono 1.001 query. Anche con 5 ms per query, 1.001 query richiedono più di 5 secondi.
+
+<Diagram caption="Fig 6 / N+1 queries vs. bulk fetch: same data, vastly different performance">
+<svg viewBox="0 0 580 200" xmlns="http://www.w3.org/2000/svg" style="max-width:580px;width:100%"><text x="20" y="22" font-family="var(--font-ui)" font-size="10" font-weight="700" fill="var(--dg-accent)" letter-spacing="0.08em">MODELLO N+1 (ERRATO)</text><rect x="20" y="32" width="240" height="24" rx="3" fill="var(--dg-accent-tint)" stroke="var(--dg-accent)" stroke-width="1"></rect><text x="140" y="48" text-anchor="middle" font-family="var(--font-diagram-mono)" font-size="9" fill="var(--dg-accent-2)">SELECT * DA post (1 query)</text><rect x="20" y="62" width="240" height="16" rx="2" fill="var(--dg-accent-tint)" stroke="var(--dg-accent)" stroke-width="0.8"></rect><text x="140" y="74" text-anchor="middle" font-family="var(--font-diagram-mono)" font-size="8" fill="var(--dg-accent-2)">SELECT autore DOVE id=1</text><rect x="20" y="80" width="240" height="16" rx="2" fill="var(--dg-accent-tint)" stroke="var(--dg-accent)" stroke-width="0.8"></rect><text x="140" y="92" text-anchor="middle" font-family="var(--font-diagram-mono)" font-size="8" fill="var(--dg-accent-2)">SELECT autore DOVE id=2</text><rect x="20" y="98" width="240" height="16" rx="2" fill="var(--dg-accent-tint)" stroke="var(--dg-accent)" stroke-width="0.8"></rect><text x="140" y="110" text-anchor="middle" font-family="var(--font-diagram-mono)" font-size="8" fill="var(--dg-accent-2)">... (x 20 in più)</text><text x="140" y="138" text-anchor="middle" font-family="var(--font-diagram-mono)" font-size="10" font-weight="600" fill="var(--dg-accent)">21 query = 105 ms</text><text x="320" y="22" font-family="var(--font-ui)" font-size="10" font-weight="700" fill="var(--dg-ok)" letter-spacing="0.08em">RECUPERO IN BLOCCO (BUONO)</text><rect x="320" y="32" width="240" height="24" rx="3" fill="var(--dg-ok-tint)" stroke="var(--dg-ok)" stroke-width="1"></rect><text x="440" y="48" text-anchor="middle" font-family="var(--font-diagram-mono)" font-size="9" fill="var(--dg-ok-soft)">SELECT * DA post (1 query)</text><rect x="320" y="62" width="240" height="24" rx="3" fill="var(--dg-ok-tint)" stroke="var(--dg-ok)" stroke-width="1"></rect><text x="440" y="78" text-anchor="middle" font-family="var(--font-diagram-mono)" font-size="9" fill="var(--dg-ok-soft)">SELECT * DA utenti DOVE id IN (...)</text><text x="440" y="110" text-anchor="middle" font-family="var(--font-diagram-mono)" font-size="10" font-weight="600" fill="var(--dg-ok)">2 query = 10 ms</text><text x="300" y="185" text-anchor="middle" font-family="var(--font-ui)" font-size="11" font-weight="700" fill="var(--dg-ink-2)">10 volte più veloce eliminando il loop</text></svg>
+</Diagram>
+
+### La soluzione: recupero batch
+
+Invece di eseguire query in un ciclo, raccogli tutti gli ID di cui hai bisogno e recuperali in un'unica query utilizzando `WHERE id IN (...)`. Il risultato: sempre 2 query indipendentemente dal numero di elementi, una per l'elenco, una per i dati correlati.
+
+Vai a Python JavaScript TypeScript Java
+
+due query, sempre, indipendentemente dal numero di righe restituite
+
+```go
+func GetPostsWithAuthors(ctx context.Context, db *sql.DB) ([]PostWithAuthor, error) {
+    // Query 1: fetch all posts
+    posts, err := queryPosts(ctx, db)
+    if err != nil {
+        return nil, err
+    }
+
+    // Collect unique author IDs
+    authorIDSet := make(map[int64]struct{})
+    for _, p := range posts {
+        authorIDSet[p.AuthorID] = struct{}{}
+    }
+    authorIDs := make([]int64, 0, len(authorIDSet))
+    for id := range authorIDSet {
+        authorIDs = append(authorIDs, id)
+    }
+
+    // Query 2: fetch ALL authors in one batch
+    authors, err := queryAuthorsByIDs(ctx, db, authorIDs)
+    if err != nil {
+        return nil, err
+    }
+
+    // Build lookup map and merge
+    authorMap := make(map[int64]Author)
+    for _, a := range authors {
+        authorMap[a.ID] = a
+    }
+
+    result := make([]PostWithAuthor, len(posts))
+    for i, p := range posts {
+        result[i] = PostWithAuthor{Post: p, Author: authorMap[p.AuthorID]}
+    }
+    return result, nil
+}
+```
+
+```python
+# BAD, N+1 queries (Django ORM)
+posts = Post.objects.all()
+for post in posts:
+    print(post.author.name)  # Each access fires a separate query!
+
+# GOOD, 1 query with JOIN (ForeignKey)
+posts = Post.objects.select_related("author").all()
+
+# GOOD, 2 queries (ManyToMany or reverse FK)
+posts = Post.objects.prefetch_related("tags").all()
+```
+
+```js
+async function getPostsWithAuthors(db) {
+  // Query 1: fetch all posts
+  const { rows: posts } = await db.query('SELECT * FROM posts')
+
+  // Collect unique author IDs
+  const authorIds = [...new Set(posts.map((p) => p.author_id))]
+
+  // Query 2: fetch ALL authors in one batch.
+  // = ANY($1) rather than IN (...): one bound array parameter, so the
+  // query text is identical whether there are 3 authors or 300, which
+  // also means Postgres can reuse the prepared plan.
+  const { rows: authors } = await db.query(
+    'SELECT * FROM users WHERE id = ANY($1)', [authorIds])
+
+  // Build lookup map and merge
+  const authorMap = new Map(authors.map((a) => [a.id, a]))
+
+  return posts.map((post) => ({ post, author: authorMap.get(post.author_id) }))
+}
+
+// The other Node answer is DataLoader, which batches per event-loop tick.
+// It lets each resolver ask for ONE author and still issues one query for
+// all of them, which is why every GraphQL server uses it.
+```
+
+```ts
+import DataLoader from 'dataloader'
+import type { Pool } from 'pg'
+
+// DataLoader is worth showing in the typed tab because its generics are
+// what make it safe: <K, V> pins the key type and the value type, so a
+// loader keyed by author id cannot be handed a post id by mistake.
+function createAuthorLoader(db: Pool): DataLoader<number, Author> {
+  return new DataLoader<number, Author>(async (ids) => {
+    // Called ONCE per event-loop tick with every id requested in it,
+    // however many separate call sites asked. That is the N+1 fix,
+    // applied automatically rather than by restructuring the callers.
+    const { rows } = await db.query<Author>(
+      'SELECT * FROM users WHERE id = ANY($1)', [[...ids]])
+
+    const byId = new Map(rows.map((a) => [a.id, a]))
+
+    // The contract: return results in the SAME ORDER as `ids`, with a
+    // hole for anything missing. Getting this wrong silently hands the
+    // wrong author to the wrong post, and nothing throws.
+    return ids.map((id) => byId.get(id) ?? new Error(`no author ${id}`))
+  })
+}
+
+async function getPostsWithAuthors(db: Pool): Promise<PostWithAuthor[]> {
+  const authors = createAuthorLoader(db) // one loader PER REQUEST, never global
+  const { rows: posts } = await db.query<Post>('SELECT * FROM posts')
+
+  // Looks like N+1 and is not: all of these batch into one query.
+  return Promise.all(
+    posts.map(async (post) => ({ post, author: await authors.load(post.author_id) })),
+  )
+}
+```
+
+```java
+// JPA/Hibernate is where N+1 bites hardest, because the lazy loading
+// that causes it is invisible: `post.getAuthor().getName()` looks like a
+// field access and is a SELECT.
+
+// BAD, N+1 queries
+List<Post> posts = em.createQuery("SELECT p FROM Post p", Post.class).getResultList();
+for (Post post : posts) {
+    System.out.println(post.getAuthor().getName()); // one query EACH
+}
+
+// GOOD, 1 query with a JOIN FETCH
+List<Post> posts = em.createQuery("""
+        SELECT p FROM Post p JOIN FETCH p.author
+        """, Post.class).getResultList();
+
+// GOOD, Spring Data: the same fetch, declared on the repository
+public interface PostRepository extends JpaRepository<Post, Long> {
+    @EntityGraph(attributePaths = "author")
+    List<Post> findAll();
+}
+
+// Or batch it, which is the closest analogue to the Go tab: Hibernate
+// collects the lazy proxies and loads them IN (...) batches of 50.
+//   spring.jpa.properties.hibernate.default_batch_fetch_size: 50
+
+// Turn the SQL log on in development and count the lines. It is the only
+// reliable way to catch this before production does:
+//   spring.jpa.show-sql: true
+```
+
+Ogni ORM moderno fornisce primitive di recupero di massa: Django ha `select_related` / `prefetch_related`, Ruby on Rails ha `includes`, Offerta Prisma e Drizzle `leftJoin` e caricamento delle relazioni. Se stai scrivendo SQL grezzo, la risposta è `JOIN`. Il modello da evitare è qualsiasi ciclo che attiva una query per iterazione.
+
+<Callout type="info" title="Suggerimento professionale">
+La maggior parte degli ORM moderni hanno una modalità "SQL generato dalla stampa". Abilitalo durante lo sviluppo per catturare modelli N+1 prima che raggiungano la produzione. In Django: `settings.LOGGING` con il `django.db.backends` registratore. Nel GORM di Go: `db.Debug()`. Nel Prisma: `new PrismaClient({ log: ['query'] })`. In ibernazione: `spring.jpa.show-sql: true`.
+</Callout>
+
+## Indici e piani di query
+
+La fonte più comune di problemi di prestazioni del database è l'assenza di indici appropriati. Un indice è una struttura dati, tipicamente un albero B, che mantiene una copia ordinata dei valori in una o più colonne, insieme ai puntatori alle righe complete. Trasforma una scansione sequenziale lenta (esaminando ogni riga) in una ricerca veloce.
+
+### L'analogia della biblioteca
+
+Immagina una biblioteca con un milione di libri ma senza catalogo. Per trovare tutti i libri di John Green è necessario camminare su ogni scaffale, esaminare ogni libro e scansionare l'intera tabella. Ora aggiungi un catalogo ordinato per nome dell'autore con posizioni sugli scaffali. Cerchi "Green, John", trovi tre riferimenti agli scaffali, vai direttamente a quegli scaffali e ritorni in pochi minuti invece che in giorni. Quel catalogo è l'indice.
+
+### Scansione sequenziale e scansione dell'indice
+
+Senza un indice, il database esegue una scansione sequenziale (chiamata anche scansione completa della tabella), legge ogni riga per verificare la `WHERE` clausola. Per un milione di righe, l'operazione può richiedere diversi secondi. Con un indice B-tree, il database esegue una ricerca logaritmica, trovando le righe corrispondenti in pochi millisecondi, indipendentemente dalle dimensioni della tabella.
+
+Scansione sequenziale: O(n) -&gt; Scansione indice: O(log n)
+
+### Creazione di indici
+
+```sql
+-- Basic single-column index
+CREATE INDEX idx_posts_author_id ON posts (author_id);
+
+-- Composite index: order matters!
+-- This helps queries filtering by user_id, or user_id + created_at
+-- It does NOT help queries filtering ONLY by created_at
+CREATE INDEX idx_orders_user_created ON orders (user_id, created_at);
+
+-- Covering index: all needed data lives IN the index
+-- The query never touches the main table at all
+CREATE INDEX idx_departments_name ON departments (name) INCLUDE (id);
+```
+
+### Indici compositi e di copertura
+
+##### Indice composito
+
+- Indicizza **più colonne** insieme
+- Ottimizza le query che filtrano su tali colonne
+- Colonna **l'ordine è importante**: regola del prefisso più a sinistra
+- Indice attivo `(A, B)` aiuta `WHERE A=...` e `WHERE A=... AND B=...` ma no `WHERE B=...` solo
+
+##### Indice di copertura
+
+- Include tutte le colonne necessarie per una query
+- Il database fornisce dati **interamente dall'indice**
+- Elimina la "ricerca heap" (tornando alla tabella)
+- Usi `INCLUDE` clausola in Postgres per aggiungere colonne non chiave
+
+### Il costo degli indici
+
+Gli indici non sono gratuiti. Ogni indice consuma spazio su disco (e idealmente si adatta alla memoria). In modo più critico, ogni `INSERT`, `UPDATE`, o `DELETE` è necessario aggiornare tutti gli indici associati. Se indicizzi ciecamente ogni colonna, le tue operazioni di scrittura rallentano notevolmente. La linea guida: colonne dell'indice che appaiono in `WHERE`, `JOIN`, e `ORDER BY` clausole delle tue domande più frequenti e lascia stare il resto.
+
+### SPIEGARE ANALIZZARE: leggere il piano di interrogazione
+
+Per scoprire se le tue query utilizzano indici, Postgres fornisce il file `EXPLAIN ANALYZE` comando. Esegue la query e mostra l'esatto piano di esecuzione, quali tabelle sono state scansionate, quali indici sono stati utilizzati e quanto tempo ha richiesto ogni passaggio.
+
+```sql
+EXPLAIN ANALYZE
+SELECT p.*, u.name AS author_name
+FROM posts p
+JOIN users u ON u.id = p.author_id
+WHERE p.published = true
+ORDER BY p.created_at DESC
+LIMIT 20;
+
+-- Look for "Seq Scan" in the output, that means no index is being used.
+-- After adding an index, re-run and confirm it shows "Index Scan".
+```
+
+<Callout type="info">
+**Riferimento:** [PostgreSQL, utilizzo di EXPLAIN](https://www.postgresql.org/docs/current/using-explain.html), documentazione ufficiale sulla lettura dei piani di esecuzione delle query.
+</Callout>
+
+## Raggruppamento delle connessioni
+
+Stabilire una connessione al database è costoso. Ogni nuova connessione prevede un handshake a tre vie TCP, autenticazione, negoziazione della crittografia, impostazione dello stato della sessione e allocazione della memoria sul server del database (in genere diversi MB per connessione). Se la tua applicazione apre una nuova connessione per ogni query e la chiude immediatamente, pagherai questo costo su ogni singola richiesta.
+
+### I due problemi
+
+**Problema 1: sovraccarico di latenza.** Ogni configurazione di connessione aggiunge decine di millisecondi di sovraccarico, tempo sprecato prima dell'esecuzione di qualsiasi query effettiva. **Problema 2: esaurimento della connessione.** I database hanno limiti rigidi sulle connessioni simultanee (Postgres per impostazione predefinita è \~100, spesso configurato su 300-500). Durante i picchi di traffico, il tuo backend può esaurire il limite di connessione e mandare in crash il database.
+
+### Raggruppamento delle connessioni
+
+Un pool di connessioni mantiene una serie di connessioni prestabilite e riutilizzabili. Invece di creare una nuova connessione per ogni query, l'applicazione prende in prestito una connessione dal pool, la utilizza e la restituisce. La connessione rimane aperta per essere riutilizzata dalla richiesta successiva. Ciò elimina sia il sovraccarico di latenza che il rischio di esaurimento della connessione.
+
+<Diagram caption="Fig 7 / External connection pool (PgBouncer) sits between servers and database">
+<svg viewBox="0 0 620 220" xmlns="http://www.w3.org/2000/svg" style="max-width:620px;width:100%"><rect x="20" y="30" width="80" height="50" rx="4" fill="var(--dg-surface)" stroke="var(--dg-ink-2)" stroke-width="1.2"></rect><text x="60" y="58" text-anchor="middle" font-family="var(--font-diagram-mono)" font-size="9" fill="var(--dg-ink-2)">Server1</text><rect x="20" y="90" width="80" height="50" rx="4" fill="var(--dg-surface)" stroke="var(--dg-ink-2)" stroke-width="1.2"></rect><text x="60" y="118" text-anchor="middle" font-family="var(--font-diagram-mono)" font-size="9" fill="var(--dg-ink-2)">Server2</text><rect x="20" y="150" width="80" height="50" rx="4" fill="var(--dg-surface)" stroke="var(--dg-ink-2)" stroke-width="1.2"></rect><text x="60" y="178" text-anchor="middle" font-family="var(--font-diagram-mono)" font-size="9" fill="var(--dg-ink-2)">Server3</text><line x1="100" y1="55" x2="230" y2="110" stroke="var(--dg-ink-2)" stroke-width="1" marker-end="url(#arrowD)"></line><line x1="100" y1="115" x2="230" y2="115" stroke="var(--dg-ink-2)" stroke-width="1" marker-end="url(#arrowD)"></line><line x1="100" y1="175" x2="230" y2="120" stroke="var(--dg-ink-2)" stroke-width="1" marker-end="url(#arrowD)"></line><rect x="230" y="70" width="150" height="90" rx="6" fill="var(--dg-ok-tint)" stroke="var(--dg-ok)" stroke-width="1.5"></rect><text x="305" y="92" text-anchor="middle" font-family="var(--font-ui)" font-size="9" font-weight="700" fill="var(--dg-ok-soft)" letter-spacing="0.08em">PISCINA ESTERNA</text><text x="305" y="107" text-anchor="middle" font-family="var(--font-diagram-mono)" font-size="9" fill="var(--dg-ink-2)">(ad esempio PgBouncer)</text><rect x="245" y="118" width="18" height="18" rx="3" fill="var(--dg-ok-tint)" stroke="var(--dg-ok)" stroke-width="0.8"></rect><rect x="268" y="118" width="18" height="18" rx="3" fill="var(--dg-ok-tint)" stroke="var(--dg-ok)" stroke-width="0.8"></rect><rect x="291" y="118" width="18" height="18" rx="3" fill="var(--dg-ok-tint)" stroke="var(--dg-ok)" stroke-width="0.8"></rect><rect x="314" y="118" width="18" height="18" rx="3" fill="var(--dg-ok-tint)" stroke="var(--dg-ok)" stroke-width="0.8"></rect><rect x="337" y="118" width="18" height="18" rx="3" fill="var(--dg-ok-tint)" stroke="var(--dg-ok)" stroke-width="0.8"></rect><text x="305" y="150" text-anchor="middle" font-family="var(--font-diagram-mono)" font-size="8" fill="var(--dg-ink-2)">massimo: 250 conn</text><line x1="380" y1="115" x2="470" y2="115" stroke="var(--dg-info)" stroke-width="1.5" marker-end="url(#arrowB2)"></line><rect x="470" y="80" width="120" height="70" rx="6" fill="var(--dg-surface)" stroke="var(--dg-info)" stroke-width="1.5"></rect><text x="530" y="112" text-anchor="middle" font-family="var(--font-prose)" font-size="12" font-weight="600" fill="var(--dg-ink)">PostgreSQL</text><text x="530" y="132" text-anchor="middle" font-family="var(--font-diagram-mono)" font-size="9" fill="var(--dg-ink-2)">massimo: 300</text><defs><marker id="arrowD" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6" fill="var(--dg-ink-2)"></path></marker><marker id="arrowB2" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6" fill="var(--dg-info)"></path></marker></defs></svg>
+</Diagram>
+
+### Pooling interno vs. esterno
+
+##### Piscina Interna
+
+- Il pool risiede **all'interno** di ciascuna istanza del server
+- Ogni istanza mantiene le proprie connessioni
+- Configurazione semplice; la maggior parte dei driver DB ne include uno
+- **Rischio:** 3 istanze x 150 connessioni = 450, che possono superare il limite DB di 300
+
+##### Piscina esterna
+
+- Processo autonomo (PgBouncer, PgCat)
+- **Tutte** le istanze del server condividono un pool
+- Le connessioni totali al DB sono controllate centralmente
+- Preferito per sistemi di produzione **in scala orizzontale**
+
+Vai a Python JavaScript TypeScript Java
+
+limitare il pool, riciclare le connessioni e contare le istanze
+
+```go
+import "database/sql"
+
+db, err := sql.Open("postgres", connStr)
+if err != nil {
+    log.Fatal(err)
+}
+
+// Configure the built-in connection pool
+db.SetMaxOpenConns(25)                  // max open connections to the DB
+db.SetMaxIdleConns(10)                  // max idle connections kept ready
+db.SetConnMaxLifetime(5 * time.Minute)  // recycle connections after 5 min
+db.SetConnMaxIdleTime(1 * time.Minute)  // close idle connections after 1 min
+```
+
+```python
+from sqlalchemy import create_engine
+
+engine = create_engine(
+    "postgresql://user:pass@host/db",
+    pool_size=20,          # number of persistent connections
+    max_overflow=10,       # extra connections allowed during spikes
+    pool_timeout=30,       # seconds to wait for a free connection
+    pool_recycle=1800,     # recycle connections every 30 minutes
+    pool_pre_ping=True,    # test connection health before use
+)
+```
+
+```js
+import { Pool } from 'pg'
+
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  max: 20,                      // max open connections to the DB
+  idleTimeoutMillis: 60_000,    // close idle connections after 1 min
+  connectionTimeoutMillis: 30_000, // wait up to 30s for a free connection
+  maxLifetimeSeconds: 300,      // recycle connections after 5 min
+})
+
+// Never let a pool error take the process down. A connection dropped by
+// the database (a failover, an idle timeout on the server side) emits
+// 'error' on the IDLE client, and an unhandled 'error' event in Node is
+// an immediate crash.
+pool.on('error', (err) => {
+  console.error('idle client error', err)
+})
+```
+
+```ts
+import { Pool, type PoolConfig } from 'pg'
+
+// The arithmetic is the part worth writing down, because it is what
+// actually breaks: max x replicas must stay under the server's limit.
+// Postgres defaults to 100 connections TOTAL, and a few are reserved for
+// superuser, so 5 replicas x 20 is already the whole budget.
+const MAX_PER_INSTANCE = 20
+const REPLICAS = 5
+// 20 x 5 = 100 -> at the limit. Lower `max`, or put PgBouncer in front.
+
+const config: PoolConfig = {
+  connectionString: process.env.DATABASE_URL,
+  max: MAX_PER_INSTANCE,
+  idleTimeoutMillis: 60_000,
+  connectionTimeoutMillis: 30_000,
+}
+
+export const pool = new Pool(config)
+
+pool.on('error', (err: Error) => console.error('idle client error', err))
+
+// A bigger pool is not a faster app. Past the point where the database
+// can run queries in parallel, extra connections only move the queue
+// from your app into the database, where it is harder to see.
+```
+
+```java
+// Spring Boot uses HikariCP by default, and it is configured entirely in
+// application.yml, no code.
+//
+//   spring.datasource.hikari:
+//     maximum-pool-size: 20      # max open connections to the DB
+//     minimum-idle: 10           # idle connections kept ready
+//     max-lifetime: 300000       # recycle connections after 5 min (ms)
+//     idle-timeout: 60000        # close idle connections after 1 min
+//     connection-timeout: 30000  # fail fast rather than hang forever
+
+// HikariCP's own guidance is deliberately counter-intuitive and worth
+// taking seriously: the optimal pool size is SMALL. Their formula is
+// roughly (core_count * 2) + effective_spindle_count, which for an
+// 8-core database box is about 17, not 200. A larger pool adds context
+// switching and lock contention inside the database and makes
+// throughput WORSE, while making the problem invisible to your metrics.
+
+@Bean
+DataSource dataSource() {
+    HikariConfig config = new HikariConfig();
+    config.setJdbcUrl(System.getenv("DATABASE_URL"));
+    config.setMaximumPoolSize(20);
+    config.setMaxLifetime(Duration.ofMinutes(5).toMillis());
+    // Fail fast when the pool is exhausted. The default is 30s, and a
+    // request that waits 30s for a connection has already timed out
+    // upstream, so all it does is hold a thread hostage.
+    config.setConnectionTimeout(Duration.ofSeconds(5).toMillis());
+    return new HikariDataSource(config);
+}
+```
+
+<Callout type="info">
+**Riferimento:** [PgBouncer](https://www.pgbouncer.org/), pooler di connessioni leggero per PostgreSQL, lo standard de facto per le distribuzioni di produzione di Postgres.
+</Callout>
+
+## Fondamenti di memorizzazione nella cache
+
+Il caching è la pratica di archiviare il risultato di un'operazione costosa in un livello di archiviazione più veloce in modo che le richieste successive per gli stessi dati possano essere soddisfatte senza ripetere il lavoro costoso. L'idea è meravigliosamente semplice: calcola una volta, servine molti.
+
+In pratica, inserisci una cache (tipicamente Redis, Memcached o Valkey) davanti al tuo database. Quando arriva una richiesta, controlli prima la cache. In caso di **cache hit**, restituisci immediatamente i dati memorizzati nella cache, spesso in meno di 5 ms. In caso di **cache miss**, interroghi il database, memorizzi il risultato nella cache e quindi lo restituisci. Una singola mossa può ridurre la latenza percepita da 800 ms a 50 ms.
+
+### Caching locale e distribuito
+
+##### Cache locale
+
+- Memoria in-process (dizionario/mappa)
+- Accesso più veloce possibile: 1-3ms
+- Privato per ogni istanza del server
+- **Problema:** incoerenza della cache tra le istanze
+
+##### Cache distribuita
+
+- Servizio esterno (Redis, Memcached, Valkey)
+- Condiviso tra tutte le istanze del server
+- Nessuna incoerenza tra i server
+- **Contro:** il viaggio di andata e ritorno sulla rete aggiunge \~5-50ms
+
+### Caching a più livelli
+
+Molti sistemi di produzione utilizzano entrambi: una piccola cache locale per i dati più "caldi" (elementi a cui si accede più frequentemente) supportata da una cache distribuita più grande. Una richiesta controlla prima la cache locale (meno di un millisecondo), quindi ritorna alla cache distribuita (pochi millisecondi) e colpisce il database solo in caso di fallimento totale.
+
+Vai a Python JavaScript TypeScript Java
+
+controlla la cache, torna al database, riscrivi con un TTL
+
+```go
+import (
+    "context"
+    "encoding/json"
+    "time"
+    "github.com/redis/go-redis/v9"
+)
+
+var rdb = redis.NewClient(&redis.Options{Addr: "localhost:6379"})
+
+func GetProduct(ctx context.Context, id string) (*Product, error) {
+    cacheKey := "product:" + id
+
+    // 1. Try cache first
+    cached, err := rdb.Get(ctx, cacheKey).Result()
+    if err == nil {
+        var p Product
+        json.Unmarshal([]byte(cached), &p)
+        return &p, nil  // Cache HIT, ~2ms
+    }
+
+    // 2. Cache miss, query database
+    p, err := queryProductFromDB(ctx, id)
+    if err != nil {
+        return nil, err
+    }
+
+    // 3. Store in cache with TTL
+    data, _ := json.Marshal(p)
+    rdb.Set(ctx, cacheKey, data, 10*time.Minute)
+
+    return p, nil
+}
+```
+
+```python
+import json, redis
+
+r = redis.Redis(host="localhost", port=6379, decode_responses=True)
+
+def get_product(product_id: str) -> dict:
+    cache_key = f"product:{product_id}"
+
+    # 1. Try cache
+    cached = r.get(cache_key)
+    if cached:
+        return json.loads(cached)  # Cache HIT
+
+    # 2. Cache miss, query database
+    product = query_product_from_db(product_id)
+
+    # 3. Store with 10-minute TTL
+    r.setex(cache_key, 600, json.dumps(product))
+    return product
+```
+
+```js
+import { createClient } from 'redis'
+
+const redis = createClient({ url: 'redis://localhost:6379' })
+await redis.connect()
+
+export async function getProduct(id) {
+  const cacheKey = `product:${id}`
+
+  // 1. Try cache first
+  const cached = await redis.get(cacheKey)
+  if (cached !== null) {
+    return JSON.parse(cached) // Cache HIT, ~2ms
+  }
+
+  // 2. Cache miss, query database
+  const product = await queryProductFromDb(id)
+
+  // 3. Store in cache with TTL
+  await redis.set(cacheKey, JSON.stringify(product), { EX: 600 }) // 10 min
+
+  return product
+}
+```
+
+```ts
+import type { RedisClientType } from 'redis'
+
+const TTL_SECONDS = 600 // 10 minutes
+
+// One generic helper instead of this block copied per entity. The type
+// parameter is what makes it reusable: the caller decides what shape
+// comes back, and the cache layer never has to know.
+async function cached<T>(
+  redis: RedisClientType,
+  key: string,
+  load: () => Promise<T>,
+  ttl = TTL_SECONDS,
+): Promise<T> {
+  // 1. Try cache first
+  const hit = await redis.get(key)
+  if (hit !== null) {
+    return JSON.parse(hit) as T // Cache HIT, ~2ms
+  }
+
+  // 2. Cache miss, query database
+  const value = await load()
+
+  // 3. Store in cache with TTL
+  await redis.set(key, JSON.stringify(value), { EX: ttl })
+
+  return value
+}
+
+export const getProduct = (id: string): Promise<Product> =>
+  cached(redis, `product:${id}`, () => queryProductFromDb(id))
+
+// One caveat this shape does NOT solve, and it is the one that bites in
+// production: if a popular key expires, every in-flight request misses
+// at once and they all hit the database together. That is a cache
+// stampede, and the fix is a short lock or a single-flight wrapper so
+// only the first miss does the work. See chapter 09.
+```
+
+```java
+@Service
+public class ProductService {
+    private static final Duration TTL = Duration.ofMinutes(10);
+
+    private final StringRedisTemplate redis;
+    private final ObjectMapper json;
+
+    public Product getProduct(String id) throws JsonProcessingException {
+        String cacheKey = "product:" + id;
+
+        // 1. Try cache first
+        String cached = redis.opsForValue().get(cacheKey);
+        if (cached != null) {
+            return json.readValue(cached, Product.class); // Cache HIT, ~2ms
+        }
+
+        // 2. Cache miss, query database
+        Product product = queryProductFromDb(id);
+
+        // 3. Store in cache with TTL
+        redis.opsForValue().set(cacheKey, json.writeValueAsString(product), TTL);
+
+        return product;
+    }
+}
+
+// Or declaratively, which is the version you would actually ship:
+//   @Cacheable(cacheNames = "product", key = "#id")
+//   public Product getProduct(String id) { return queryProductFromDb(id); }
+// with the TTL set on the RedisCacheManager. See chapter 09.
+```
+
+## Invalidazione della cache
+
+C'è un famoso detto in informatica: _"Ci sono solo due problemi difficili nella programmazione: dare un nome alle cose, invalidare la cache ed errori off-by-one."_ L'invalidazione della cache, ovvero mantenere i dati memorizzati nella cache sincronizzati con la fonte della verità, è davvero uno dei problemi più difficili nei sistemi distribuiti.
+
+### Scadenza basata sul tempo (TTL)
+
+L'approccio più semplice: impostare un **Time To Live (TTL)** su ciascuna voce della cache. Allo scadere del TTL, la voce viene automaticamente eliminata. La richiesta successiva attiva una nuova query sul database. La sfida è scegliere il TTL giusto, troppo breve e si perde la maggior parte dei vantaggi della memorizzazione nella cache; troppo lungo e gli utenti vedranno dati non aggiornati.
+
+### Invalidazione basata sugli eventi
+
+Invece di attendere un timer, elimini o aggiorni esplicitamente la voce della cache ogni volta che cambiano i dati sottostanti. Ad esempio, quando un utente aggiorna il proprio profilo, il gestore degli aggiornamenti elimina anche la voce del profilo memorizzato nella cache. La successiva richiesta di lettura recupererà nuovi dati dal database e ripopolerà la cache.
+
+Il vantaggio: i dati sono sempre aggiornati. Il rischio: se si dimentica di invalidare anche un solo percorso di codice che modifica i dati, si ottengono risultati obsoleti. Ciò richiede disciplina e revisione approfondita del codice.
+
+## Modelli di memorizzazione nella cache
+
+Il _modello_ di memorizzazione nella cache determina quando e come i dati entrano nella cache. Tre modelli principali dominano l'ingegneria di backend:
+
+### 1. Cache-Aside (caricamento lento)
+
+Il modello più comune. Il codice dell'applicazione gestisce la cache in modo esplicito: controlla la cache -&gt; in caso di errore, interroga il DB -&gt; memorizza il risultato nella cache -&gt; restituisci. Durante la scrittura, invalida o elimina la voce della cache.
+
+<Callout type="info" title="Flusso cache-aside">
+**Leggi:** Controlla la cache -&gt; colpito? Ritorno. Mancare? Interroga DB -&gt; scrivi nella cache -&gt; ritorna.\
+**Scrivi:** Aggiorna DB -&gt; elimina la voce della cache (la lettura successiva viene ripopolata).
+</Callout>
+
+### 2. Scrittura attraverso
+
+Ogni operazione di scrittura aggiorna _sia_ la cache che il database contemporaneamente. Le letture trovano sempre nuovi dati nella cache, non ci sono errori nella cache dopo la prima scrittura. Il compromesso: la latenza di scrittura aumenta perché stai scrivendo su due sistemi prima di restituire una risposta di successo.
+
+### 3. Write-Behind (Write-Back)
+
+La scrittura aggiorna solo la cache e ritorna immediatamente. L'aggiornamento del database avviene in modo asincrono in background. Ciò garantisce la latenza di scrittura più rapida ma introduce un rischio: se la cache fallisce prima del completamento della scrittura asincrona, i dati vengono persi. La cache e il database potrebbero essere temporaneamente incoerenti.
+
+| Modello | Leggi Velocità | Scrivi velocità | Coerenza | Complessità |
+| ------------- | ----------------------- | ------------------- | ---------------------------- | ---------- |
+| Cache-Aside | Veloce (dopo il primo errore) | Normale | Buono (invalidazione esplicita) | Basso |
+| Scrittura attraverso | Sempre veloce | Più lento (doppia scrittura) | Forte | Medio |
+| Scrivi dietro | Sempre veloce | Il più veloce | Eventuale (rischio di perdita) | Alto |
+
+## Tasso di riscontri nella cache
+
+Il tasso di successo della cache misura la percentuale di richieste che vengono servite con successo dalla cache anziché passare al database. Una percentuale di successo del 90% significa che 9 richieste su 10 vengono servite dalla cache; solo il 10% tocca il database. Una percentuale di successo del 20% significa che il tuo livello di memorizzazione nella cache funziona a malapena.
+
+Percentuale di riscontri nella cache = Riscontri nella cache / (Riscontri nella cache + Riscontri nella cache) x 100%
+
+### Fattori che influenzano il tasso di successo
+
+**Durata TTL:** TTL più lunghi mantengono gli oggetti nella cache più a lungo, aumentando la percentuale di successo ma rischiando di diventare obsoleti. **Dimensione della cache:** una cache più grande contiene più voci, aumentando naturalmente la probabilità di un successo. **Modelli di accesso ai dati:** se il traffico è altamente concentrato su un piccolo insieme di elementi "caldi" (distribuzione basata sulla legge di potenza), la memorizzazione nella cache è estremamente efficace. Se il traffico viene distribuito uniformemente su milioni di chiavi univoche, i tassi di successo saranno inferiori. **Politica di eliminazione:** Algoritmi come LRU (Least Recently Used) e LFU (Least Frequently Used) determinano quali voci vengono eliminate quando la cache è piena, la scelta di quella giusta dipende dai tuoi modelli di accesso.
+
+<Callout type="info" title="Tassi di successo del target">
+Per la maggior parte delle applicazioni web, un tasso di successo del **70-95%** è considerato salutare. Al di sotto del 50% suggerisce una discrepanza fondamentale tra la strategia di memorizzazione nella cache e i modelli di accesso effettivi, è tempo di riesaminare i TTL, le chiavi di cache e la politica di eliminazione.
+</Callout>
+
+## Scala verticale
+
+Il ridimensionamento verticale (chiamato anche "scaling up") significa sostituire il server con una macchina più potente, più core CPU, più RAM, spazio di archiviazione più veloce e schede di rete migliori. Il tuo codice non cambia. La tua architettura non cambia. Aggiorna semplicemente l'hardware.
+
+### Perché è attraente
+
+Il ridimensionamento verticale è la forma più semplice di ridimensionamento. Un server con il doppio dei core della CPU gestisce circa il doppio delle richieste. Un server con il doppio della RAM può contenere il doppio dei dati memorizzati nella cache. Eviti l'intera categoria della complessità dei sistemi distribuiti: nessun sistema di bilanciamento del carico, nessuna sincronizzazione dello stato, nessuna gestione delle partizioni di rete. Dal punto di vista economico, una singola macchina con una potenza doppia spesso costa meno di due macchine della metà delle sue dimensioni e si evitano i costi operativi legati alla gestione di una flotta.
+
+### Limiti rigidi del ridimensionamento verticale
+
+**Tetto hardware:** I fornitori di servizi cloud offrono macchine fino a una certa dimensione. Una volta esaurita l'istanza più grande disponibile (ad esempio, 96 core, 384 GB di RAM), semplicemente non è possibile scalare ulteriormente. **Singolo punto di errore:** una macchina significa un dominio di errore. Se si blocca, l'intero servizio va offline. **Nessuna distribuzione geografica:** un singolo server in un data center significa che gli utenti dall'altra parte del mondo sperimentano un'elevata latenza, la fisica impone una velocità massima della luce nei viaggi di andata e ritorno attraverso il continente (\~100 ms negli Stati Uniti&lt;-&gt;India).
+
+<Diagram caption="Fig 8 / Vertical scaling: bigger machines, same architecture, hard ceiling">
+<svg viewBox="0 0 580 170" xmlns="http://www.w3.org/2000/svg" style="max-width:580px;width:100%"><rect x="30" y="60" width="80" height="80" rx="5" fill="var(--dg-surface)" stroke="var(--dg-ink-2)" stroke-width="1.2"></rect><text x="70" y="90" text-anchor="middle" font-family="var(--font-diagram-mono)" font-size="9" fill="var(--dg-ink-2)">2 nuclei</text><text x="70" y="105" text-anchor="middle" font-family="var(--font-diagram-mono)" font-size="9" fill="var(--dg-ink-2)">4 GB</text><text x="70" y="120" text-anchor="middle" font-family="var(--font-diagram-mono)" font-size="9" fill="var(--dg-ink-2)">50 GB</text><text x="70" y="155" text-anchor="middle" font-family="var(--font-ui)" font-size="9" fill="var(--dg-ink-2)">$50/mese</text><text x="175" y="105" text-anchor="middle" font-family="var(--font-prose)" font-size="22" fill="var(--dg-accent)">-&gt;</text><rect x="220" y="45" width="100" height="95" rx="5" fill="var(--dg-surface)" stroke="var(--dg-ink-2)" stroke-width="1.2"></rect><text x="270" y="78" text-anchor="middle" font-family="var(--font-diagram-mono)" font-size="9" fill="var(--dg-ink-2)">8 nuclei</text><text x="270" y="93" text-anchor="middle" font-family="var(--font-diagram-mono)" font-size="9" fill="var(--dg-ink-2)">32 GB</text><text x="270" y="108" text-anchor="middle" font-family="var(--font-diagram-mono)" font-size="9" fill="var(--dg-ink-2)">SSD da 500GB</text><text x="270" y="155" text-anchor="middle" font-family="var(--font-ui)" font-size="9" fill="var(--dg-ink-2)">$ 320/mese</text><text x="385" y="105" text-anchor="middle" font-family="var(--font-prose)" font-size="22" fill="var(--dg-accent)">-&gt;</text><rect x="420" y="25" width="130" height="115" rx="5" fill="var(--dg-surface)" stroke="var(--dg-accent)" stroke-width="1.5"></rect><text x="485" y="60" text-anchor="middle" font-family="var(--font-diagram-mono)" font-size="9" fill="var(--dg-ink-2)">32 nuclei</text><text x="485" y="75" text-anchor="middle" font-family="var(--font-diagram-mono)" font-size="9" fill="var(--dg-ink-2)">96 GB di RAM</text><text x="485" y="90" text-anchor="middle" font-family="var(--font-diagram-mono)" font-size="9" fill="var(--dg-ink-2)">NVMe da 2TB</text><text x="485" y="105" text-anchor="middle" font-family="var(--font-diagram-mono)" font-size="9" fill="var(--dg-ink-2)">Scheda di rete da 10 Gbps</text><text x="485" y="155" text-anchor="middle" font-family="var(--font-ui)" font-size="9" fill="var(--dg-ink-2)">$ 2.400 / mese</text><line x1="420" y1="18" x2="550" y2="18" stroke="var(--dg-accent)" stroke-width="1.5" stroke-dasharray="4 3"></line><text x="485" y="12" text-anchor="middle" font-family="var(--font-ui)" font-size="8" font-weight="700" fill="var(--dg-accent)" letter-spacing="0.1em">SOFFITTO FERRAMENTA</text></svg>
+</Diagram>
+
+## Ridimensionamento orizzontale
+
+Il ridimensionamento orizzontale (chiamato anche "scaling out") adotta l'approccio opposto: invece di ingrandire una macchina, si aggiungono più macchine di dimensioni simili che lavorano insieme per gestire il carico.
+
+### Vantaggi
+
+**Nessun soffitto rigido:** Hai bisogno di più capacità? Aggiungi più server. Non c'è limite al numero di istanze che puoi eseguire. **Ridondanza:** se un server si guasta, gli altri continuano a gestire il traffico; il guasto viene assorbito, non è catastrofico. **Distribuzione geografica:** puoi posizionare i server in più data center in tutto il mondo, indirizzando gli utenti a quello più vicino per una latenza minima.
+
+### Il costo della complessità
+
+Il ridimensionamento orizzontale introduce una categoria completamente nuova di problemi, i problemi dei sistemi distribuiti:
+
+**Distribuzione delle richieste:** Come decidi quale server gestisce ciascuna richiesta? Hai bisogno di un bilanciatore del carico, un nuovo componente nella tua infrastruttura. **Sincronizzazione dello stato:** se l'utente A aggiorna il proprio profilo sul Server 1, come fa il Server 2 a saperlo? **Partizioni di rete:** cosa succede quando la rete che collega i tuoi server fallisce? I server possono prendere decisioni contrastanti. **Controllo dello stato:** come si rileva quando un server non è disponibile e come si reindirizza il traffico da esso e lo riporta al server quando viene ripristinato?
+
+Tutti questi problemi hanno soluzioni, bilanciatori del carico, database condivisi, algoritmi di consenso, controlli di integrità, ma ogni soluzione aggiunge complessità e richiede un'attenta progettazione. I sistemi distribuiti non eliminano i problemi; essi _trasformano_ una serie di problemi in una serie diversa e tu devi valutare quale serie di problemi è più gestibile per la tua situazione.
+
+##### Scala verticale
+
+- Semplice, senza modifiche architettoniche
+- Nessuna complessità di sistemi distribuiti
+- Economicamente efficiente su piccola scala
+- Soffitto hardware rigido
+- Singolo punto di guasto
+- Nessuna distribuzione geografica
+
+##### Ridimensionamento orizzontale
+
+- Nessun tetto massimo di capacità
+- Ridondanza integrata
+- Distribuzione geografica possibile
+- Richiede il bilanciamento del carico
+- È necessaria la sincronizzazione dello stato
+- Operativamente complesso
+
+## Bilanciamento del carico
+
+Nel momento in cui hai più di un server, hai bisogno di un meccanismo per distribuire le richieste in entrata su di essi. Questo meccanismo è il bilanciatore del carico. Si trova davanti ai tuoi server, riceve tutto il traffico in entrata e inoltra ogni richiesta a una delle istanze di backend disponibili in base a un algoritmo scelto.
+
+### Algoritmi comuni
+
+**Round Robin:** le richieste vengono distribuite in sequenza, server 1, server 2, server 3, ripetizione. Semplice e uniforme. **Minime connessioni:** ogni richiesta viene inviata al server che attualmente gestisce il minor numero di connessioni attive. Meglio per richieste di durata variabile. **Hash IP:** l'indirizzo IP del client determina quale server riceve la richiesta, garantendo che lo stesso client raggiunga sempre lo stesso server (utile per l'affinità di sessione). **Round Robin ponderato:** I server con maggiore capacità ricevono proporzionalmente più richieste.
+
+<Diagram caption="Fig 9 / Load balancer distributes traffic across geographically distributed servers">
+<svg viewBox="0 0 600 210" xmlns="http://www.w3.org/2000/svg" style="max-width:600px;width:100%"><rect x="20" y="70" width="65" height="70" rx="4" fill="var(--dg-surface)" stroke="var(--dg-ink-2)" stroke-width="1.2"></rect><text x="52" y="100" text-anchor="middle" font-family="var(--font-prose)" font-size="10" fill="var(--dg-ink-2)">Utenti</text><text x="52" y="118" text-anchor="middle" font-family="var(--font-diagram-mono)" font-size="8" fill="var(--dg-ink-2)">10K RPS</text><line x1="85" y1="105" x2="160" y2="105" stroke="var(--dg-ink-2)" stroke-width="1.2" marker-end="url(#arrowD2)"></line><rect x="160" y="55" width="110" height="100" rx="6" fill="var(--dg-accent-tint)" stroke="var(--dg-accent)" stroke-width="1.5"></rect><text x="215" y="85" text-anchor="middle" font-family="var(--font-ui)" font-size="9" font-weight="700" fill="var(--dg-accent)" letter-spacing="0.06em">CARICO</text><text x="215" y="100" text-anchor="middle" font-family="var(--font-ui)" font-size="9" font-weight="700" fill="var(--dg-accent)" letter-spacing="0.06em">BILANCIATORE</text><text x="215" y="120" text-anchor="middle" font-family="var(--font-diagram-mono)" font-size="8" fill="var(--dg-ink-2)">Nginx/HAProxy</text><text x="215" y="140" text-anchor="middle" font-family="var(--font-diagram-mono)" font-size="8" fill="var(--dg-ink-2)">ALB/Traefik</text><line x1="270" y1="80" x2="370" y2="40" stroke="var(--dg-ink-2)" stroke-width="1" marker-end="url(#arrowD2)"></line><line x1="270" y1="105" x2="370" y2="105" stroke="var(--dg-ink-2)" stroke-width="1" marker-end="url(#arrowD2)"></line><line x1="270" y1="130" x2="370" y2="170" stroke="var(--dg-ink-2)" stroke-width="1" marker-end="url(#arrowD2)"></line><rect x="370" y="18" width="90" height="42" rx="4" fill="var(--dg-surface)" stroke="var(--dg-ink-2)" stroke-width="1.2"></rect><text x="415" y="38" text-anchor="middle" font-family="var(--font-diagram-mono)" font-size="9" fill="var(--dg-ink-2)">Server1</text><text x="415" y="52" text-anchor="middle" font-family="var(--font-diagram-mono)" font-size="8" fill="var(--dg-ink-2)">Stati Uniti orientali</text><rect x="370" y="84" width="90" height="42" rx="4" fill="var(--dg-surface)" stroke="var(--dg-ink-2)" stroke-width="1.2"></rect><text x="415" y="104" text-anchor="middle" font-family="var(--font-diagram-mono)" font-size="9" fill="var(--dg-ink-2)">Server2</text><text x="415" y="118" text-anchor="middle" font-family="var(--font-diagram-mono)" font-size="8" fill="var(--dg-ink-2)">UE-Ovest</text><rect x="370" y="150" width="90" height="42" rx="4" fill="var(--dg-surface)" stroke="var(--dg-ink-2)" stroke-width="1.2"></rect><text x="415" y="170" text-anchor="middle" font-family="var(--font-diagram-mono)" font-size="9" fill="var(--dg-ink-2)">Server3</text><text x="415" y="184" text-anchor="middle" font-family="var(--font-diagram-mono)" font-size="8" fill="var(--dg-ink-2)">AP-Sud</text><text x="520" y="42" font-family="var(--font-diagram-mono)" font-size="8" fill="var(--dg-ok)">~3,3K RPS</text><text x="520" y="108" font-family="var(--font-diagram-mono)" font-size="8" fill="var(--dg-ok)">~3,3K RPS</text><text x="520" y="174" font-family="var(--font-diagram-mono)" font-size="8" fill="var(--dg-ok)">~3,3K RPS</text><defs><marker id="arrowD2" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6" fill="var(--dg-ink-2)"></path></marker></defs></svg>
+</Diagram>
+
+### Bilanciatore del carico in pratica (configurazione Nginx)
+
+```nginx
+upstream backend {
+    # Least connections algorithm
+    least_conn;
+
+    server 10.0.1.10:8080 weight=3;   # stronger machine
+    server 10.0.1.11:8080 weight=2;
+    server 10.0.1.12:8080 weight=2;
+    server 10.0.1.13:8080 backup;     # only used if others are down
+}
+
+server {
+    listen 443 ssl;
+    server_name api.example.com;
+
+    location / {
+        proxy_pass http://backend;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+    }
+}
+```
+
+### Controlli sanitari
+
+I sistemi di bilanciamento del carico inviano periodicamente sonde di controllo dello stato (richieste HTTP a a `/health` endpoint) a ciascun backend. Se un server non risponde, il sistema di bilanciamento del carico interrompe l'instradamento del traffico verso di esso. Quando il server viene ripristinato, il traffico riprende. Questo è il meccanismo che offre il vantaggio di ridondanza del ridimensionamento orizzontale.
+
+Vai a Python JavaScript TypeScript Java
+
+sonda la dipendenza, rispondi 503 quando è irraggiungibile
+
+```go
+http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+    // Check database connectivity
+    if err := db.PingContext(r.Context()); err != nil {
+        w.WriteHeader(http.StatusServiceUnavailable)
+        json.NewEncoder(w).Encode(map[string]string{
+            "status": "unhealthy",
+            "reason": "database unreachable",
+        })
+        return
+    }
+    w.WriteHeader(http.StatusOK)
+    json.NewEncoder(w).Encode(map[string]string{
+        "status": "healthy",
+    })
+})
+```
+
+```python
+@app.get("/health")
+async def health(response: Response):
+    # Check database connectivity
+    try:
+        await db.execute(text("SELECT 1"))
+    except Exception:
+        response.status_code = 503
+        return {"status": "unhealthy", "reason": "database unreachable"}
+
+    return {"status": "healthy"}
+```
+
+```js
+app.get('/health', async (req, res) => {
+  // Check database connectivity
+  try {
+    await pool.query('SELECT 1')
+  } catch {
+    return res.status(503).json({
+      status: 'unhealthy',
+      reason: 'database unreachable',
+    })
+  }
+
+  res.status(200).json({ status: 'healthy' })
+})
+```
+
+```ts
+import type { Request, Response } from 'express'
+
+// Keep the health check CHEAP and give it a timeout. A probe that runs a
+// real query, or that can hang, turns a slow database into a fleet-wide
+// outage: every instance fails its check at once and the load balancer
+// takes all of them out of rotation simultaneously.
+export async function health(_req: Request, res: Response): Promise<void> {
+  try {
+    await Promise.race([
+      pool.query('SELECT 1'),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 2000)),
+    ])
+  } catch {
+    res.status(503).json({ status: 'unhealthy', reason: 'database unreachable' })
+    return
+  }
+
+  res.status(200).json({ status: 'healthy' })
+}
+```
+
+```java
+// Spring Boot Actuator gives you this endpoint for free, and it already
+// includes a DataSource check:
+//   management.endpoint.health.show-details: always
+//
+// GET /actuator/health -> 200 {"status":"UP"} or 503 {"status":"DOWN"}
+
+// Anything it does not know about is one bean:
+@Component
+public class DatabaseHealthIndicator implements HealthIndicator {
+    private final JdbcClient db;
+
+    DatabaseHealthIndicator(JdbcClient db) {
+        this.db = db;
+    }
+
+    @Override
+    public Health health() {
+        try {
+            db.sql("SELECT 1").query(Integer.class).single();
+            return Health.up().build();
+        } catch (Exception e) {
+            return Health.down().withDetail("reason", "database unreachable").build();
+        }
+    }
+}
+
+// See chapter 12 for why liveness and readiness must be separate groups:
+// a database outage should stop traffic being routed here, but must NOT
+// restart the pod, since restarting does not bring the database back.
+```
+
+## Riepilogo e principi chiave
+
+L'ingegneria delle prestazioni non consiste nel memorizzare una lista di tecniche. Si tratta di costruire modelli mentali sul comportamento dei sistemi sotto carico e di applicare lo strumento giusto al momento giusto. Ecco i principi fondamentali:
+
+**1. Misura, non indovinare.** Non dare mai per scontato dove sia il collo di bottiglia. Utilizza middleware di temporizzazione, tracciamento distribuito, profiler e `EXPLAIN ANALYZE` identificare il problema reale prima di investire in una soluzione.
+
+**2. Pensa in percentili, non in medie.** P50 descrive l'esperienza tipica. P99 ti racconta l'esperienza peggiore e spesso rappresenta gli utenti più preziosi che eseguono le operazioni più complesse.
+
+**3. Rispetta la curva di utilizzo.** La latenza cresce in modo esponenziale man mano che l'utilizzo si avvicina al 100%. Mantieni spazio per gli attacchi di traffico. Obiettivo: utilizzo del 60-80% nella produzione.
+
+**4. Correggi prima il database.** Elimina N+1 query, aggiungi indici appropriati (ma non troppi) e utilizza il pool di connessioni. Queste ottimizzazioni a basso impatto spesso forniscono i maggiori vantaggi.
+
+**5. Memorizza nella cache in modo strategico.** Comprendi i tuoi modelli di accesso. Scegli il modello di memorizzazione nella cache corretto (cache-aside, write-through, write-behind). Monitora la percentuale di riscontri nella cache. Ricorda che l'invalidazione della cache è davvero difficile, rispettala.
+
+**6. Ridimensiona in modo appropriato.** Inizia con il ridimensionamento verticale: è più semplice ed economico. Passa alla scalabilità orizzontale quando raggiungi i limiti hardware, hai bisogno di ridondanza o di distribuzione geografica. Comprendi che il ridimensionamento orizzontale trasforma i tuoi problemi anziché eliminarli.
+
+<Callout type="info">
+**Ulteriori letture:** [MDN Web Performance](https://developer.mozilla.org/en-US/docs/Web/Performance) / [Postgres Performance Tips](https://www.postgresql.org/docs/current/performance-tips.html) / [OpenTelemetry Docs](https://opentelemetry.io/docs/) / [Redis Documentation](https://redis.io/docs/latest/)
+</Callout>
+
+[^ Torna all'inizio](#top)
+
+Backend dai Primi Principi / Capitolo 18 / Scaling. Il codice è destinato a Go 1.22+, Python 3.11+, Node.js 20+, TypeScript 5+ e Java 17+ (Spring Boot).

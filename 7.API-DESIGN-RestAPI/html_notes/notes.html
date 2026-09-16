@@ -1,0 +1,2036 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="referrer" content="no-referrer">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Progettazione API (REST) / Capitolo 07 / Backend dai primi principi</title>
+  <meta name="description" content="Capitolo 07 di Backend dai primi principi: progettazione API (REST). Note sui principi primi, diagrammi ed esempi eseguibili in Go e Python.">
+  <meta name="theme-color" content="#f3ede2">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2032%2032'%3E%3Crect%20width='32'%20height='32'%20rx='7'%20fill='%23b8402e'/%3E%3Ctext%20x='16'%20y='23'%20font-family='Georgia,serif'%20font-size='19'%20font-weight='700'%20fill='%23f3ede2'%20text-anchor='middle'%3EB%3C/text%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<style>
+:root{
+  --paper: #f3ede2;
+  --paper-2: #ece3d4;
+  --paper-3: #e6dcca;
+  --ink: #211e1a;
+  --ink-soft: #5b5347;
+  --ink-faint: #8d8475;
+  --accent: #b8402e;
+  --accent-2: #8f2f20;
+  --accent-soft: #f4ded6;
+  --accent-line: #e3c4b8;
+  --green: #3f6f4e;
+  --green-soft: #e0e9dd;
+  --green-line: #bcd3b6;
+  --blue: #37607f;
+  --blue-soft: #dee5ee;
+  --gold: #b07d2b;
+  --gold-soft: #f0e5c9;
+  --border: #d8cfbe;
+  --border-2: #c7bca6;
+  --code-bg: #232019;
+  --code-2: #1a1813;
+  --code-text: #e9e2d3;
+  --code-faint: #9c948a;
+  --c-kw: #e0896a;
+  --c-str: #a9c98a;
+  --c-com: #7d7468;
+  --c-num: #d8b66a;
+  --c-fn: #7fb0c9;
+}
+*{box-sizing:border-box;}
+html{scroll-behavior:smooth;}
+body{
+  margin:0; background:var(--paper); color:var(--ink);
+  font-family:"Spline Sans", system-ui, sans-serif; font-size: 17px; line-height: 1.7;
+  -webkit-font-smoothing:antialiased;
+}
+body::before{
+  content:""; position:fixed; inset:0; pointer-events:none; z-index:0; opacity:.5;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+}
+.kicker{
+  font-family:"JetBrains Mono", ui-monospace, monospace; font-size:.66rem; letter-spacing:.24em;
+  text-transform:uppercase; color:var(--accent); font-weight:600;
+}
+.page-title{
+  font-family:"Fraunces", Georgia, serif; font-weight:900; font-size:3.1rem; line-height:1.02;
+  letter-spacing:-.02em; margin:.32em 0 .25em;
+}
+.lede{font-size: 19px; color:var(--ink-soft); line-height: 1.6; max-width:42em; font-weight:300;}
+.divider{height:1px; background:var(--border); border:0; margin:42px 0;}
+
+section{scroll-margin-top:24px;}
+.sec-head{display:flex; align-items:center; gap:16px; margin:62px 0 22px;}
+.sec-num{
+  font-family:"JetBrains Mono", ui-monospace, monospace; font-weight:600; font-size:.82rem; color:#fff;
+  background:var(--accent); border-radius:8px; padding:7px 11px; line-height:1; flex-shrink:0;
+  box-shadow:0 2px 0 #8f2f20;
+}
+.sec-head h2{font-family:"Fraunces", Georgia, serif; font-weight:700; font-size:1.92rem; letter-spacing:-.01em; margin:0; line-height:1.1;}
+h3{font-family:"Fraunces", Georgia, serif; font-weight:600; font-size:1.28rem; margin:38px 0 12px; letter-spacing:-.01em;}
+h4{font-family:"Fraunces", Georgia, serif; font-weight:600; font-size:1.05rem; margin:26px 0 8px;}
+p{margin:0 0 16px;}
+strong{font-weight:600; color:var(--ink);}
+a.ext{color:var(--accent); text-decoration:none; border-bottom:1px solid var(--accent-line);}
+a.ext:hover{background:var(--accent-soft);}
+
+/* inline code token */
+code{
+  font-family:"JetBrains Mono", ui-monospace, monospace; font-size:.82em; background:var(--paper-3);
+  border:1px solid var(--border); border-radius:5px; padding:1px 6px; color:#8f2f20;
+  white-space:nowrap;
+}
+
+ul,ol{margin:0 0 18px; padding-left:0; list-style:none;}
+ul li,ol li{position:relative; padding-left:26px; margin:9px 0;}
+ul li::before{content:">"; position:absolute; left:6px; color:var(--accent); font-weight:700; font-size:1.05em;}
+ol{counter-reset:ol;}
+ol li{counter-increment:ol;}
+ol li::before{
+  content:counter(ol); position:absolute; left:0; top:2px; font-family:"JetBrains Mono", ui-monospace, monospace;
+  font-size:.62rem; font-weight:600; color:var(--accent); background:var(--accent-soft);
+  width:18px; height:18px; border-radius:50%; display:flex; align-items:center; justify-content:center;
+}
+
+/* ---------- CODE BLOCK ---------- */
+.code{
+  background:var(--code-bg); border-radius:11px; margin:22px 0; overflow:hidden;
+  box-shadow:0 14px 30px -16px rgba(40,30,20,.55); border:1px solid #35302a;
+}
+.code-top{
+  display:flex; align-items:center; gap:14px; padding:10px 15px; background:var(--code-2);
+  border-bottom:1px solid #35302a;
+}
+.dots{display:flex; gap:7px;}
+.dots i{width:11px; height:11px; border-radius:50%; display:block;}
+.dots i:nth-child(1){background:#d05a47;}
+.dots i:nth-child(2){background:#cf9f4b;}
+.dots i:nth-child(3){background:#5a9a5f;}
+.tabs{display:flex; gap:4px; margin-left:6px;}
+.tab{
+  font-family:"JetBrains Mono", ui-monospace, monospace; font-size:.72rem; color:var(--code-faint);
+  background:transparent; border:0; padding:4px 12px; border-radius:6px; cursor:pointer; font-weight:500;
+  transition:all .15s;
+}
+.tab:hover{color:var(--code-text);}
+.tab.active{background:#1a1813; color:#d8b66a;}
+.code-cap{margin-left:auto; font-family:"JetBrains Mono", ui-monospace, monospace; font-size:.66rem; color:var(--code-faint);}
+.code-body{
+  margin:0; padding:17px 19px; overflow-x:auto; font-family:"JetBrains Mono", ui-monospace, monospace;
+  font-size:.79rem; line-height:1.7; color:var(--code-text); white-space:pre; tab-size:2;
+}
+.code-body.hidden{display:none;}
+.code-body::-webkit-scrollbar{height:8px;}
+.code-body::-webkit-scrollbar-thumb{background:#4a443b; border-radius:4px;}
+.c-kw{color:var(--c-kw);} .c-str{color:var(--c-str);} .c-com{color:var(--c-com); font-style:italic;}
+.c-num{color:var(--c-num);} .c-fn{color:var(--c-fn);}
+
+/* HTTP wire block (light, single) */
+.wire{
+  background:var(--code-bg); color:var(--code-text); font-family:"JetBrains Mono", ui-monospace, monospace;
+  font-size:.79rem; line-height:1.7; border-radius:11px; padding:17px 19px; margin:20px 0;
+  overflow-x:auto; white-space:pre; border:1px solid #35302a;
+}
+.wire .m{color:#e0896a;} .wire .h{color:#7fb0c9;} .wire .v{color:#a9c98a;} .wire .cm{color:#7d7468; font-style:italic;}
+
+/* ---------- DIAGRAM PANEL ---------- */
+.diagram{
+  background:var(--paper-3); border:1px solid var(--border); border-radius:13px;
+  padding:26px 26px 22px; margin:26px 0; position:relative;
+}
+.diagram-label{
+  font-family:"JetBrains Mono", ui-monospace, monospace; font-size:.62rem; letter-spacing:.18em; text-transform:uppercase;
+  color:var(--accent); font-weight:600; margin-bottom:18px; display:flex; align-items:center; gap:8px;
+}
+.diagram-label::before{content:""; width:22px; height:1px; background:var(--accent); display:inline-block;}
+.diagram svg{display:block; width:100%; height:auto;}
+.dg-note{font-size:.84rem; color:var(--ink-faint); margin-top:14px; font-style:italic; line-height:1.5;}
+
+/* URL anatomy */
+.urlbar{
+  font-family:"JetBrains Mono", ui-monospace, monospace; font-size:.92rem; background:var(--code-bg);
+  border-radius:10px; padding:18px 16px; color:var(--code-text); display:flex; flex-wrap:wrap;
+  justify-content:center; gap:2px; line-height:1.4; margin-bottom:6px;
+}
+.useg{padding:3px 7px; border-radius:6px; position:relative; cursor:default;}
+.useg.s1{background:rgba(127,176,201,.2); color:#7fb0c9;}
+.useg.s2{background:rgba(224,137,106,.22); color:#e0896a;}
+.useg.s3{background:rgba(169,201,138,.2); color:#a9c98a;}
+.useg.s4{background:rgba(216,182,106,.22); color:#d8b66a;}
+.useg.s5{background:rgba(180,140,200,.22); color:#c58fb0;}
+.ulegend{display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:8px 18px; margin-top:16px;}
+.ulegend div{font-size:.82rem; color:var(--ink-soft); display:flex; gap:8px; align-items:flex-start;}
+.ulegend .sw{width:13px; height:13px; border-radius:4px; flex-shrink:0; margin-top:4px;}
+
+/* ---------- TABLE ---------- */
+.tbl-wrap{margin:22px 0; overflow-x:auto; border:1px solid var(--border); border-radius:11px;}
+table{width:100%; border-collapse:collapse; font-size:.88rem; background:var(--paper-3);}
+thead th{
+  font-family:"JetBrains Mono", ui-monospace, monospace; font-size:.64rem; letter-spacing:.12em; text-transform:uppercase;
+  color:var(--accent); font-weight:600; text-align:left; padding:13px 16px; border-bottom:1.5px solid var(--border-2);
+  white-space:nowrap;
+}
+tbody td{padding:12px 16px; border-bottom:1px solid var(--border); vertical-align:top; line-height:1.5;}
+tbody tr:last-child td{border-bottom:0;}
+tbody tr:hover{background:var(--paper-2);}
+td code, th code{white-space:nowrap;}
+
+/* ---------- CALLOUTS ---------- */
+.callout{border-radius:11px; padding:18px 20px 16px; margin:24px 0; border:1px solid; position:relative;}
+.callout .clabel{
+  font-family:"JetBrains Mono", ui-monospace, monospace; font-size:.62rem; letter-spacing:.16em; text-transform:uppercase;
+  font-weight:600; margin-bottom:9px; display:block;
+}
+.callout p:last-child{margin-bottom:0;}
+.callout.trap{background:var(--accent-soft); border-color:var(--accent-line);}
+.callout.trap .clabel{color:var(--accent);}
+.callout.model{background:var(--gold-soft); border-color:#ddc79a;}
+.callout.model .clabel{color:var(--gold);}
+.callout.tip{background:var(--green-soft); border-color:var(--green-line);}
+.callout.tip .clabel{color:var(--green);}
+.callout.note{background:var(--blue-soft); border-color:#b9c8da;}
+.callout.note .clabel{color:var(--blue);}
+
+/* steps */
+.steps{margin:20px 0;}
+.step{display:flex; gap:15px; margin:14px 0; align-items:flex-start;}
+.step .sn{
+  flex-shrink:0; width:27px; height:27px; border-radius:50%; background:var(--accent); color:#fff;
+  font-family:"JetBrains Mono", ui-monospace, monospace; font-size:.78rem; font-weight:600;
+  display:flex; align-items:center; justify-content:center; margin-top:2px;
+}
+.step.g .sn{background:var(--green);}
+.step .sb{flex:1;}
+.step .sb b{font-family:"Fraunces", Georgia, serif;}
+
+.pill{font-family:"JetBrains Mono", ui-monospace, monospace; font-size:.66rem; padding:3px 9px; border-radius:20px; font-weight:600; letter-spacing:.04em;}
+.pill.idem{background:var(--green-soft); color:var(--green); border:1px solid var(--green-line);}
+.pill.nonidem{background:var(--accent-soft); color:var(--accent); border:1px solid var(--accent-line);}
+.pill.safe{background:var(--blue-soft); color:var(--blue); border:1px solid #b9c8da;}
+
+.footer{margin-top:80px; padding-top:26px; border-top:1px solid var(--border); font-size:.82rem; color:var(--ink-faint); font-family:"JetBrains Mono", ui-monospace, monospace;}
+.footer a{color:var(--accent); text-decoration:none;}
+
+@media(max-width:980px){
+  .page-title{font-size:2.3rem;}}</style>
+<style>
+.chapter-nav{position:fixed;bottom:0;left:0;right:0;z-index:9998;display:flex;align-items:center;justify-content:space-between;padding:14px clamp(16px,4vw,48px);background:rgba(243,237,226,.88);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border-top:1.5px solid #c7bca6;box-shadow:0 -8px 32px -16px rgba(40,30,20,.18);font-family:"JetBrains Mono", ui-monospace, monospace;}
+.nav-chapter-link{display:flex;align-items:center;gap:12px;text-decoration:none;color:#5b5347;padding:10px 18px;border-radius:10px;transition:all .2s ease;max-width:38%;}
+.nav-chapter-link:hover{background:rgba(184,64,46,.08);color:#b8402e;transform:translateY(-1px);}
+.nav-chapter-link.nav-next{text-align:right;flex-direction:row;}
+.nav-arrow{font-size:22px;color:#b8402e;font-weight:700;flex:none;}
+.nav-label{display:flex;flex-direction:column;gap:2px;font-size:13.5px;line-height:1.3;}
+.nav-small{font-size:10px;letter-spacing:.22em;text-transform:uppercase;color:#8d8475;font-weight:600;}
+.nav-indicator{font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:#b8402e;font-weight:700;text-decoration:none;padding:8px 16px;border:1.5px solid #c7bca6;border-radius:40px;background:rgba(255,255,255,.5);transition:all .2s;white-space:nowrap;}
+.nav-indicator:hover{background:#b8402e;color:#fff;border-color:#b8402e;}
+.nav-dot{display:inline-block;width:7px;height:7px;background:#b8402e;border-radius:50%;margin-right:4px;vertical-align:middle;}
+.nav-sep{color:#c7bca6;margin:0 2px;}
+.nav-disabled{visibility:hidden;pointer-events:none;}
+@media(max-width:700px){.nav-label{font-size:11.5px;}.nav-chapter-link{padding:8px 10px;max-width:38%;}.chapter-nav{padding:10px 12px;}.nav-small{font-size:9px;letter-spacing:.16em;}}
+@media(max-width:520px){.nav-label{display:none;}.nav-chapter-link{max-width:none;padding:8px 12px;}.nav-arrow{font-size:20px;}.nav-indicator{font-size:11px;padding:7px 13px;letter-spacing:.12em;}}
+body{padding-bottom:80px;}
+</style>
+  <link rel="stylesheet" href="../../assets/copy-button.css">
+  <link rel="stylesheet" href="../../assets/enhancements.css">
+  <link rel="stylesheet" href="../../assets/shell.css">
+  <link rel="stylesheet" href="../../assets/theme.css">
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;0,9..144,900;1,9..144,400;1,9..144,600&family=Spline+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="../../assets/theme.js"></script>
+</head>
+<body>
+<button class="bfp-toc-toggle" id="bfpTocToggle" aria-controls="bfpToc" aria-expanded="false"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><line x1="2" y1="4" x2="14" y2="4"/><line x1="2" y1="8" x2="14" y2="8"/><line x1="2" y1="12" x2="14" y2="12"/></svg>Contenuto</button>
+<div class="bfp-toc-scrim" id="bfpTocScrim"></div>
+<div class="bfp-shell">
+    <aside class="bfp-toc" id="bfpToc">
+      <div class="bfp-brand"><span class="bfp-brand-name">RIPOSO</span><span class="bfp-brand-slash">/</span><span class="bfp-brand-lens">l'obiettivo del back-end</span></div>
+      <div class="bfp-brand-sub">Capitolo 07/Manuale da campo</div>
+      <div class="bfp-toc-rule"></div>
+      <nav class="bfp-toc-nav">
+        <a class="bfp-toc-link" href="#s1"><span class="bfp-toc-num">01</span><span class="bfp-toc-text">Cos'è realmente il REST</span></a>
+        <a class="bfp-toc-link" href="#s2"><span class="bfp-toc-num">02</span><span class="bfp-toc-text">I sei vincoli</span></a>
+        <a class="bfp-toc-link" href="#s3"><span class="bfp-toc-num">03</span><span class="bfp-toc-text">Perché ci confonde adesso</span></a>
+        <a class="bfp-toc-link" href="#s4"><span class="bfp-toc-num">04</span><span class="bfp-toc-text">Anatomia di un percorso</span></a>
+        <a class="bfp-toc-link" href="#s5"><span class="bfp-toc-num">05</span><span class="bfp-toc-text">Metodi e idempotenza</span></a>
+        <a class="bfp-toc-link" href="#s6"><span class="bfp-toc-num">06</span><span class="bfp-toc-text">Azioni personalizzate</span></a>
+        <a class="bfp-toc-link" href="#s7"><span class="bfp-toc-num">07</span><span class="bfp-toc-text">Elenca le API</span></a>
+        <a class="bfp-toc-link" href="#s8"><span class="bfp-toc-num">08</span><span class="bfp-toc-text">Codici di stato</span></a>
+        <a class="bfp-toc-link" href="#s9"><span class="bfp-toc-num">09</span><span class="bfp-toc-text">Esempio lavorato</span></a>
+        <a class="bfp-toc-link" href="#s10"><span class="bfp-toc-num">10</span><span class="bfp-toc-text">Regole d'oro</span></a>
+        <a class="bfp-toc-link" href="#s11"><span class="bfp-toc-num">11</span><span class="bfp-toc-text">Controllo delle versioni</span></a>
+        <a class="bfp-toc-link" href="#s12"><span class="bfp-toc-num">12</span><span class="bfp-toc-text">Risposte agli errori</span></a>
+        <a class="bfp-toc-link" href="#s13"><span class="bfp-toc-num">13</span><span class="bfp-toc-text">I 6 contro gli 8</span></a>
+        <a class="bfp-toc-link" href="#s14"><span class="bfp-toc-num">14</span><span class="bfp-toc-text">Gli Otto Principi</span></a>
+        <a class="bfp-toc-link" href="#s15"><span class="bfp-toc-num">15</span><span class="bfp-toc-text">Codice lavorato / Vai</span></a>
+      </nav>
+    </aside>
+    <main class="bfp-content">
+  <div class="kicker">Un riferimento dettagliato al backend</div>
+  <h1 class="page-title">RIPOSO completo<br>Progettazione dell'API</h1>
+  <p class="lede">REST non è una tecnologia che installi, è un insieme di accordi che consentono a milioni di client e server di parlare senza coordinarsi. Questo capitolo smonta lo standard, lo ricostruisce dalla crisi di scalabilità che lo ha creato e trasforma ogni domanda confusa (plurale o singolare? PUT o PATCH? quale codice di stato?) in una regola su cui non dovrai mai più indovinare.</p>
+  <hr class="divider">
+
+  <!-- 01 -->
+  <section id="s1">
+    <div class="sec-head"><span class="sec-num">01</span><h2>Cos'è realmente il REST</h2></div>
+
+    <p>Nel 1990 <strong>Tim Berners-Lee</strong> ha avviato un progetto per condividere la conoscenza in tutto il mondo, il World Wide Web. Nel giro di circa un anno ha inventato essenzialmente tutto ciò che usiamo ancora: il <strong>URI</strong> (identificatore uniforme della risorsa), il <strong>HTTP</strong> protocollo, <strong>HTML</strong>, il primo server web, il primo browser e il primo editor HTML WYSIWYG integrato in quel browser. Notevole per una persona in dodici mesi.</p>
+
+    <p>Poi è arrivato il problema: <strong>scala</strong>. Il web è cresciuto in modo esponenziale, ben oltre ciò che Berners-Lee aveva pianificato. Il design originale semplicemente non poteva assorbire la base di utenti che acquisiva ogni giorno. Intorno al 1993, <strong>Roy Fielding</strong>: co-fondatore del progetto del server HTTP Apache, si è preoccupato proprio di questo. Per rendere scalabile il web ha proposto una serie di soluzioni architettoniche <em>vincoli</em>. Lui e Berners-Lee hanno poi co-scritto le specifiche per <strong>HTTP/1.1</strong>, la prima versione standardizzata del protocollo. Infine, dentro <strong>2000</strong>, Fielding ha nominato e descritto l'intero stile architettonico nella sua tesi di dottorato: <strong>REST, Trasferimento di Stato rappresentativo</strong>.</p>
+
+    <div class="callout note">
+      <span class="clabel">Vale la pena leggerlo</span>
+      <p>La tesi di Fielding è il documento originale di REST. Cerca &quot;Dissertazione REST di Roy Fielding&quot;, è una lettura davvero utile per qualsiasi ingegnere di backend, perché spiega <em>perché</em> questi modelli esistono, non solo quello che sono.</p>
+    </div>
+
+    <p>Il nome si scompone in tre idee e ognuna rappresenta un concetto reale che usi ogni giorno:</p>
+
+    <h3>Rappresentativo</h3>
+    <p>Una risorsa (un dato, un utente, un libro, un carrello) può esserlo <em>rappresentato</em> in diversi formati a seconda di chi lo richiede. Lo stesso <code>user</code> il record potrebbe essere inviato come <strong>JSON</strong> a un client API (server-server) o come <strong>HTML</strong> a un browser o come <strong>XML</strong> a qualche consumatore legacy. La risorsa sottostante è una cosa; le sue rappresentazioni sono molteplici.</p>
+
+    <div class="diagram">
+      <div class="diagram-label">Una risorsa/molte rappresentazioni</div>
+      <svg viewBox="0 0 720 230" xmlns="http://www.w3.org/2000/svg" font-family="JetBrains Mono, monospace">
+        <rect x="290" y="92" width="140" height="46" rx="9" fill="#b8402e"/>
+        <text x="360" y="113" fill="#fff" font-size="13" font-weight="600" text-anchor="middle">utente</text>
+        <text x="360" y="129" fill="#f4ded6" font-size="9.5" text-anchor="middle">id/nome/creatoAt</text>
+        <!-- arrows -->
+        <line x1="290" y1="108" x2="180" y2="55" stroke="#c7bca6" stroke-width="1.5"/>
+        <line x1="290" y1="115" x2="170" y2="115" stroke="#c7bca6" stroke-width="1.5"/>
+        <line x1="290" y1="122" x2="180" y2="180" stroke="#c7bca6" stroke-width="1.5"/>
+        <!-- JSON -->
+        <rect x="20" y="34" width="150" height="42" rx="8" fill="#e0e9dd" stroke="#bcd3b6"/>
+        <text x="95" y="52" fill="#3f6f4e" font-size="11" font-weight="600" text-anchor="middle">JSON</text>
+        <text x="95" y="67" fill="#5b5347" font-size="9" text-anchor="middle">Client/server API&lt;-&gt;server</text>
+        <!-- HTML -->
+        <rect x="20" y="94" width="150" height="42" rx="8" fill="#dee5ee" stroke="#b9c8da"/>
+        <text x="95" y="112" fill="#37607f" font-size="11" font-weight="600" text-anchor="middle">HTML</text>
+        <text x="95" y="127" fill="#5b5347" font-size="9" text-anchor="middle">browser/umano</text>
+        <!-- XML -->
+        <rect x="20" y="158" width="150" height="42" rx="8" fill="#f0e5c9" stroke="#ddc79a"/>
+        <text x="95" y="176" fill="#b07d2b" font-size="11" font-weight="600" text-anchor="middle">XML</text>
+        <text x="95" y="191" fill="#5b5347" font-size="9" text-anchor="middle">consumatore tradizionale</text>
+        <text x="510" y="118" fill="#8d8475" font-size="11" text-anchor="start">stessi dati,</text>
+        <text x="510" y="134" fill="#8d8475" font-size="11" text-anchor="start">vestiti diversi</text>
+      </svg>
+    </div>
+
+    <h3>Stato</h3>
+    <p>Lo Stato è il <em>condizione attuale</em> di una risorsa, i suoi attributi attuali. Pensa a un carrello della spesa di Amazon: il suo stato è l'insieme degli articoli in esso contenuti, le loro quantità e il prezzo totale <em>proprio adesso</em>. Questo stato risiede sul server ed è ciò che viene spostato.</p>
+
+    <div class="diagram">
+      <div class="diagram-label">Stato/la risorsa in questo momento</div>
+      <svg viewBox="0 0 720 180" xmlns="http://www.w3.org/2000/svg" font-family="JetBrains Mono, monospace">
+        <!-- cart resource -->
+        <rect x="50" y="67" width="140" height="46" rx="9" fill="#b8402e"/>
+        <text x="120" y="88" fill="#fff" font-size="13" font-weight="600" text-anchor="middle">carrello</text>
+        <text x="120" y="104" fill="#f4ded6" font-size="9.5" text-anchor="middle">ID / ID utente / stato</text>
+        <!-- connector lines -->
+        <path d="M 190 83 Q 230 53 270 53" fill="none" stroke="#c7bca6" stroke-width="1.2" stroke-dasharray="3 3"/>
+        <path d="M 190 97 Q 245 99 305 99" fill="none" stroke="#c7bca6" stroke-width="1.5"/>
+        <!-- earlier snapshot (behind) -->
+        <rect x="270" y="26" width="230" height="54" rx="8" fill="#ece3d4" stroke="#d8cfbe" stroke-dasharray="3 3"/>
+        <text x="385" y="47" fill="#8d8475" font-size="10" font-weight="600" text-anchor="middle">istantanea precedente</text>
+        <text x="385" y="63" fill="#8d8475" font-size="8.5" text-anchor="middle">articoli: 1 / quantità: 1 / totale: $ 18,00</text>
+        <!-- current snapshot (crisp, highlighted) -->
+        <rect x="305" y="67" width="245" height="64" rx="8" fill="#e0e9dd" stroke="#bcd3b6"/>
+        <text x="428" y="88" fill="#3f6f4e" font-size="11" font-weight="600" text-anchor="middle">stato attuale (adesso)</text>
+        <text x="428" y="105" fill="#5b5347" font-size="9" text-anchor="middle">articoli: 2 / quantità: 3 / totale: $ 47,00</text>
+        <text x="428" y="119" fill="#8d8475" font-size="8.5" text-anchor="middle">aggiornatoAt: proprio ora</text>
+        <!-- annotation -->
+        <text x="580" y="88" fill="#8d8475" font-size="11" text-anchor="start">un'istantanea nel tempo,</text>
+        <text x="580" y="104" fill="#8d8475" font-size="11" text-anchor="start">non una storia</text>
+      </svg>
+    </div>
+
+    <h3>Trasferimento</h3>
+    <p>Poiché abbiamo un client e un server, il punto è spostare queste rappresentazioni tra di loro. Il <em>trasferimento</em> avviene tramite lo standard comune, HTTP, utilizzando i suoi metodi (<code>GET</code>, <code>POST</code>, <code>PUT</code>, <code>PATCH</code>, <code>DELETE</code>, ...). Quando il tuo browser richiede una pagina con <code>GET</code>, sta trasferendo una rappresentazione dal server al client.</p>
+
+    <div class="diagram">
+      <div class="diagram-label">Bonifici/rappresentazioni via filo</div>
+      <svg viewBox="0 0 720 180" xmlns="http://www.w3.org/2000/svg" font-family="JetBrains Mono, monospace">
+        <!-- client -->
+        <rect x="40" y="62" width="140" height="56" rx="8" fill="#dee5ee" stroke="#b9c8da"/>
+        <text x="110" y="84" fill="#37607f" font-size="11" font-weight="600" text-anchor="middle">CLIENTE</text>
+        <text x="110" y="101" fill="#5b5347" font-size="9" text-anchor="middle">browser/umano</text>
+        <!-- server -->
+        <rect x="410" y="62" width="140" height="56" rx="8" fill="#f0e5c9" stroke="#ddc79a"/>
+        <text x="480" y="84" fill="#b07d2b" font-size="11" font-weight="600" text-anchor="middle">SERVER</text>
+        <text x="480" y="101" fill="#5b5347" font-size="9" text-anchor="middle">dove vive lo Stato</text>
+        <!-- request going right -->
+        <path d="M 180 72 Q 295 64 410 72" fill="none" stroke="#c7bca6" stroke-width="1.5"/>
+        <polyline points="404,68 410,72 404,76" fill="none" stroke="#c7bca6" stroke-width="1.5"/>
+        <text x="295" y="55" fill="#8d8475" font-size="10" font-weight="600" text-anchor="middle">GET /cart</text>
+        <!-- response coming left -->
+        <line x1="410" y1="108" x2="350" y2="108" stroke="#c7bca6" stroke-width="1.5"/>
+        <line x1="240" y1="108" x2="180" y2="108" stroke="#c7bca6" stroke-width="1.5"/>
+        <polyline points="186,104 180,108 186,112" fill="none" stroke="#c7bca6" stroke-width="1.5"/>
+        <!-- representation in transit -->
+        <rect x="240" y="88" width="110" height="40" rx="7" fill="#e0e9dd" stroke="#bcd3b6"/>
+        <text x="295" y="105" fill="#3f6f4e" font-size="10.5" font-weight="600" text-anchor="middle">JSON</text>
+        <text x="295" y="119" fill="#5b5347" font-size="9" text-anchor="middle">{ carrello: ... }</text>
+        <text x="295" y="145" fill="#8d8475" font-size="10" font-weight="600" text-anchor="middle">200 / stato attuale del carrello</text>
+        <!-- annotation -->
+        <text x="580" y="88" fill="#8d8475" font-size="11" text-anchor="start">lo stato resta fermo</text>
+        <text x="580" y="104" fill="#8d8475" font-size="11" text-anchor="start">viaggiano solo le copie</text>
+      </svg>
+    </div>
+
+    <div class="callout model">
+      <span class="clabel">Modello mentale</span>
+      <p>REST = risorse che ne hanno molteplici <strong>rappresentazioni</strong>, di cui <strong>stato</strong> può essere <strong>trasferito</strong> tra client e server su HTTP, il tutto entro una serie di vincoli che mantengono il sistema scalabile. Non è necessario memorizzare la teoria, ma conoscere le tre parole ti dice cosa sta realmente facendo ogni chiamata API: spostare una rappresentazione dello stato attuale di alcune risorse.</p>
+    </div>
+  </section>
+
+  <!-- 02 -->
+  <section id="s2">
+    <div class="sec-head"><span class="sec-num">02</span><h2>I sei vincoli</h2></div>
+    <p>Per essere veramente &quot;RESTful&quot; e ottenere la scalabilità ricercata da Fielding, un sistema segue sei vincoli. Ne sono richiesti cinque; il sesto è facoltativo. Questa non è burocrazia; ognuno acquista una proprietà di ridimensionamento concreta.</p>
+
+    <div class="diagram">
+      <div class="diagram-label">I sei vincoli e ciò che ciascuno acquista</div>
+      <div class="tbl-wrap" style="margin:0; border:0;">
+      <table>
+        <thead><tr><th>Vincolo</th><th>Cosa dice</th><th>Cosa compra</th></tr></thead>
+        <tbody>
+          <tr><td><strong>1 / Cliente-Server</strong></td><td>Rigorosa separazione delle preoccupazioni: il client possiede UI/UX, il server possiede dati e logica applicativa.</td><td>Ciascun lato si evolve in modo indipendente.</td></tr>
+          <tr><td><strong>2 / Interfaccia uniforme</strong></td><td>Un modo standardizzato per far comunicare tutti i componenti. (Quattro sottovincoli di seguito.)</td><td>Coerenza in ogni servizio.</td></tr>
+          <tr><td><strong>3 / Sistema a strati</strong></td><td>Strati gerarchici; un livello vede solo quello immediatamente sottostante.</td><td>Inserisci bilanciatori di carico/proxy senza toccare la logica principale.</td></tr>
+          <tr><td><strong>4/ Cache</strong></td><td>Le risposte devono etichettarsi come memorizzabili nella cache o meno.</td><td>Meno carico sul server, risposte più veloci.</td></tr>
+          <tr><td><strong>5/senza stato</strong></td><td>Il server non conserva memoria delle richieste passate; ogni richiesta porta con sé tutto ciò di cui ha bisogno.</td><td>Qualsiasi server può gestire qualsiasi richiesta -&gt; ridimensionamento orizzontale.</td></tr>
+          <tr><td><strong>6 / Codice su richiesta</strong> <span style="color:var(--ink-faint)">(facoltativo)</span></td><td>Il server può fornire codice eseguibile (ad esempio JavaScript) per estendere il client.</td><td>Comportamento flessibile del cliente quando necessario.</td></tr>
+        </tbody>
+      </table>
+      </div>
+    </div>
+
+    <h3>I due che contano di più nella pratica</h3>
+    <p><strong>senza stato</strong> è il battitore pesante. Il server non ricorda la tua richiesta precedente, ogni richiesta deve contenere tutte le informazioni necessarie per comprenderla ed elaborarla. Questo è ciò che rende possibile la scalabilità: metti un bilanciatore del carico davanti a tre server identici e poiché nessun server mantiene la tua sessione in memoria, <em>qualsiasi</em> di loro possono gestire <em>qualsiasi</em> richiesta tramite round robin. L'assenza di stato è la ragione per cui puoi aggiungere server e &quot;funzionano e basta&quot;.</p>
+
+    <p><strong>Sistema a strati</strong> è ciò che consente l’assenza di stato. Poiché il client comunica sempre e solo con il livello immediatamente precedente, puoi inserire CDN, proxy inversi, bilanciatori del carico e gateway API tra il client e l'origine, e il client non lo sa né se ne preoccupa. Questa è la base fondamentale per cui una piccola app diventa una che serve milioni di persone.</p>
+
+    <div class="diagram">
+      <div class="diagram-label">assenza di stato -&gt; qualsiasi server può rispondere</div>
+      <svg viewBox="0 0 720 250" xmlns="http://www.w3.org/2000/svg" font-family="JetBrains Mono, monospace" font-size="11">
+        <!-- client -->
+        <rect x="18" y="100" width="104" height="44" rx="9" fill="#dee5ee" stroke="#b9c8da"/>
+        <text x="70" y="120" fill="#37607f" text-anchor="middle" font-weight="600">cliente</text>
+        <text x="70" y="135" fill="#5b5347" text-anchor="middle" font-size="9">richiesta completa</text>
+        <!-- LB -->
+        <line x1="122" y1="122" x2="210" y2="122" stroke="#c7bca6" stroke-width="1.5"/>
+        <rect x="210" y="98" width="120" height="48" rx="9" fill="#b8402e"/>
+        <text x="270" y="118" fill="#fff" text-anchor="middle" font-weight="600">bilanciatore del carico</text>
+        <text x="270" y="133" fill="#f4ded6" text-anchor="middle" font-size="9">girone all'italiana</text>
+        <!-- servers -->
+        <line x1="330" y1="118" x2="430" y2="50" stroke="#c7bca6" stroke-width="1.5"/>
+        <line x1="330" y1="122" x2="430" y2="122" stroke="#c7bca6" stroke-width="1.5"/>
+        <line x1="330" y1="126" x2="430" y2="194" stroke="#c7bca6" stroke-width="1.5"/>
+        <rect x="430" y="30" width="120" height="42" rx="8" fill="#e0e9dd" stroke="#bcd3b6"/><text x="490" y="56" fill="#3f6f4e" text-anchor="middle" font-weight="600">servitore 1</text>
+        <rect x="430" y="101" width="120" height="42" rx="8" fill="#e0e9dd" stroke="#bcd3b6"/><text x="490" y="127" fill="#3f6f4e" text-anchor="middle" font-weight="600">servitore 2</text>
+        <rect x="430" y="172" width="120" height="42" rx="8" fill="#e0e9dd" stroke="#bcd3b6"/><text x="490" y="198" fill="#3f6f4e" text-anchor="middle" font-weight="600">servitore 3</text>
+        <!-- shared DB -->
+        <line x1="550" y1="51" x2="640" y2="118" stroke="#d8cfbe" stroke-width="1.2" stroke-dasharray="3 3"/>
+        <line x1="550" y1="122" x2="640" y2="122" stroke="#d8cfbe" stroke-width="1.2" stroke-dasharray="3 3"/>
+        <line x1="550" y1="193" x2="640" y2="126" stroke="#d8cfbe" stroke-width="1.2" stroke-dasharray="3 3"/>
+        <rect x="640" y="100" width="62" height="44" rx="8" fill="#f0e5c9" stroke="#ddc79a"/>
+        <text x="671" y="126" fill="#b07d2b" text-anchor="middle" font-weight="600" font-size="10">DB</text>
+      </svg>
+      <p class="dg-note">Poiché nessun server memorizza la tua sessione, il bilanciatore del carico può inviare le tue richieste al server 1, 2 o 3 in modo intercambiabile, ognuno trasporta tutto ciò di cui ha bisogno <em>all'interno della richiesta</em>. Aggiungi un quarto server e funzionerà immediatamente, senza bisogno di coordinamento. Questa è la scalabilità orizzontale, e l’assenza di stato è ciò che la rende libera.</p>
+    </div>
+
+    <h4>I quattro sottovincoli di Uniform Interface</h4>
+    <ul>
+      <li><strong>Identificazione delle risorse</strong>: ogni risorsa è indirizzabile da un URI.</li>
+      <li><strong>Manipolazione attraverso rappresentazioni</strong>: agisci su una risorsa inviando/ricevendo la sua rappresentazione (il JSON che hai PUT <em>è</em> come lo cambi).</li>
+      <li><strong>Messaggi autodescrittivi</strong>: ogni messaggio contiene metadati sufficienti (intestazioni, tipo di contenuto, metodo) per essere compreso da solo.</li>
+      <li><strong>HATEOAS</strong>: <em>Hypermedia come motore dello stato dell'applicazione</em>: le risposte possono includere collegamenti che indicano al client cosa può fare dopo. (Il vincolo secondario più ambizioso; poche API lo implementano completamente.)</li>
+    </ul>
+  </section>
+
+  <!-- 03 -->
+  <section id="s3">
+    <div class="sec-head"><span class="sec-num">03</span><h2>Perché REST ci confonde adesso</h2></div>
+    <p>Ecco l'onesto retroscena su cui si basa la trascrizione: le persone continuano a inciampare con REST, <em>percorso plurale o singolare? PUT o PATCH? quale codice di stato per un'azione personalizzata?</em>, e il motivo è storico. Quando questi standard si stavano formando, il web continuava a funzionare <strong>MPA (applicazioni multipagina)</strong>: ogni interazione era una richiesta a pagina intera al server, che eseguiva il rendering dell'HTML e lo rimandava indietro.</p>
+
+    <p>Oggi si costruisce soprattutto <strong>SPA (applicazioni a pagina singola)</strong>: la prima richiesta scarica un grosso pacchetto di JavaScript e da quel momento in poi il browser esegue il proprio routing sul lato client, recuperando <em>dati</em> (JSON) dalle API anziché da intere pagine. Il cliente è diventato pesante; il server è diventato una pura API di dati. I vecchi standard non hanno mai previsto questo cambiamento, motivo per cui alcune delle loro regole sembrano ambigue rispetto all’uso moderno.</p>
+
+    <div class="callout note">
+      <span class="clabel">Lo scopo di questo capitolo</span>
+      <p>Non per inventare nuove regole, le norme già esistono, ma per farlo <em>estratto</em> da loro linee guida chiare e pratiche e impegnarsi ad adottare uno stile coerente. Una volta interiorizzate le convenzioni, smetti di ribattere &quot;è RESTful?&quot; su ogni endpoint e puoi invece dedicare le tue energie alla logica applicativa.</p>
+    </div>
+  </section>
+
+  <!-- 04 -->
+  <section id="s4">
+    <div class="sec-head"><span class="sec-num">04</span><h2>Anatomia di un percorso</h2></div>
+    <p>Inizia con un normale URL del sito Web e le sue parti:</p>
+
+    <div class="diagram">
+      <div class="diagram-label">Un URL tipico, scomposto</div>
+      <div class="urlbar">
+        <span class="useg s1">https://</span><span class="useg s2">api.esempio.com</span><span class="useg s3">/v1</span><span class="useg s4">/books/harry-potter</span><span class="useg s5">?ordinamento=nome</span><span style="color:#9c948a">#recensioni</span>
+      </div>
+      <div class="ulegend">
+        <div><span class="sw" style="background:#7fb0c9"></span><b style="font-weight:600">Schema</b>: <code>https</code>, il trasporto crittografato.</div>
+        <div><span class="sw" style="background:#e0896a"></span><b style="font-weight:600">Autorità</b>: dominio + facoltativo <code>api.</code> sottodominio.</div>
+        <div><span class="sw" style="background:#a9c98a"></span><b style="font-weight:600">Versione</b>: <code>v1</code>, controllo delle versioni dell'API tramite path.</div>
+        <div><span class="sw" style="background:#d8b66a"></span><b style="font-weight:600">Percorso/risorsa</b>: la cosa a cui stai accedendo; <code>/</code> significa gerarchia.</div>
+        <div><span class="sw" style="background:#c58fb0"></span><b style="font-weight:600">Parametri query</b>: coppie chiave/valore per filtri e opzioni.</div>
+        <div><span class="sw" style="background:#9c948a"></span><b style="font-weight:600">Frammento</b>: scorre il browser fino ad una sezione.</div>
+      </div>
+    </div>
+
+    <p>Il <strong>standard del settore</strong> la forma di un percorso API (una convenzione, non una regola rigida) li mette insieme: <code>https://</code> + un <code>api.</code> sottodominio + una versione simile <code>/v1</code> + il percorso della risorsa.</p>
+
+    <h3>Regola 1: nomi sempre plurali</h3>
+    <p>La risorsa nel percorso è <strong>sempre plurale</strong>, anche quando si recupera un singolo elemento. Elenca tutti i libri -&gt; <code>/books</code>. Prendi un libro -&gt; <code>/books/123</code>, <em>no</em> <code>/book/123</code>. La risorsa <em>tipo</em> (&quot;libri&quot;) è una raccolta; l'ID si restringe semplicemente ad esso. Questo è l’errore più comune tra i principianti.</p>
+
+    <h3>Regola 2: niente spazi o trattini bassi; utilizzare le lumache</h3>
+    <p>Gli URL viaggiano in molti ambienti server/client/sistema operativo, quindi mantienili puliti. Non inserire mai spazi o caratteri di sottolineatura in un percorso. Per inserire un nome leggibile dall'uomo in un URL, crea a <strong>lumaca</strong>:</p>
+    <div class="steps">
+      <div class="step"><span class="sn">1</span><div class="sb">Prendi il nome: <code>Harry Potter</code></div></div>
+      <div class="step"><span class="sn">2</span><div class="sb">Tutto in minuscolo (evita bug di mancata corrispondenza tra maiuscole e minuscole tra gli ambienti): <code>harry potter</code></div></div>
+      <div class="step g"><span class="sn">3</span><div class="sb">Sostituisci gli spazi con i trattini: <code>harry-potter</code> -&gt; <code>/books/harry-potter</code></div></div>
+    </div>
+
+    <h3>Regola 3: la barra significa gerarchia</h3>
+    <p>Una barra esprime a <strong>rapporto gerarchico</strong> tra le risorse. <code>/organizations/123/projects</code> si legge come &quot;i progetti che appartengono specificamente all'organizzazione 123&quot;. Primo livello: la collezione. Livello successivo: un membro specifico. Successivamente: la sottoraccolta di quel membro. Progetta i tuoi percorsi in modo che il nido racconti la storia.</p>
+  </section>
+
+  <!-- 05 -->
+  <section id="s5">
+    <div class="sec-head"><span class="sec-num">05</span><h2>Metodi e idempotenza</h2></div>
+    <p><strong>Idempotenza</strong> è il concetto che sblocca &quot;quale metodo devo usare?&quot; Un'operazione è idempotente se eseguita più volte ha il <em>stesso effetto sul server</em> come eseguirlo una volta. La sottigliezza chiave: l'idempotenza riguarda il <strong>effetto collaterale che provochi sul server</strong>, non sul fatto che i byte di risposta siano identici.</p>
+
+    <div class="diagram">
+      <div class="diagram-label">I cinque metodi in sintesi</div>
+      <div class="tbl-wrap" style="margin:0;border:0;">
+      <table>
+        <thead><tr><th>Metodo</th><th>Scopo</th><th>Idempotente?</th><th>Ha un corpo?</th></tr></thead>
+        <tbody>
+          <tr><td><code>GET</code></td><td>Leggere/recuperare una rappresentazione</td><td><span class="pill idem">sì</span> <span class="pill safe">+ sicuro</span></td><td>No</td></tr>
+          <tr><td><code>POST</code></td><td>Crea una risorsa/azione personalizzata</td><td><span class="pill nonidem">no</span></td><td>Sì</td></tr>
+          <tr><td><code>PUT</code></td><td>Sostituisci completamente una risorsa</td><td><span class="pill idem">sì</span></td><td>Sì (completo)</td></tr>
+          <tr><td><code>PATCH</code></td><td>Aggiorna parte di una risorsa</td><td><span class="pill idem">di solito</span></td><td>Sì (parziale)</td></tr>
+          <tr><td><code>DELETE</code></td><td>Rimuovere una risorsa</td><td><span class="pill idem">sì</span></td><td>No</td></tr>
+        </tbody>
+      </table>
+      </div>
+      <p class="dg-note"><code>HEAD</code> (recupera solo le intestazioni) e <code>OPTIONS</code> (utilizzato nel pre-volo CORS per chiedere &quot;questa origine è consentita?&quot;), ma questi cinque portano il vero lavoro sui dati.</p>
+    </div>
+
+    <h3>GET: idempotente e sicuro</h3>
+    <p>Recupera i dati; non cambia nulla sul server. Chiamalo una o mille volte, lo stato del server è identico. &quot;Ma cosa succede se qualcun altro crea un libro tra le mie chiamate e la risposta cambia?&quot; Ciò non rompe l'idempotenza: l'idempotenza chiede quale effetto collaterale <em>tuo</em> cause della chiamata e a <code>GET</code> non ne causa nessuno. Poiché è sicuro, è possibile riprovare liberamente e memorizzare nella cache.</p>
+
+    <p>In rete, un GET è solo una riga di richiesta, intestazioni e una riga vuota, <strong>nessun corpo</strong>. Tutti gli input passano nell'URL (percorso + stringa di query), motivo per cui non inserisci mai segreti in un GET: l'intero URL finisce nella cronologia del browser, nei log del server e nei log CDN.</p>
+    <div class="wire"><span class="m">GET</span> /v1/books/123 HTTP/1.1
+<span class="h">Ospite</span>: <span class="v">api.esempio.com</span>
+<span class="h">Autorizzazione</span>: <span class="v">Portatore eyJhbGci...</span>
+<span class="h">Accetta</span>: <span class="v">applicazione/json</span>
+<span class="cm">                          &lt;- riga vuota = &quot;intestazioni completate, nessun corpo&quot;</span>
+
+<span class="v">HTTP/1.1</span> <span class="m">200 OK</span>
+<span class="h">Tipo di contenuto</span>: <span class="v">applicazione/json</span>
+<span class="h">Controllo della cache</span>: <span class="v">età massima=300</span>
+<span class="h">ETag</span>: <span class="v">&quot;9a3f-1f&quot;</span>
+
+{ <span class="v">&quot;id&quot;</span>: 123, <span class="v">&quot;titolo&quot;</span>: <span class="v">&quot;Lo Hobbit&quot;</span> }</div>
+
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>Codice</th><th>Su un GET, questo significa</th></tr></thead>
+        <tbody>
+          <tr><td><code>200 OK</code></td><td>Trovato; il corpo è la rappresentazione.</td></tr>
+          <tr><td><code>304 Not Modified</code></td><td>La tua copia cache è ancora aggiornata (hai inviato <code>If-None-Match</code>); nessun corpo restituito, salva il carico utile.</td></tr>
+          <tr><td><code>301</code> / <code>302</code></td><td>spostato; seguire il <code>Location</code> intestazione.</td></tr>
+          <tr><td><code>400 Bad Request</code></td><td>La stringa della tua query non è valida.</td></tr>
+          <tr><td><code>401</code> / <code>403</code></td><td>Non autenticato/autenticato ma non consentito.</td></tr>
+          <tr><td><code>404 Not Found</code></td><td>Nessuna risorsa unica del genere.</td></tr>
+          <tr><td><code>429 Too Many Requests</code></td><td>Tariffa limitata; controllare <code>Retry-After</code>.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>PUT &amp; PATCH: aggiornamenti idempotenti</h3>
+    <p>Entrambi si aggiornano. La differenza è la portata:</p>
+    <ul>
+      <li><strong>PATCH</strong>: aggiornamento parziale. Invia solo i campi che desideri modificare (ad esempio just <code>status</code>). La soluzione migliore per le app JSON dell'era SPA, in cui si aggiornano quasi sempre alcuni campi, non l'intero record.</li>
+      <li><strong>PUT</strong>: sostituzione completa. Devi inviare il <em>intero</em> rappresentanza; il server sostituisce ciò che ha con il tuo carico utile. Ometti un campo e lo hai cancellato.</li>
+    </ul>
+    <p>Perché idempotente? Supponiamo che il nome di un utente sia <code>A</code> e lo PATCH a <code>B</code>. Prima chiamata: <code>A -&gt; B</code>. Seconda chiamata identica: <code>B -&gt; B</code>. Millesima chiamata: ancora <code>B</code>. Lo stato finale non cambia mai dopo la prima chiamata, quindi ripetere lo stesso payload di aggiornamento è idempotente.</p>
+
+    <div class="callout note">
+      <span class="clabel">PUT vs PATCH nel mondo reale</span>
+      <p>Gli sviluppatori spesso li usano in modo intercambiabile e internamente va per lo più bene. Ma per a <strong>API pubblica</strong>, attenersi alla semantica: PATCH per parziale, PUT per sostituzione completa. I consumatori presumono che tu segua lo standard, se usi PUT dove intendi PATCH, fornisci loro un presupposto confuso e sbagliato. In pratica le API più moderne (guidate da SPA) si appoggiano a PATCH, perché raramente si desidera sostituire un'intera entità.</p>
+    </div>
+
+    <h4>Sul filo: il corpo fa la differenza</h4>
+    <div class="wire"><span class="cm"># PATCH, invia SOLO ciò che cambia</span>
+<span class="m">PATCH</span> /v1/users/divyansh HTTP/1.1
+<span class="h">Tipo di contenuto</span>: <span class="v">applicazione/json</span>
+
+{ <span class="v">&quot;città&quot;</span>: <span class="v">&quot;Bangalore&quot;</span> }              <span class="cm">&lt;- nome ed email intatti</span>
+
+<span class="cm"># PUT, invia l'INTERA rappresentazione</span>
+<span class="m">PUT</span> /v1/users/divyansh HTTP/1.1
+<span class="h">Tipo di contenuto</span>: <span class="v">applicazione/json</span>
+
+{ <span class="v">&quot;nome&quot;</span>: <span class="v">&quot;Divyansh&quot;</span>, <span class="v">&quot;e-mail&quot;</span>: <span class="v">&quot;d@x.com&quot;</span>, <span class="v">&quot;città&quot;</span>: <span class="v">&quot;Bangalore&quot;</span> }</div>
+
+    <div class="callout trap">
+      <span class="clabel">La trappola PUT/cancellazione silenziosa del campo</span>
+      <p>PUT <em>sostituisce</em>. Se l'utente memorizzato ha <code>name</code>, <code>email</code>, e <code>city</code>, ma hai MESSO solo <code>{"city":"Bangalore"}</code>, hai appena cancellato il nome e l'e-mail. I campi che dimentichi di inviare sono spariti. Se solo hai <em>alcuni</em> del record in mano, usa PATCH, mai PUT. Questo è il modo n. 1 con cui le persone distruggono accidentalmente i dati tramite un'API.</p>
+    </div>
+
+    <h4>Modifiche simultanee: il problema degli aggiornamenti persi</h4>
+    <p>Due client OTTIENE lo stesso record. A modifica l'e-mail e salva. B (che non ha mai visto il cambiamento di A) salva la città utilizzando la copia obsoleta di B e la scrittura di B sovrascrive silenziosamente l'e-mail di A. La soluzione è <strong>concorrenza ottimistica</strong> con <code>ETag</code> + <code>If-Match</code>: il server fornisce un'impronta digitale della versione e applica la tua scrittura solo se quella versione è ancora aggiornata.</p>
+    <div class="wire"><span class="cm"># GET prima, il server restituisce un tag di versione</span>
+<span class="h">ETag</span>: <span class="v">&quot;v7&quot;</span>
+
+<span class="cm"># più tardi, quando rispondi, fai eco alla versione che hai visto</span>
+<span class="m">PATCH</span> /v1/users/divyansh HTTP/1.1
+<span class="h">Se-match</span>: <span class="v">&quot;v7&quot;</span>
+
+<span class="cm"># se qualcun altro lo ha già aggiornato a &quot;v8&quot;:</span>
+<span class="v">HTTP/1.1</span> <span class="m">412 Precondizione non riuscita</span>   <span class="cm">&lt;- recupera nuovamente, unisci nuovamente, riprova</span></div>
+
+    <div class="code">
+      <div class="code-top"><span class="dots"><i></i><i></i><i></i></span>
+        <div class="tabs"><button class="tab active" data-lang="go">Vai</button><button class="tab" data-lang="python">Pitone</button></div>
+        <span class="code-cap">PATCH con protezione della concorrenza ottimistica</span>
+      </div>
+      <pre class="code-body" data-lang="go">func UpdateOrganization(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	org := store.Get(id)
+	if org == nil {
+		writeJSON(w, 404, errBody("organization not found"))
+		return
+	}
+	// optimistic concurrency: reject stale writes
+	if m := r.Header.Get("If-Match"); m != "" &amp;&amp; m != org.ETag {
+		writeJSON(w, 412, errBody("resource changed; re-fetch and retry"))
+		return
+	}
+	var patch map[string]any
+	json.NewDecoder(r.Body).Decode(&amp;patch) // only the fields to change
+	updated := store.Patch(id, patch)        // merge, don't replace
+	w.Header().Set("ETag", updated.ETag)
+	writeJSON(w, 200, updated)               // 200 + updated entity
+}</pre>
+      <pre class="code-body hidden" data-lang="python">@app.patch("/v1/organizations/{id}")
+def update_organization(id: str, body: dict, if_match: str | None = Header(None)):
+    org = store.get(id)
+    if org is None:
+        raise HTTPException(404, "organization not found")
+    # optimistic concurrency: reject stale writes
+    if if_match is not None and if_match != org.etag:
+        raise HTTPException(412, "resource changed; re-fetch and retry")
+    updated = store.patch(id, body)   # merge only the given fields, don't replace
+    return Response(
+        content=json.dumps(updated),
+        media_type="application/json",
+        headers={"ETag": updated["etag"]},
+    )                                  # 200 + updated entity</pre>
+    </div>
+
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>Codice</th><th>Su un PUT / PATCH, questo significa</th></tr></thead>
+        <tbody>
+          <tr><td><code>200 OK</code></td><td>Aggiornato; il corpo detiene il nuovo stato.</td></tr>
+          <tr><td><code>201 Created</code></td><td>Solo PUT, ha creato la risorsa in un URL scelto dal client (upsert). PATCH non crea mai.</td></tr>
+          <tr><td><code>204 No Content</code></td><td>Aggiornato; niente da restituire.</td></tr>
+          <tr><td><code>400 Bad Request</code></td><td>Corpo malformato.</td></tr>
+          <tr><td><code>404 Not Found</code></td><td>La risorsa non esiste (PATCH); PUT senza upsert.</td></tr>
+          <tr><td><code>409 Conflict</code></td><td>La modifica entra in conflitto con lo stato corrente (ad esempio, conflitto di campi univoci).</td></tr>
+          <tr><td><code>412 Precondition Failed</code></td><td>Stanco <code>If-Match</code>, qualcuno lo ha modificato per primo.</td></tr>
+          <tr><td><code>415 Unsupported Media Type</code></td><td>Sbagliato <code>Content-Type</code> (specialmente la patch di unione di PATCH rispetto alla patch json).</td></tr>
+          <tr><td><code>422 Unprocessable Entity</code></td><td>JSON ben formato, ma non rispetta una regola aziendale (ad es. <code>age: -5</code>).</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>DELETE: idempotente</h3>
+    <p>Elimina utente <code>1</code>. Prima chiamata: l'utente viene allontanato (un vero effetto collaterale). Seconda chiamata: il server controlla, non trova tale utente e restituisce <code>404</code>, ma <em>non è cambiato nulla sul server</em>. Non si è verificato alcun nuovo effetto collaterale. Hai cambiato stato solo alla prima chiamata; ogni chiamata successiva è una no-op che riporta semplicemente &quot;non trovato&quot;. Quindi DELETE è idempotente.</p>
+
+    <h3>POST: l'unico non idempotente</h3>
+    <p>POST crea. Invia un payload &quot;crea libro&quot; una volta -&gt; un libro con ID <code>1</code>. Invia di nuovo lo stesso identico payload -&gt; a <em>secondo</em> prenotare con documento d'identità <code>2</code> (Gli ID vengono generati lato server/DB e i nomi in genere non devono essere univoci). Dieci POST identici -&gt; dieci libri distinti. L'effetto collaterale cambia ogni volta, quindi il POST non è idempotente.</p>
+
+    <p>Sul filo, POST porta a <strong>corpo</strong> (dichiarato da <code>Content-Type</code>) e viene restituita una creazione riuscita <code>201</code> con a <code>Location</code> intestazione che punta alla nuova risorsa:</p>
+    <div class="wire"><span class="m">POST</span> /v1/orders HTTP/1.1
+<span class="h">Autorizzazione</span>: <span class="v">Portatore eyJhbGci...</span>
+<span class="h">Tipo di contenuto</span>: <span class="v">applicazione/json</span>
+
+{ <span class="v">&quot;IDprodotto&quot;</span>: <span class="v">&quot;sku_42&quot;</span>, <span class="v">&quot;quantità&quot;</span>: 2 }
+
+<span class="v">HTTP/1.1</span> <span class="m">201 Creato</span>
+<span class="h">Posizione</span>: <span class="v">/v1/orders/ord_9f2a</span>      <span class="cm">&lt;- dove vive la nuova risorsa</span>
+
+{ <span class="v">&quot;id&quot;</span>: <span class="v">&quot;ord_9f2a&quot;</span>, <span class="v">&quot;stato&quot;</span>: <span class="v">&quot;in sospeso&quot;</span> }</div>
+
+    <div class="callout trap">
+      <span class="clabel">Il pericolo della non-idempotenza/e la soluzione</span>
+      <p>Dillo tu <code>POST /payments {amount: 5000}</code> e la rete cade <em>dopo</em> il server ha addebitato la carta ma <em>prima</em> ti è arrivata la risposta. Non sai se ha funzionato, quindi riprovi e ora ti sono stati addebitati 10.000 INR. La soluzione standard è un <strong>chiave di idepotenza</strong>: il client invia un ID univoco, il server lo registra con il risultato e qualsiasi tentativo con la stessa chiave restituisce il file <em>originale</em> risultato invece di ricaricare nuovamente. Questo è il modo in cui Stripe e tutte le API di pagamento serie rendono POST sicuro per riprovare.</p>
+    </div>
+
+    <div class="code">
+      <div class="code-top"><span class="dots"><i></i><i></i><i></i></span>
+        <div class="tabs"><button class="tab active" data-lang="go">Vai</button><button class="tab" data-lang="python">Pitone</button></div>
+        <span class="code-cap">rendendo POST retry-safe con una chiave di idempotenza</span>
+      </div>
+      <pre class="code-body" data-lang="go">func CreatePayment(w http.ResponseWriter, r *http.Request) {
+	key := r.Header.Get("Idempotency-Key") // client-generated UUID
+
+	// already processed this exact request? return the SAME result, don't re-charge
+	if prior, ok := idemStore.Get(key); ok {
+		writeJSON(w, prior.Status, prior.Body)
+		return
+	}
+
+	var in struct{ Amount int `json:"amount"` }
+	json.NewDecoder(r.Body).Decode(&amp;in)
+
+	payment := charge(in.Amount)          // the real, non-idempotent side effect
+	idemStore.Save(key, 201, payment)     // remember it, keyed by the idempotency key
+	writeJSON(w, 201, payment)
+}</pre>
+      <pre class="code-body hidden" data-lang="python">@app.post("/v1/payments", status_code=201)
+def create_payment(body: dict, idempotency_key: str = Header(...)):
+    # already processed this exact request? return the SAME result, don't re-charge
+    prior = idem_store.get(idempotency_key)
+    if prior is not None:
+        return JSONResponse(status_code=prior["status"], content=prior["body"])
+
+    payment = charge(body["amount"])               # the real, non-idempotent side effect
+    idem_store.save(idempotency_key, 201, payment) # remember it, keyed by the idempotency key
+    return payment</pre>
+    </div>
+
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>Codice</th><th>Su un POST, questo significa</th></tr></thead>
+        <tbody>
+          <tr><td><code>200 OK</code></td><td>L'azione si è svolta; nessuna nuova risorsa creata (ad esempio &quot;invia email&quot;, azioni personalizzate).</td></tr>
+          <tr><td><code>201 Created</code></td><td>È stata creata una nuova risorsa; <code>Location</code> lo indica.</td></tr>
+          <tr><td><code>202 Accepted</code></td><td>In coda per l'elaborazione asincrona, &quot;Lo farò dopo&quot; (rapporti, lavori pesanti).</td></tr>
+          <tr><td><code>400 Bad Request</code></td><td>Corpo non valido o campi obbligatori mancanti.</td></tr>
+          <tr><td><code>409 Conflict</code></td><td>È in conflitto con lo stato esistente (ad esempio &quot;nome utente già utilizzato&quot;).</td></tr>
+          <tr><td><code>413 Payload Too Large</code></td><td>Il corpo supera il limite di dimensione del server.</td></tr>
+          <tr><td><code>415 Unsupported Media Type</code></td><td>Il server non accetta il file <code>Content-Type</code> hai inviato.</td></tr>
+          <tr><td><code>422 Unprocessable Entity</code></td><td>JSON valido, ma non supera la convalida a livello di regola aziendale.</td></tr>
+          <tr><td><code>429 Too Many Requests</code></td><td>Tariffa limitata.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="diagram">
+      <div class="diagram-label">Stessa chiamata, due volte / cosa cambia sul server</div>
+      <svg viewBox="0 0 720 250" xmlns="http://www.w3.org/2000/svg" font-family="JetBrains Mono, monospace" font-size="11">
+        <!-- PATCH row -->
+        <text x="14" y="40" fill="#3f6f4e" font-weight="600" font-size="12">Nome PATCH=B</text>
+        <rect x="150" y="22" width="120" height="34" rx="7" fill="#e0e9dd" stroke="#bcd3b6"/>
+        <text x="210" y="43" fill="#211e1a" text-anchor="middle">A -&gt; B</text>
+        <text x="290" y="43" fill="#8d8475" text-anchor="middle">allora</text>
+        <rect x="340" y="22" width="120" height="34" rx="7" fill="#e0e9dd" stroke="#bcd3b6"/>
+        <text x="400" y="43" fill="#211e1a" text-anchor="middle">B -&gt; B</text>
+        <rect x="510" y="22" width="190" height="34" rx="7" fill="#e0e9dd" stroke="#bcd3b6"/>
+        <text x="605" y="43" fill="#3f6f4e" text-anchor="middle" font-weight="600">stato stabile/idempotente</text>
+
+        <!-- DELETE row -->
+        <text x="14" y="115" fill="#3f6f4e" font-weight="600" font-size="12">DELETE /users/1</text>
+        <rect x="150" y="97" width="120" height="34" rx="7" fill="#e0e9dd" stroke="#bcd3b6"/>
+        <text x="210" y="118" fill="#211e1a" text-anchor="middle">cancellato</text>
+        <text x="290" y="118" fill="#8d8475" text-anchor="middle">allora</text>
+        <rect x="340" y="97" width="120" height="34" rx="7" fill="#ece3d4" stroke="#d8cfbe"/>
+        <text x="400" y="118" fill="#b8402e" text-anchor="middle">404</text>
+        <rect x="510" y="97" width="190" height="34" rx="7" fill="#e0e9dd" stroke="#bcd3b6"/>
+        <text x="605" y="118" fill="#3f6f4e" text-anchor="middle" font-weight="600">nessun nuovo effetto / idempotente</text>
+
+        <!-- POST row -->
+        <text x="14" y="190" fill="#b8402e" font-weight="600" font-size="12">POST /books</text>
+        <rect x="150" y="172" width="120" height="34" rx="7" fill="#f4ded6" stroke="#e3c4b8"/>
+        <text x="210" y="193" fill="#211e1a" text-anchor="middle">ID libro=1</text>
+        <text x="290" y="193" fill="#8d8475" text-anchor="middle">allora</text>
+        <rect x="340" y="172" width="120" height="34" rx="7" fill="#f4ded6" stroke="#e3c4b8"/>
+        <text x="400" y="193" fill="#211e1a" text-anchor="middle">ID libro=2</text>
+        <rect x="510" y="172" width="190" height="34" rx="7" fill="#f4ded6" stroke="#e3c4b8"/>
+        <text x="605" y="193" fill="#b8402e" text-anchor="middle" font-weight="600">nuovo ogni volta / NON idempotente</text>
+      </svg>
+    </div>
+  </section>
+
+  <!-- 06 -->
+  <section id="s6">
+    <div class="sec-head"><span class="sec-num">06</span><h2>Azioni personalizzate: oltre il CRUD</h2></div>
+    <p>A volte un'azione non è adatta a Crea/Leggi/Aggiorna/Elimina. &quot;Clonare un progetto&quot;, &quot;archiviare un'organizzazione&quot;, &quot;inviare un'e-mail&quot; attivano una rete di lavoro in background che va oltre la semplice scrittura di un database. Le specifiche REST rendono <code>POST</code> il <strong>metodo a tempo indeterminato</strong> proprio per questi casi.</p>
+
+    <h3>La regola e la forma del percorso</h3>
+    <p>Quando un'azione non corrisponde a un metodo standard, impostala come a <code>POST</code> e aggiungi l'azione come a <strong>verbo alla fine</strong> di un percorso di risorsa specifico:</p>
+    <div class="wire"><span class="m">POST</span> /organizations/5/<span class="v">archivio</span>
+<span class="m">POST</span> /projects/123/<span class="v">clone</span></div>
+
+    <p>Ciò mantiene la gerarchia onesta: tutte le organizzazioni -&gt; un'organizzazione specifica -&gt; l'azione da eseguire su di essa.</p>
+
+    <div class="callout trap">
+      <span class="clabel">Perché l'archivio non è solo una PATCH</span>
+      <p>In superficie, l'archiviazione sembra un'impostazione <code>status = "archived"</code>, quindi perché non PATCH? Perché l'archiviazione di un'organizzazione può innescare molto più di una semplice scrittura sul campo: eliminare tutti i suoi progetti e le relative attività, inviare un'e-mail al proprietario, revocare l'accesso, mettere in coda lavori di pulizia. L'inversione di stato è a <em>effetto collaterale</em> dell'azione, non l'azione stessa. Quando l'operazione reale è più grande della modifica dei dati, si tratta di un'azione personalizzata -&gt; POST.</p>
+    </div>
+
+    <h3>L'esempio &quot;invia e-mail&quot;.</h3>
+    <p>Considera <code>POST /emails</code> con il corpo <code>{"target": "someone@example.com"}</code>. L'invio di un'e-mail è un recupero? No. Una creazione? Non proprio. Un aggiornamento o un'eliminazione? No. È un'azione personalizzata, quindi vive sotto POST. E nota: spesso ritorna un POST di azione personalizzata <code>200 OK</code> (l'azione si è svolta), no <code>201 Created</code>, perché non è stato necessariamente creato nulla di nuovo. Non dare mai per scontato &quot;POST =&gt; 201&quot;.</p>
+  </section>
+
+  <!-- 07 -->
+  <section id="s7">
+    <div class="sec-head"><span class="sec-num">07</span><h2>Elenco API: Pagina/Ordina/Filtro</h2></div>
+    <p>Un endpoint di elenco non può semplicemente eseguire il dump di ogni riga. Tre funzionalità lo rendono robusto e tutte e tre si basano su parametri di query.</p>
+
+    <h3>Impaginazione: perché e come</h3>
+    <p>Restituire un migliaio di record contemporaneamente è costoso da entrambe le parti: la serializzazione/deserializzazione JSON è un lavoro pesante, crea colli di bottiglia nella rete e l'utente percepisce un ritardo di diversi secondi, anche se sullo schermo vedono solo i primi 10-20 elementi prima dello scorrimento. Quindi il server restituisce i dati <strong>pezzi (pagine)</strong>.</p>
+
+    <div class="diagram">
+      <div class="diagram-label">limite = 2, cinque organizzazioni -&gt; tre pagine</div>
+      <svg viewBox="0 0 720 150" xmlns="http://www.w3.org/2000/svg" font-family="JetBrains Mono, monospace" font-size="11">
+        <!-- full set -->
+        <text x="14" y="30" fill="#8d8475" font-size="10">ordinato più recente -&gt; più vecchio</text>
+        <g>
+          <rect x="14" y="42" width="100" height="34" rx="7" fill="#e0e9dd" stroke="#bcd3b6"/><text x="64" y="63" text-anchor="middle">organizzazione 5</text>
+          <rect x="120" y="42" width="100" height="34" rx="7" fill="#e0e9dd" stroke="#bcd3b6"/><text x="170" y="63" text-anchor="middle">organizzazione 4</text>
+          <rect x="240" y="42" width="100" height="34" rx="7" fill="#dee5ee" stroke="#b9c8da"/><text x="290" y="63" text-anchor="middle">organizzazione 3</text>
+          <rect x="346" y="42" width="100" height="34" rx="7" fill="#dee5ee" stroke="#b9c8da"/><text x="396" y="63" text-anchor="middle">organizzazione 2</text>
+          <rect x="466" y="42" width="100" height="34" rx="7" fill="#f0e5c9" stroke="#ddc79a"/><text x="516" y="63" text-anchor="middle">organizzazione 1</text>
+        </g>
+        <!-- braces -->
+        <text x="64" y="100" text-anchor="middle" fill="#3f6f4e" font-weight="600" font-size="10">pagina 1</text>
+        <line x1="14" y1="84" x2="220" y2="84" stroke="#bcd3b6" stroke-width="2"/>
+        <text x="290" y="100" text-anchor="middle" fill="#37607f" font-weight="600" font-size="10">pagina 2</text>
+        <line x1="240" y1="84" x2="446" y2="84" stroke="#b9c8da" stroke-width="2"/>
+        <text x="516" y="100" text-anchor="middle" fill="#b07d2b" font-weight="600" font-size="10">pagina 3</text>
+        <line x1="466" y1="84" x2="566" y2="84" stroke="#ddc79a" stroke-width="2"/>
+        <text x="14" y="135" fill="#5b5347" font-size="10.5">?limit=2&amp;pagina=2 -&gt; restituisce org 3, org 2 / totale=5, pagina=2, totalePagine=3</text>
+      </svg>
+    </div>
+
+    <p>Una risposta impaginata include quattro campi:</p>
+    <ul>
+      <li><code>data</code>, l'array di elementi per questa pagina.</li>
+      <li><code>total</code>, il conteggio assoluto degli elementi nel database (in modo che l'interfaccia utente possa indicare &quot;mostra 10 su 50&quot;).</li>
+      <li><code>page</code>, quale pagina rappresenta questa risposta.</li>
+      <li><code>totalPages</code>, il numero massimo di pagine (il frontend lo usa per sapere quando interrompere il recupero in caso di scorrimento infinito: quando <code>page === totalPages</code>, fermare).</li>
+    </ul>
+
+    <p>Il client lo controlla con due parametri: <code>limit</code> (quanti per pagina) e <code>page</code> (quale pezzo). E, un momento sano di default, se il client non invia nessuno dei due, il server dovrebbe andare in default <code>page</code> a <code>1</code> e <code>limit</code> a qualcosa di simile <code>10</code> o <code>20</code>, non schiantarsi mai.</p>
+
+    <h3>Ordinamento</h3>
+    <p>Due parametri: <code>sortBy</code> (quale campo) e <code>sortOrder</code> (<code>ascending</code> / <code>descending</code>). Impostazione predefinita cruciale: anche senza parametri di ordinamento, il server deve ordinare in base a <em>qualcosa</em>, altrimenti il DB restituisce le righe in ordine arbitrario e la stessa chiamata produce ogni volta ordinamenti diversi. Il valore predefinito naturale è <code>sortBy=createdAt</code>, <code>sortOrder=descending</code> (prima il più recente).</p>
+
+    <h3>Filtraggio</h3>
+    <p>Passa i campi delle risorse come parametri di query per restringere l'elenco: <code>?status=active</code>oppure combinali: <code>?status=archived&amp;name=org</code>. Il server applica ciascuno di essi come filtro sul set di risultati.</p>
+
+    <div class="code">
+      <div class="code-top"><span class="dots"><i></i><i></i><i></i></span>
+        <div class="tabs"><button class="tab active" data-lang="go">Vai</button><button class="tab" data-lang="python">Pitone</button></div>
+        <span class="code-cap">elenca endpoint/pagina/ordinamento/filtro/valori predefiniti sani</span>
+      </div>
+      <pre class="code-body" data-lang="go">// GET /v1/organizations?status=active&amp;sortBy=name&amp;sortOrder=ascending&amp;page=1&amp;limit=10
+func ListOrganizations(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+
+	// --- sane defaults: never crash if the client omits params ---
+	page := atoiDefault(q.Get("page"), 1)
+	limit := atoiDefault(q.Get("limit"), 10)
+	sortBy := defaultStr(q.Get("sortBy"), "createdAt")
+	sortOrder := defaultStr(q.Get("sortOrder"), "descending")
+
+	filters := map[string]string{}
+	if s := q.Get("status"); s != "" {
+		filters["status"] = s // ?status=active
+	}
+
+	rows, total := store.Query(filters, sortBy, sortOrder, page, limit)
+	totalPages := (total + limit - 1) / limit // ceil division
+
+	writeJSON(w, 200, map[string]any{
+		"data":       rows,
+		"total":      total,
+		"page":       page,
+		"totalPages": totalPages,
+	})
+}</pre>
+      <pre class="code-body hidden" data-lang="python"># GET /v1/organizations?status=active&amp;sortBy=name&amp;sortOrder=ascending&amp;page=1&amp;limit=10
+@app.get("/v1/organizations")
+def list_organizations(
+    status: str | None = None,
+    sortBy: str = "createdAt",        # sane default
+    sortOrder: str = "descending",    # sane default
+    page: int = 1,                    # sane default
+    limit: int = 10,                  # sane default
+):
+    filters = {}
+    if status:
+        filters["status"] = status    # ?status=active
+
+    rows, total = store.query(filters, sortBy, sortOrder, page, limit)
+    total_pages = (total + limit - 1) // limit   # ceil division
+
+    return {
+        "data": rows,
+        "total": total,
+        "page": page,
+        "totalPages": total_pages,
+    }</pre>
+    </div>
+  </section>
+
+  <!-- 08 -->
+  <section id="s8">
+    <div class="sec-head"><span class="sec-num">08</span><h2>Codici di stato: fatto bene</h2></div>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>Codice</th><th>Significato</th><th>Usalo quando</th></tr></thead>
+        <tbody>
+          <tr><td><code>200 OK</code></td><td>Successo</td><td>Recupera, aggiorna (PATCH/PUT) o un'azione personalizzata eseguita.</td></tr>
+          <tr><td><code>201 Created</code></td><td>Creato</td><td>Un POST ha creato con successo una nuova entità. Restituisce la nuova entità nel corpo.</td></tr>
+          <tr><td><code>204 No Content</code></td><td>Successo, corpo vuoto</td><td>Un DELETE riuscito, niente da rispedire.</td></tr>
+          <tr><td><code>404 Not Found</code></td><td>Risorsa mancante</td><td>Il cliente ha richiesto un ID specifico che non esiste.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>La regola 404: quella che le persone sbagliano</h3>
+    <p>Ritorno <code>404</code> solo quando un cliente richiede a <strong>singola risorsa specifica</strong> che non esiste (es. <code>GET /users/999</code>). Se un cliente colpisce a <strong>elenco API</strong> e non c'è nessuna corrispondenza (ad esempio &quot;tutti gli utenti chiamati Zack&quot; o un filtro che non corrisponde a nulla), fallo <em>no</em> ritorno 404. Ritorno <code>200 OK</code> con un array vuoto <code>[]</code>. Un elenco che non ha trovato nulla ha comunque avuto successo, semplicemente non ha trovato nulla.</p>
+
+    <div class="diagram">
+      <div class="diagram-label">404 o array vuoto?</div>
+      <svg viewBox="0 0 720 170" xmlns="http://www.w3.org/2000/svg" font-family="JetBrains Mono, monospace" font-size="11">
+        <rect x="250" y="14" width="220" height="40" rx="9" fill="#232019"/>
+        <text x="360" y="39" fill="#e9e2d3" text-anchor="middle" font-size="11">la richiesta non ha trovato nulla</text>
+        <!-- left branch -->
+        <line x1="320" y1="54" x2="180" y2="92" stroke="#c7bca6" stroke-width="1.5"/>
+        <line x1="400" y1="54" x2="540" y2="92" stroke="#c7bca6" stroke-width="1.5"/>
+        <rect x="60" y="92" width="240" height="62" rx="9" fill="#f4ded6" stroke="#e3c4b8"/>
+        <text x="180" y="114" fill="#b8402e" text-anchor="middle" font-weight="600">ha chiesto UN ID</text>
+        <text x="180" y="132" fill="#5b5347" text-anchor="middle" font-size="10">GET /users/999</text>
+        <text x="180" y="147" fill="#b8402e" text-anchor="middle" font-size="11">-&gt; 404 Non trovato</text>
+        <rect x="420" y="92" width="240" height="62" rx="9" fill="#e0e9dd" stroke="#bcd3b6"/>
+        <text x="540" y="114" fill="#3f6f4e" text-anchor="middle" font-weight="600">ha chiesto una LISTA</text>
+        <text x="540" y="132" fill="#5b5347" text-anchor="middle" font-size="10">GET /users?name=Zack</text>
+        <text x="540" y="147" fill="#3f6f4e" text-anchor="middle" font-size="11">-&gt; 200 OK / dati: []</text>
+      </svg>
+    </div>
+
+    <h3>Le cinque famiglie: leggi la prima cifra</h3>
+    <p>Ogni codice di stato <strong>prima cifra</strong> ti dice quasi tutto. Questo è l'istinto di debug più veloce che puoi costruire.</p>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>Famiglia</th><th>Classe</th><th>Di chi è il problema</th></tr></thead>
+        <tbody>
+          <tr><td><code>1xx</code></td><td>Informativo</td><td>Raro; praticamente non li gestirai mai direttamente.</td></tr>
+          <tr><td><code>2xx</code></td><td>Successo</td><td>Ha funzionato.</td></tr>
+          <tr><td><code>3xx</code></td><td>Reindirizzamento</td><td>Vai a cercare altrove / usa la cache.</td></tr>
+          <tr><td><code>4xx</code></td><td>Errore del cliente</td><td><strong>Tu</strong> ha inviato qualcosa di sbagliato, correggi la richiesta.</td></tr>
+          <tr><td><code>5xx</code></td><td>Errore del server</td><td><strong>Il servitore</strong> si è rotto, non è colpa tua; riprova/avvisa op.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout model">
+      <span class="clabel">Il riflesso della prima cifra</span>
+      <p>Quando una chiamata fallisce: <strong>4xx -&gt; correggi la tua richiesta</strong> (controlla corpo, autenticazione, URL). <strong>5xx -&gt; non è colpa tua</strong>; riprovare con il backoff o chiamare il team del server. Quando riesce: <strong>20x -&gt; fatto</strong>, <strong>30x -&gt; segui il reindirizzamento</strong>. Quella singola divisione risolve la maggior parte di &quot;cosa devo fare con questa risposta?&quot; domande all'istante.</p>
+    </div>
+
+    <h3>I codici 4xx che le persone confondono</h3>
+    <h4>401 vs 403</h4>
+    <p><strong>401 Non autorizzato</strong> significa &quot;Non so chi sei&quot;, nessuna credenziale oppure non è valida/scaduta. La soluzione consiste nell'accedere o aggiornare il token. <strong>403 Proibito</strong> significa &quot;So esattamente chi sei e non ti è consentito&quot;, credenziali valide, permessi insufficienti. Effettuare nuovamente l'accesso non aiuterà. (I nomi sono storicamente invertiti, 401 riguarda in realtà l'autenticazione, 403 l'autorizzazione.)</p>
+    <h4>409 Conflitto</h4>
+    <p>La richiesta entra in conflitto con lo stato corrente della risorsa: creazione di qualcosa che già esiste, un conflitto di campi univoci o eliminazione di qualcosa da cui dipendono ancora altri record (&quot;impossibile eliminare un utente con ordini attivi&quot;).</p>
+    <h4>422 vs 400</h4>
+    <p><strong>400 Richiesta errata</strong> = la richiesta non è valida al momento <em>sintassi</em> livello (JSON interrotto, una stringa in cui era richiesto un numero). <strong>422 Entità non elaborabile</strong> = la sintassi è perfetta, ma fallisce a <em>semantico</em>/business rule (a negative age, an email that isn't an email, an end-date before the start-date). Use 422 when you parsed the body fine but the values don't make sense.</p>
+    <h4>429 Troppe richieste</h4>
+    <p>Tariffa limitata. Rispetta il <code>Retry-After</code> header (secondi di attesa) invece di martellare, altrimenti rimarrai semplicemente strozzato.</p>
+
+    <h3>I codici che incontrerai il 90% delle volte</h3>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>Codice</th><th>Significato semplice</th></tr></thead>
+        <tbody>
+          <tr><td><code>200</code></td><td>ha funzionato</td></tr>
+          <tr><td><code>201</code></td><td>creato (successo POST)</td></tr>
+          <tr><td><code>204</code></td><td>ha funzionato, nessun corpo (DELETE successo)</td></tr>
+          <tr><td><code>301 / 302</code></td><td>reindirizzare</td></tr>
+          <tr><td><code>304</code></td><td>la tua cache è ancora buona</td></tr>
+          <tr><td><code>400</code></td><td>la tua richiesta non è valida (sintassi)</td></tr>
+          <tr><td><code>401</code></td><td>accedi</td></tr>
+          <tr><td><code>403</code></td><td>effettuato l'accesso ma non consentito</td></tr>
+          <tr><td><code>404</code></td><td>quell'unica cosa non esiste</td></tr>
+          <tr><td><code>409</code></td><td>conflitto con lo stato attuale</td></tr>
+          <tr><td><code>422</code></td><td>i dati non superano la convalida (semantica)</td></tr>
+          <tr><td><code>429</code></td><td>rallentare</td></tr>
+          <tr><td><code>500</code></td><td>si sono schiantati</td></tr>
+          <tr><td><code>503</code></td><td>sono sovraccarichi / in manutenzione</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- 09 -->
+  <section id="s9">
+    <div class="sec-head"><span class="sec-num">09</span><h2>Esempio lavorato: una piattaforma PM</h2></div>
+    <p>Di seguito la creazione della trascrizione: un prodotto di gestione del progetto (si pensi a Jira / Linear). Dai wireframe estraiamo il file <strong>sostantivi</strong> -&gt; risorse: <code>organizations</code>, <code>projects</code>, <code>tasks</code> (anche utenti, tag). Quelli diventano tabelle, quindi endpoint. Ecco l'endpoint completo impostato per una risorsa, lo stesso modello si ripete per ogni altra risorsa.</p>
+
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>Azione</th><th>Metodo + Percorso</th><th>Successo</th></tr></thead>
+        <tbody>
+          <tr><td>Elenca le organizzazioni</td><td><code>GET /v1/organizations</code></td><td>200 / impaginati</td></tr>
+          <tr><td>Crea organizzazione</td><td><code>POST /v1/organizations</code></td><td>201/nuovo ente</td></tr>
+          <tr><td>Prendine uno</td><td><code>GET /v1/organizations/:id</code></td><td>200 / 404</td></tr>
+          <tr><td>Aggiornamento (parziale)</td><td><code>PATCH /v1/organizations/:id</code></td><td>200/ente aggiornato</td></tr>
+          <tr><td>Elimina</td><td><code>DELETE /v1/organizations/:id</code></td><td>204/vuoto</td></tr>
+          <tr><td>Archivio (personalizzato)</td><td><code>POST /v1/organizations/:id/archive</code></td><td>200/entità archiviata</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>Notare la simmetria: <strong>elenco</strong> e <strong>creare</strong> condividi l'URL della raccolta (<code>/organizations</code>) e differiscono solo per il metodo, i percorsi del server <code>GET</code> al gestore della lista e <code>POST</code> al gestore di creazione. Allo stesso modo <strong>prendine uno / aggiorna / elimina</strong> condividere <code>/organizations/:id</code> e differiscono solo per il metodo. L'azione personalizzata aggiunge un verbo. <code>projects</code> rispecchierebbe esattamente questo, con <code>clone</code> come azione personalizzata.</p>
+
+    <div class="code">
+      <div class="code-top"><span class="dots"><i></i><i></i><i></i></span>
+        <div class="tabs"><button class="tab active" data-lang="go">Vai</button><button class="tab" data-lang="python">Pitone</button></div>
+        <span class="code-cap">cablaggio dell'intera risorsa/CRUD + azione personalizzata</span>
+      </div>
+      <pre class="code-body" data-lang="go">func RegisterOrgRoutes(mux *http.ServeMux) {
+	// list + create share the collection URL, split by method
+	mux.HandleFunc("GET /v1/organizations", ListOrganizations)
+	mux.HandleFunc("POST /v1/organizations", CreateOrganization)
+
+	// get-one / update / delete share /:id, split by method
+	mux.HandleFunc("GET /v1/organizations/{id}", GetOrganization)
+	mux.HandleFunc("PATCH /v1/organizations/{id}", UpdateOrganization)
+	mux.HandleFunc("DELETE /v1/organizations/{id}", DeleteOrganization)
+
+	// custom action: verb at the end of a specific resource
+	mux.HandleFunc("POST /v1/organizations/{id}/archive", ArchiveOrganization)
+}
+
+func CreateOrganization(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		Name        string `json:"name"`
+		Status      string `json:"status"`
+		Description string `json:"description"`
+	}
+	json.NewDecoder(r.Body).Decode(&amp;in)
+
+	if in.Status == "" {
+		in.Status = "active" // sane default, don't force the client to send the obvious
+	}
+	org := store.Insert(in.Name, in.Status, in.Description) // id, createdAt set server-side
+	writeJSON(w, 201, org) // 201 Created + the new entity
+}
+
+func DeleteOrganization(w http.ResponseWriter, r *http.Request) {
+	store.Delete(r.PathValue("id"))
+	w.WriteHeader(204) // No Content
+}
+
+func ArchiveOrganization(w http.ResponseWriter, r *http.Request) {
+	org := store.Archive(r.PathValue("id")) // flips status + cascades: projects, tasks, emails...
+	writeJSON(w, 200, org) // custom action -&gt; 200, NOT 201
+}</pre>
+      <pre class="code-body hidden" data-lang="python">from fastapi import FastAPI, Response
+app = FastAPI()
+
+# list + create share the collection URL, split by method
+@app.get("/v1/organizations")
+def list_organizations(): ...      # (see section 07)
+
+@app.post("/v1/organizations", status_code=201)   # 201 Created
+def create_organization(body: dict):
+    status = body.get("status") or "active"        # sane default
+    return store.insert(                            # id, createdAt set server-side
+        name=body["name"], status=status, description=body.get("description"),
+    )
+
+# get-one / update / delete share /{id}, split by method
+@app.get("/v1/organizations/{id}")
+def get_organization(id: str):
+    org = store.get(id)
+    if org is None:
+        raise HTTPException(404, "organization not found")  # single id -&gt; 404
+    return org
+
+@app.patch("/v1/organizations/{id}")                # partial update -&gt; 200
+def update_organization(id: str, body: dict):
+    return store.update(id, body)
+
+@app.delete("/v1/organizations/{id}", status_code=204)  # No Content
+def delete_organization(id: str):
+    store.delete(id)
+    return Response(status_code=204)
+
+# custom action: verb at the end -&gt; POST, returns 200 (created nothing)
+@app.post("/v1/organizations/{id}/archive")
+def archive_organization(id: str):
+    return store.archive(id)   # flips status + cascades: projects, tasks, emails...</pre>
+    </div>
+  </section>
+
+  <!-- 10 -->
+  <section id="s10">
+    <div class="sec-head"><span class="sec-num">10</span><h2>Regole d'oro</h2></div>
+
+    <h3>Estrai prima i nomi dall'interfaccia utente</h3>
+    <p>Prima di scrivere una linea di logica applicativa, guarda i wireframe (Figma) o parla con gli addetti al prodotto. Il <strong>sostantivi</strong> gli utenti interagiscono, progetti, utenti, attività, tag, sono le tue risorse. Osservare il modo in cui l'utente finale tocca i dati ti dice come il livello più basso (il DB) è correlato al livello superiore (lo schermo) e questo è il posto giusto per iniziare a progettare l'interfaccia.</p>
+
+    <h3>Progettare l'interfaccia prima della codifica</h3>
+    <p>Un'API REST lo è <em>progettato</em>, non programmato prima. Disponi percorsi, carichi utili e risposte in uno strumento come <strong>Insonnia</strong> o <strong>Postino</strong> prima di toccare Go, Python o qualsiasi framework. Il punto centrale è un'interfaccia deliziosa, intuitiva e inequivocabile, in modo che il consumatore non debba mai leggere il codice sorgente o indovinare il tuo comportamento per tentativi ed errori.</p>
+
+    <h3>Fornire impostazioni predefinite sensate</h3>
+    <p>Non bloccarsi mai perché il client ha omesso qualcosa di ovvio. No <code>page</code> -&gt; predefinito <code>1</code>. No <code>limit</code> -&gt; predefinito <code>10</code>. No <code>sortBy</code> -&gt; <code>createdAt</code> discendente. No <code>status</code> su crea -&gt; <code>active</code>. Richiedi solo le informazioni che veramente non puoi dedurre.</p>
+
+    <h3>Sii spietatamente coerente</h3>
+    <ul>
+      <li><strong>JSON nel <code>camelCase</code>, sempre</strong>: sia payload che risposte.</li>
+      <li><strong>Nessuna abbreviazione</strong>: se un campo è <code>description</code>, non chiamarlo mai <code>desc</code> in un altro punto finale. Hai un contesto che il consumatore non ha; un'abbreviazione che non riescono a decodificare costa loro una chiamata fallita e una ricerca di documenti.</li>
+      <li><strong>Stesse forme tra le risorse</strong>: se <code>organizations</code> sono plurali e impaginati con <code>{data,total,page,totalPages}</code>, quindi <code>projects</code> e <code>tasks</code> lo sono anche loro. I consumatori integrano quindi un endpoint <em>assumere</em> il resto segue lo stesso stile. Premia questa ipotesi.</li>
+    </ul>
+
+    <div class="callout tip">
+      <span class="clabel">Perché la coerenza è l'intero gioco</span>
+      <p>Seguire uno standard condiviso elimina congetture, supposizioni ed errori umani dall'integrazione. Se un consumatore può presumere che la tua API sia conforme allo standard all'80% circa, il tempo di integrazione diminuirà drasticamente, meno bug, meno &quot;come si comporta questo endpoint?&quot; chiamate. La coerenza dello stile è uno dei segni più chiari di un buon ingegnere di backend.</p>
+    </div>
+
+    <h3>Spedisci documenti interattivi</h3>
+    <p>Genera un parco giochi interattivo con <strong>Spavalderia/OpenAPI</strong> dall'inizio. Funge anche da documentazione per gli ingegneri frontend che ti integrano e da banco di prova per te. La costanza con cui mantieni le specifiche OpenAPI ti distingue davvero.</p>
+
+    <div class="callout model">
+      <span class="clabel">Il capitolo in un fiato</span>
+      <p>Estrai risorse (sostantivi plurali) dalla tua interfaccia utente, assegna a ciascuna il set CRUD su un URL gerarchico pulito, scegli il metodo in base all'intento (GET leggi / POST crea/azione / PUT sostituisci / PATCH parziale / DELETE rimuovi), lascia che l'idempotenza decida la possibilità di riprovare, restituisce il codice di stato onesto (201 creato / 204 eliminato / 404 solo per una singola risorsa mancante), crea pagine/ordina/filtra elenchi con valori predefiniti sensati e rimani spietatamente coerente, così puoi smettere di discutere su REST e tornare alla tua logica applicativa.</p>
+    </div>
+  </section>
+
+  <!-- 11 -->
+  <section id="s11">
+    <div class="sec-head"><span class="sec-num">11</span><h2>Versioning: non danneggiare i tuoi consumatori</h2></div>
+    <p>Nel momento in cui un altro team o un'altra azienda integra la tua API, non puoi più modificarla liberamente, un campo che rinomini o una risposta che rimodella si rompe <em>loro</em> codice in produzione. Il controllo delle versioni è il modo in cui evolvi senza interrompere ciò che è già stato distribuito. Tre strategie comuni:</p>
+
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>Strategia</th><th>Sembra</th><th>Compromesso</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Percorso dell'URL</strong> <span style="color:var(--green)">(più comune)</span></td><td><code>/v1/books</code> -&gt; <code>/v2/books</code></td><td>Evidente, banale da eseguire il debug, facile da instradare. REST leggermente &quot;impuro&quot; (la versione non fa parte dell'identità della risorsa). Il default pragmatico.</td></tr>
+          <tr><td><strong>Intestazione</strong></td><td><code>Accept: application/vnd.example.v2+json</code></td><td>Mantiene gli URL puliti e &quot;puri&quot;, ma invisibili in un browser e più difficili da testare/debug. Utilizzato da GitHub per anni.</td></tr>
+          <tr><td><strong>Parametro interrogazione</strong></td><td><code>/books?version=2</code></td><td>Semplice ma ingombra ogni URL e confonde la memorizzazione nella cache. Meno consigliato.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>Quando eseguire il bumping della versione</h3>
+    <p>Solo su a <strong>cambiamento di rottura</strong>: qualcosa che distruggerebbe un consumatore esistente:</p>
+    <ul>
+      <li>Rimuovere o rinominare un campo; cambiandone il tipo o il significato.</li>
+      <li>Rimozione di un endpoint o modifica del suo metodo/percorso.</li>
+      <li>Rendere obbligatorio un campo precedentemente facoltativo o modificare il comportamento predefinito.</li>
+    </ul>
+    <p><strong>Le modifiche aggiuntive NON si interrompono</strong>: e non è necessaria una nuova versione. L'aggiunta di un nuovo campo facoltativo, un nuovo endpoint o un nuovo parametro di query facoltativo lascia i vecchi client intatti (ignorano semplicemente ciò di cui non sono a conoscenza). Aumentare la versione per modifiche aggiuntive è inutile.</p>
+
+    <div class="callout tip">
+      <span class="clabel">Deprecazione, fatta gentilmente</span>
+      <p>Quando devi ritirare una versione, non strattonarla. Annuncia una sequenza temporale, corri <code>v1</code> e <code>v2</code> in parallelo durante una finestra di migrazione e inviare un file <code>Deprecation</code> / <code>Sunset</code> intestazione di risposta sulla vecchia versione in modo che gli integratori ricevano un avviso programmatico. Spezzare le persone in silenzio è il modo in cui perdi la loro fiducia.</p>
+    </div>
+  </section>
+
+  <!-- 12 -->
+  <section id="s12">
+    <div class="sec-head"><span class="sec-num">12</span><h2>Risposte agli errori: l'altra metà del contratto</h2></div>
+    <p>Le persone progettano attentamente il percorso felice e quindi restituiscono tracce di stack grezze o stringhe nude in caso di fallimento. Ma anche la forma dell'errore fa parte del contratto API, il codice di gestione degli errori del consumatore dipende da esso <strong>coerente e leggibile dalla macchina</strong>. Il solo codice di stato non è sufficiente; il corpo dovrebbe spiegare cosa è andato storto in una struttura prevedibile.</p>
+
+    <h3>Una busta di errore coerente</h3>
+    <p>Scegli una forma di errore e utilizzala <em>ogni</em> errore, su ogni endpoint. Una busta solida e minimale:</p>
+    <div class="wire"><span class="v">HTTP/1.1</span> <span class="m">422 Entità non elaborabile</span>
+<span class="h">Tipo di contenuto</span>: <span class="v">applicazione/json</span>
+
+{
+  <span class="v">&quot;errore&quot;</span>: {
+    <span class="v">&quot;codice&quot;</span>: <span class="v">&quot;validazione_non riuscita&quot;</span>,        <span class="cm">&lt;- stabile, leggibile dalla macchina</span>
+    <span class="v">&quot;messaggio&quot;</span>: <span class="v">&quot;Alcuni campi non sono validi.&quot;</span>, <span class="cm">&lt;- leggibile dall'uomo</span>
+    <span class="v">&quot;dettagli&quot;</span>: [                            <span class="cm">&lt;- per campo, per i moduli</span>
+      { <span class="v">&quot;campo&quot;</span>: <span class="v">&quot;e-mail&quot;</span>, <span class="v">&quot;problema&quot;</span>: <span class="v">&quot;deve essere un'e-mail valida&quot;</span> },
+      { <span class="v">&quot;campo&quot;</span>: <span class="v">&quot;età&quot;</span>,   <span class="v">&quot;problema&quot;</span>: <span class="v">&quot;deve essere &gt;= 0&quot;</span> }
+    ],
+    <span class="v">&quot;ID richiesta&quot;</span>: <span class="v">&quot;req_9f2a3c&quot;</span>          <span class="cm">&lt;- traccialo nei tuoi log</span>
+  }
+}</div>
+
+    <p>Perché ogni pezzo guadagna il suo posto:</p>
+    <ul>
+      <li><strong><code>code</code></strong>: una stringa stabile che il client può <code>switch</code> su. Non costringerli mai ad analizzare il messaggio umano; i messaggi vengono riformulati, i codici no.</li>
+      <li><strong><code>message</code></strong>: per esseri umani/tronchi. Sicuro da mostrare o in superficie.</li>
+      <li><strong><code>details</code></strong>: errori per campo in modo che un modulo possa evidenziare esattamente quali input non sono riusciti (si abbina naturalmente a <code>422</code>).</li>
+      <li><strong><code>requestId</code></strong>: il singolo campo più utile in produzione: il consumatore lo cita in una segnalazione di bug e tu trovi la richiesta esatta nei tuoi log in pochi secondi.</li>
+    </ul>
+
+    <div class="callout trap">
+      <span class="clabel">Non perdere mai parti interne</span>
+      <p>Non restituire tracce di stack, errori SQL, percorsi di file o dump di eccezioni del framework ai client, sono inutili per il consumatore e un regalo per gli aggressori (rivelano lo stack, lo schema e la struttura). Registra i dettagli cruenti lato server contro il file <code>requestId</code>; restituire la busta pulita al cliente. A <code>500</code> body dovrebbe dire &quot;qualcosa è andato storto, ecco l'ID della tua richiesta&quot;, niente di più.</p>
+    </div>
+
+    <div class="code">
+      <div class="code-top"><span class="dots"><i></i><i></i><i></i></span>
+        <div class="tabs"><button class="tab active" data-lang="go">Vai</button><button class="tab" data-lang="python">Pitone</button></div>
+        <span class="code-cap">un helper per gli errori, utilizzato ovunque</span>
+      </div>
+      <pre class="code-body" data-lang="go">type FieldError struct {
+	Field string `json:"field"`
+	Issue string `json:"issue"`
+}
+
+func writeError(w http.ResponseWriter, status int, code, msg string, details ...FieldError) {
+	body := map[string]any{"error": map[string]any{
+		"code":      code,
+		"message":   msg,
+		"details":   details,
+		"requestId": requestIDFromCtx(),
+	}}
+	writeJSON(w, status, body) // SAME shape for every error in the whole API
+}
+
+// usage
+writeError(w, 422, "validation_failed", "Some fields are invalid.",
+	FieldError{"email", "must be a valid email"},
+	FieldError{"age", "must be >= 0"},
+)</pre>
+      <pre class="code-body hidden" data-lang="python">from fastapi import Request
+from fastapi.responses import JSONResponse
+
+def error_response(status, code, message, details=None, request_id=""):
+    return JSONResponse(status_code=status, content={"error": {
+        "code": code,
+        "message": message,
+        "details": details or [],
+        "requestId": request_id,
+    }})  # SAME shape for every error in the whole API
+
+# usage
+error_response(
+    422, "validation_failed", "Some fields are invalid.",
+    details=[
+        {"field": "email", "issue": "must be a valid email"},
+        {"field": "age",   "issue": "must be >= 0"},
+    ],
+)</pre>
+    </div>
+
+    <div class="callout note">
+      <span class="clabel">Anche per questo c'è uno standard</span>
+      <p>Se preferisci adottare una specifica piuttosto che inventare una busta, <strong>RFC 9457 (dettagli del problema per le API HTTP)</strong> definisce uno standard <code>application/problem+json</code> corpo con <code>type</code>, <code>title</code>, <code>status</code>, <code>detail</code>, e <code>instance</code> campi. Entrambi gli approcci vanno bene, l’unica mossa sbagliata è essere <em>incoerente</em> sulla forma dell'errore negli endpoint.</p>
+    </div>
+
+    <div class="callout model">
+      <span class="clabel">Tutta la storia dell'errore in una riga</span>
+      <p>Restituisci il codice di stato onesto, racchiudi ogni errore in una busta JSON coerente leggibile dalla macchina <code>code</code> + umano <code>message</code> + per campo <code>details</code> + a <code>requestId</code>e non trapelano mai informazioni interne, in modo che il consumatore possa gestire i tuoi errori con la stessa affidabilità dei tuoi successi.</p>
+    </div>
+  </section>
+
+  <!-- 13 -->
+  <section id="s13">
+    <div class="sec-head"><span class="sec-num">13</span><h2>Vincoli vs Convenzioni</h2></div>
+
+    <p>Rimpicciolisci. Plurale o singolare e <code>PUT</code>-o-<code>PATCH</code> non sono le uniche cose che inciampano le persone riguardo a REST, lo stesso vale per <em>contare</em> stesso. Chiedi a un ingegnere &quot;i principi del REST&quot; e ascolterai <strong>sei</strong>; chiedi a un altro e otterrai una lista di controllo di <strong>otto</strong> o dieci. Entrambi hanno ragione perché rispondono a due domande diverse. Questa sezione di chiusura è una scheda di riferimento per distinguerli.</p>
+
+    <h3>Due elenchi, due domande</h3>
+    <p>Il <strong>sei</strong> sono formali di Roy Fielding <em>vincoli architettonici</em>, definiscono ciò che rende un sistema RESTful <em>affatto</em>. Questa è la risposta accademica, ed è tutto <a href="#s2" class="ext">sec 02</a>. Il <strong>otto</strong> sono pratici <em>convenzioni</em>, come progettare un'API pulita e prevedibile una volta accettati tali vincoli. Questo è ciò che in realtà insegna la maggior parte di questo manuale, distribuito nei suoi capitoli. I vincoli sono la teoria; le convenzioni sono il mestiere.</p>
+
+    <h4>I sei vincoli: la definizione di REST</h4>
+    <ol>
+      <li><strong>Client-Server</strong>: divide l'interfaccia utente da dati e logica in modo che ogni lato si evolva per conto proprio.</li>
+      <li><strong>Interfaccia uniforme</strong>: un modo standard per affrontare e manipolare ogni risorsa.</li>
+      <li><strong>Sistema a strati</strong>: lascia che proxy, cache e gateway si trovino tra il client e l'origine, in modo invisibile.</li>
+      <li><strong>Memorizzabile nella cache</strong>: ogni risposta dichiara se può essere memorizzata nella cache.</li>
+      <li><strong>senza stato</strong>: ogni richiesta porta con sé tutto ciò di cui ha bisogno; il server non ricorda nulla tra le chiamate.</li>
+      <li><strong>Codice su richiesta</strong> <span style="color:var(--ink-faint)">(facoltativo)</span>, il server potrebbe fornire codice eseguibile per estendere il client.</li>
+    </ol>
+    <p class="dg-note">Tutti e sei, più i quattro sottovincoli dell'interfaccia uniforme, tra cui HATEOAS, sono scompattati in <a href="#s2" class="ext">sec 02</a>.</p>
+
+    <h4>Le otto convenzioni: come costruirne una bene</h4>
+    <div class="diagram">
+      <div class="diagram-label">Le otto convenzioni e dove le tratta questo manuale</div>
+      <div class="tbl-wrap" style="margin:0; border:0;">
+        <table>
+          <thead><tr><th>Convenzione</th><th>In una riga</th><th>Coperto</th></tr></thead>
+          <tbody>
+            <tr><td><strong>Risorse come sostantivi plurali</strong></td><td>Modello <em>cose</em>, non azioni; il metodo è il verbo. <code>/orders/123</code>, mai <code>/getOrder</code>.</td><td><a href="#s4" class="ext">sezione 04 Percorsi</a></td></tr>
+            <tr><td><strong>Metodi per intenzione</strong></td><td><code>GET</code> leggi / <code>POST</code> creare/azione/ <code>PUT</code> sostituire / <code>PATCH</code> parziale / <code>DELETE</code> rimuovere.</td><td><a href="#s5" class="ext">sezione 05 Metodi</a></td></tr>
+            <tr><td><strong>Codici di stato onesti</strong></td><td>Lascia che sia il codice a portare il risultato, non seppellire un errore all'interno di a <code>200</code>.</td><td><a href="#s8" class="ext">sec. 08 Stato</a></td></tr>
+            <tr><td><strong>assenza di stato</strong> <span style="color:var(--ink-faint)">*</span></td><td>Ogni richiesta è autonoma -&gt; qualsiasi server può rispondere -&gt; ridimensionamento orizzontale.</td><td><a href="#s2" class="ext">sec 02 Vincoli</a></td></tr>
+            <tr><td><strong>Coerenza spietata</strong></td><td>Un involucro, un formato della data, una forma di impaginazione, ovunque.</td><td><a href="#s10" class="ext">sec 10 Regole d'oro</a></td></tr>
+            <tr><td><strong>Controllo delle versioni</strong></td><td>Bump solo in caso di modifiche importanti; le modifiche aggiuntive non richiedono una nuova versione.</td><td><a href="#s11" class="ext">sez 11 Controllo delle versioni</a></td></tr>
+            <tr><td><strong>Pagina/ordina/filtra</strong></td><td>Non scaricare mai un'intera tabella; impaginare elenchi e fornire valori predefiniti sensati.</td><td><a href="#s7" class="ext">sec 07 Elenco API</a></td></tr>
+            <tr><td><strong>Errori strutturati</strong></td><td>Una busta coerente e leggibile dalla macchina per ogni guasto.</td><td><a href="#s12" class="ext">sezione 12 Errori</a></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="dg-note"><span style="color:var(--ink-faint)">*</span> L’assenza di stato è l’unico tema su cui si arriva <em>entrambi</em> elenchi, vedere sotto.</p>
+    </div>
+
+    <div class="callout note">
+      <span class="clabel">Dove i due elenchi si toccano</span>
+      <p>Non sono rivali, lo sono le convenzioni <em>come onori</em> i vincoli quotidiani. La sovrapposizione più chiara è <strong>assenza di stato</strong>, che è sia il vincolo n. 5 di Fielding sia una regola da seguire su ogni endpoint. Anche gli altri fanno eco: <strong>cacheabilità</strong> superfici come le tue <code>Cache-Control</code> / <code>ETag</code> intestazioni e il <strong>interfaccia uniforme</strong> è esattamente ciò che &quot;URL con nomi plurali + metodi per intento + forme coerenti&quot; offrono nella pratica. <strong>HATEOAS</strong>: il vincolo secondario più ambizioso, è l'unico pezzo della teoria che la maggior parte delle API del mondo reale ignora silenziosamente.</p>
+    </div>
+
+    <div class="callout model">
+      <span class="clabel">Quale lista vuole qualcuno?</span>
+      <p>Se la domanda è accademica, vogliono un colloquio, &quot;definire REST&quot;, un esame di sistema <strong>i sei vincoli</strong>. Se si tratta di &quot;come posso progettare un'API pulita?&quot;, una revisione del codice, un nuovo servizio, vogliono <strong>le otto convenzioni</strong>. Stesso standard, due altitudini: i sei dicono cosa RIPOSO <em>è</em>; gli otto dicono come fare <em>farlo bene</em>.</p>
+    </div>
+  </section>
+
+  <!-- 14 -->
+  <section id="s14">
+    <div class="sec-head"><span class="sec-num">14</span><h2>Gli Otto Principi</h2></div>
+
+    <p><a href="#s13" class="ext">sezione 13</a> li mise in fila con i sei di Fielding a colpo d'occhio; questi sono gli stessi otto scritti per intero, la lista di controllo in inglese semplice. Ciascuna è una convenzione di lavoro che trasforma la teoria in un'API che altri sviluppatori apprezzano effettivamente utilizzare e ciascuna rimanda al capitolo che la spiega in modo approfondito.</p>
+
+    <h3>1. Modellare le risorse come sostantivi, non come azioni</h3>
+    <p>Gli URL dovrebbero rappresentare <em>cose</em>, non operazioni. Utilizzare <code>/users/123/orders</code> piuttosto che <code>/getUserOrders?id=123</code>. Il metodo HTTP fornisce il verbo, quindi il nome e il metodo insieme descrivono l'azione. Le collezioni sono plurali, <code>/orders</code>, no <code>/order</code>. (Trattamento completo in <a href="#s4" class="ext">sezione 04</a>.)</p>
+
+    <h3>2. Utilizzare i metodi HTTP per la semantica prevista</h3>
+    <p><code>GET</code> legge (e non cambia mai stato), <code>POST</code> crea, <code>PUT</code> sostituisce un commercio all'ingrosso di risorse, <code>PATCH</code> ne aggiorna una parte e <code>DELETE</code> lo rimuove. Il rispetto di ciò consente a client, cache e proxy di ragionare correttamente sulla tua API, a <code>GET</code> è sicuro riprovare, a <code>PUT</code> è idempotente (chiamarlo due volte ha lo stesso effetto di una volta), ma a <code>POST</code> generalmente non lo è. (Vedi <a href="#s5" class="ext">sec 05</a>.)</p>
+
+    <h3>3. Restituisce codici di stato significativi</h3>
+    <p>Appoggiati a quelli standard invece di tornare sempre <code>200</code> con un errore sepolto nel corpo: <code>200</code>/<code>201</code>/<code>204</code> per il successo, <code>400</code> per input errati, <code>401</code>/<code>403</code> per problemi di autenticazione, <code>404</code> quando manca qualcosa, <code>409</code> per i conflitti, <code>422</code> per errori di convalida, <code>500</code> per errori del server. Ciò consente ai client di gestire i risultati a livello di codice. (Vedi <a href="#s8" class="ext">sec 08</a>.)</p>
+
+    <h3>4. Rimani senza stato</h3>
+    <p>Ogni richiesta dovrebbe contenere tutto ciò di cui il server ha bisogno per elaborarla, token di autenticazione, parametri, senza fare affidamento sulla memoria della sessione lato server delle chiamate precedenti. Questo è ciò che ti consente di scalare orizzontalmente: qualsiasi server può gestire qualsiasi richiesta. È anche uno dei vincoli principali di Fielding (<a href="#s2" class="ext">sec 02</a>).</p>
+
+    <h3>5. Sii coerente</h3>
+    <p>Scegli le convenzioni e applicale ovunque: stile di denominazione (<code>snake_case</code> contro <code>camelCase</code> in JSON), formati di data (ISO 8601), come vengono formati gli errori, come funziona l'impaginazione. La prevedibilità vale più dell'intelligenza, uno sviluppatore che apprende un endpoint dovrebbe essere in grado di indovinare gli altri. (Vedi <a href="#s10" class="ext">sec 10</a>.)</p>
+
+    <h3>6. Versione della tua API</h3>
+    <p>Le modifiche sostanziali sono inevitabili, quindi pianificale fin dall'inizio, in genere tramite il percorso URL (<code>/v1/users</code>) o un'intestazione. Ciò ti consente di evolvere senza interrompere i clienti esistenti. (<a href="#s11" class="ext">sezione 11</a> approfondisce quando eseguire il bumping della versione.)</p>
+
+    <h3>7. Gestisci le raccolte con garbo</h3>
+    <p>Gli elenchi di grandi dimensioni richiedono l'impaginazione (<code>?page=2&amp;limit=50</code> o basato sul cursore), oltre al filtraggio (<code>?status=active</code>), ordinamento (<code>?sort=-created_at</code>) e spesso la selezione del campo. Restituire diecimila record in una risposta non serve a nessuno. (<a href="#s7" class="ext">sec 07</a> ha lo schema completo.)</p>
+
+    <h3>8. Progettare errori chiari e strutturati</h3>
+    <p>Una buona risposta all'errore indica al client cosa è andato storto e, idealmente, come risolverlo, un codice leggibile dalla macchina, un messaggio leggibile dall'uomo e spesso quale campo ha fallito. La coerenza qui conta tanto quanto la coerenza nelle risposte di successo. (<a href="#s12" class="ext">sezione 12</a> mostra un involucro di cemento.)</p>
+
+    <div class="callout model">
+      <span class="clabel">La linea passante</span>
+      <p>Un'API è un contratto pensato per essere utilizzato da altri sviluppatori, quindi prevedibilità, conformità agli standard e comunicazione chiara superano ogni volta la novità. Inchioda questi otto e un consumatore può integrare un endpoint, quindi correttamente <em>indovina</em> il resto.</p>
+    </div>
+  </section>
+
+  <!-- 15 -->
+  <section id="s15">
+    <div class="sec-head"><span class="sec-num">15</span><h2>Codice lavorato: un'API di attività in Go</h2></div>
+
+    <p>Tutto in questo capitolo, compilato in un unico file eseguibile: un'API REST completa per una singola risorsa, <code>tasks</code>, basato esclusivamente sulla libreria standard di Go e sul router sensibile al metodo introdotto in <strong>Vai 1.22</strong>. Prima del sorgente stesso, ecco come si comporta effettivamente in fase di esecuzione, come si avvia, come viene inviata una richiesta e ogni ramo che una richiesta può prendere.</p>
+
+    <!-- DIAGRAM A / BOOT -->
+    <div class="diagram">
+      <div class="diagram-label">Flusso di esecuzione/da &quot;go run&quot; a un server in ascolto</div>
+      <svg viewBox="0 0 720 128" xmlns="http://www.w3.org/2000/svg" font-family="JetBrains Mono, monospace">
+        <defs><marker id="ahA" markerWidth="7" markerHeight="7" refX="5.5" refY="3" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,0 L6,3 L0,6 Z" fill="#c7bca6"/></marker></defs>
+        <line x1="142" y1="52" x2="168" y2="52" stroke="#c7bca6" stroke-width="1.5" marker-end="url(#ahA)"/>
+        <line x1="278" y1="52" x2="304" y2="52" stroke="#c7bca6" stroke-width="1.5" marker-end="url(#ahA)"/>
+        <line x1="414" y1="52" x2="440" y2="52" stroke="#c7bca6" stroke-width="1.5" marker-end="url(#ahA)"/>
+        <line x1="550" y1="52" x2="576" y2="52" stroke="#c7bca6" stroke-width="1.5" marker-end="url(#ahA)"/>
+        <rect x="34" y="28" width="108" height="48" rx="9" fill="#ece3d4" stroke="#d8cfbe"/>
+        <text x="88" y="49" text-anchor="middle" fill="#5b5347" font-size="9.5" font-weight="600">vai a eseguire ./RestAPI</text>
+        <text x="88" y="64" text-anchor="middle" fill="#8d8475" font-size="8">compilare -&gt; eseguire</text>
+        <rect x="170" y="28" width="108" height="48" rx="9" fill="#ece3d4" stroke="#d8cfbe"/>
+        <text x="224" y="49" text-anchor="middle" fill="#5b5347" font-size="11" font-weight="600">main()</text>
+        <text x="224" y="64" text-anchor="middle" fill="#8d8475" font-size="8">punto di ingresso</text>
+        <rect x="306" y="28" width="108" height="48" rx="9" fill="#f0e5c9" stroke="#ddc79a"/>
+        <text x="360" y="49" text-anchor="middle" fill="#b07d2b" font-size="10" font-weight="600">newStore()</text>
+        <text x="360" y="64" text-anchor="middle" fill="#8d8475" font-size="8">seminare 12 compiti</text>
+        <rect x="442" y="28" width="108" height="48" rx="9" fill="#ece3d4" stroke="#d8cfbe"/>
+        <text x="496" y="49" text-anchor="middle" fill="#5b5347" font-size="10" font-weight="600">http.Server</text>
+        <text x="496" y="64" text-anchor="middle" fill="#8d8475" font-size="8">timeout 10s</text>
+        <rect x="578" y="28" width="108" height="48" rx="9" fill="#e0e9dd" stroke="#bcd3b6"/>
+        <text x="632" y="49" text-anchor="middle" fill="#3f6f4e" font-size="8.5" font-weight="600">Ascolta e servi</text>
+        <text x="632" y="64" text-anchor="middle" fill="#3f6f4e" font-size="8">:8080 / pronto</text>
+        <text x="360" y="108" text-anchor="middle" fill="#8d8475" font-size="9.5">attualmente in servizio, ogni richiesta in entrata segue il flusso riportato di seguito</text>
+      </svg>
+      <p class="dg-note"><code>main()</code> costruisce il negozio, semina dodici attività, collega i percorsi, imposta i timeout di lettura/scrittura e passa a <code>ListenAndServe</code>. Quella chiamata si blocca: il processo ora resta fermo e attende, pronto a soddisfare una richiesta alla volta man mano che arriva.</p>
+    </div>
+
+    <!-- DIAGRAM B / ROUTING -->
+    <div class="diagram">
+      <div class="diagram-label">Richiedi flusso/il router invia su METODO + PERCORSO</div>
+      <svg viewBox="0 0 720 320" xmlns="http://www.w3.org/2000/svg" font-family="JetBrains Mono, monospace">
+        <defs><marker id="ahB" markerWidth="7" markerHeight="7" refX="5.5" refY="3" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,0 L6,3 L0,6 Z" fill="#c7bca6"/></marker></defs>
+        <!-- request -->
+        <rect x="14" y="124" width="118" height="54" rx="9" fill="#b8402e"/>
+        <text x="73" y="147" text-anchor="middle" fill="#fff" font-size="11" font-weight="600">Richiesta HTTP</text>
+        <text x="73" y="163" text-anchor="middle" fill="#f4ded6" font-size="8.5">metodo + percorso</text>
+        <!-- router -->
+        <line x1="132" y1="151" x2="164" y2="151" stroke="#c7bca6" stroke-width="1.5" marker-end="url(#ahB)"/>
+        <rect x="168" y="124" width="140" height="54" rx="9" fill="#dee5ee" stroke="#b9c8da"/>
+        <text x="238" y="146" text-anchor="middle" fill="#37607f" font-size="11.5" font-weight="600">ServeMux</text>
+        <text x="238" y="162" text-anchor="middle" fill="#5b5347" font-size="8">consapevole del metodo / Go 1.22</text>
+        <!-- fan-out arrows -->
+        <line x1="308" y1="151" x2="340" y2="25"  stroke="#c7bca6" stroke-width="1.3" marker-end="url(#ahB)"/>
+        <line x1="308" y1="151" x2="340" y2="67"  stroke="#c7bca6" stroke-width="1.3" marker-end="url(#ahB)"/>
+        <line x1="308" y1="151" x2="340" y2="109" stroke="#c7bca6" stroke-width="1.3" marker-end="url(#ahB)"/>
+        <line x1="308" y1="151" x2="340" y2="151" stroke="#c7bca6" stroke-width="1.3" marker-end="url(#ahB)"/>
+        <line x1="308" y1="151" x2="340" y2="193" stroke="#c7bca6" stroke-width="1.3" marker-end="url(#ahB)"/>
+        <line x1="308" y1="151" x2="340" y2="235" stroke="#c7bca6" stroke-width="1.3" marker-end="url(#ahB)"/>
+        <line x1="308" y1="151" x2="340" y2="277" stroke="#c7bca6" stroke-width="1.3" stroke-dasharray="3 3" marker-end="url(#ahB)"/>
+        <!-- rows -->
+        <rect x="344" y="10"  width="300" height="30" rx="7" fill="#ece3d4" stroke="#d8cfbe"/>
+        <text x="356" y="29" fill="#5b5347" font-size="9.5">GET /v1/tasks -&gt; handleList</text>
+        <rect x="590" y="15" width="48" height="20" rx="6" fill="#e0e9dd"/><text x="614" y="29" text-anchor="middle" fill="#3f6f4e" font-size="9" font-weight="600">200</text>
+        <rect x="344" y="52"  width="300" height="30" rx="7" fill="#ece3d4" stroke="#d8cfbe"/>
+        <text x="356" y="71" fill="#5b5347" font-size="9.5">POST /v1/tasks -&gt; handleCreate</text>
+        <rect x="590" y="57" width="48" height="20" rx="6" fill="#e0e9dd"/><text x="614" y="71" text-anchor="middle" fill="#3f6f4e" font-size="9" font-weight="600">201</text>
+        <rect x="344" y="94"  width="300" height="30" rx="7" fill="#ece3d4" stroke="#d8cfbe"/>
+        <text x="356" y="113" fill="#5b5347" font-size="9.5">GET /v1/tasks/{id} -&gt; handleGet</text>
+        <rect x="590" y="99" width="48" height="20" rx="6" fill="#e0e9dd"/><text x="614" y="113" text-anchor="middle" fill="#3f6f4e" font-size="9" font-weight="600">200</text>
+        <rect x="344" y="136" width="300" height="30" rx="7" fill="#ece3d4" stroke="#d8cfbe"/>
+        <text x="356" y="155" fill="#5b5347" font-size="9.5">PUT /v1/tasks/{id} -&gt; handleUpdate</text>
+        <rect x="590" y="141" width="48" height="20" rx="6" fill="#e0e9dd"/><text x="614" y="155" text-anchor="middle" fill="#3f6f4e" font-size="9" font-weight="600">200</text>
+        <rect x="344" y="178" width="300" height="30" rx="7" fill="#ece3d4" stroke="#d8cfbe"/>
+        <text x="356" y="197" fill="#5b5347" font-size="9.5">DELETE /v1/tasks/{id} -&gt; handleDelete</text>
+        <rect x="590" y="183" width="48" height="20" rx="6" fill="#e0e9dd"/><text x="614" y="197" text-anchor="middle" fill="#3f6f4e" font-size="9" font-weight="600">204</text>
+        <rect x="344" y="220" width="300" height="30" rx="7" fill="#ece3d4" stroke="#d8cfbe"/>
+        <text x="356" y="239" fill="#5b5347" font-size="9.5">GET /healthz -&gt; controllo dello stato</text>
+        <rect x="590" y="225" width="48" height="20" rx="6" fill="#e0e9dd"/><text x="614" y="239" text-anchor="middle" fill="#3f6f4e" font-size="9" font-weight="600">200</text>
+        <rect x="344" y="262" width="300" height="30" rx="7" fill="#f4ded6" stroke="#e3c4b8"/>
+        <text x="356" y="281" fill="#b8402e" font-size="9.5">/ unmatched route / method</text>
+        <rect x="590" y="267" width="48" height="20" rx="6" fill="#b8402e"/><text x="614" y="281" text-anchor="middle" fill="#fff" font-size="9" font-weight="600">404</text>
+      </svg>
+      <p class="dg-note">Perché il router è registrato con <code>"METHOD /path"</code> schemi, un metodo sbagliato su un percorso reale (diciamo <code>POST /v1/tasks/5</code>) non corrisponde ad alcun percorso e cade nel built-in <strong>404</strong>. Il tag su ogni riga è il codice di successo di quel percorso; i rami dell'errore si trovano nel diagramma successivo e nella tabella seguente.</p>
+    </div>
+
+    <!-- DIAGRAM C / LIST PIPELINE -->
+    <div class="diagram">
+      <div class="diagram-label">Approfondimento / ogni ramo all'interno di &quot;GET /v1/tasks&quot;</div>
+      <svg viewBox="0 0 720 540" xmlns="http://www.w3.org/2000/svg" font-family="JetBrains Mono, monospace">
+        <defs><marker id="ahC" markerWidth="7" markerHeight="7" refX="5.5" refY="3" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,0 L6,3 L0,6 Z" fill="#c7bca6"/></marker></defs>
+        <!-- spine arrows -->
+        <line x1="250" y1="60"  x2="250" y2="74"  stroke="#c7bca6" stroke-width="1.5" marker-end="url(#ahC)"/>
+        <line x1="250" y1="116" x2="250" y2="130" stroke="#c7bca6" stroke-width="1.5" marker-end="url(#ahC)"/>
+        <line x1="250" y1="180" x2="250" y2="194" stroke="#c7bca6" stroke-width="1.5" marker-end="url(#ahC)"/>
+        <line x1="250" y1="234" x2="250" y2="248" stroke="#c7bca6" stroke-width="1.5" marker-end="url(#ahC)"/>
+        <line x1="250" y1="302" x2="250" y2="316" stroke="#c7bca6" stroke-width="1.5" marker-end="url(#ahC)"/>
+        <line x1="250" y1="356" x2="250" y2="370" stroke="#c7bca6" stroke-width="1.5" marker-end="url(#ahC)"/>
+        <line x1="250" y1="420" x2="250" y2="434" stroke="#c7bca6" stroke-width="1.5" marker-end="url(#ahC)"/>
+        <line x1="250" y1="484" x2="250" y2="498" stroke="#c7bca6" stroke-width="1.5" marker-end="url(#ahC)"/>
+        <!-- error arrows -->
+        <line x1="375" y1="156" x2="468" y2="156" stroke="#c7bca6" stroke-width="1.3" marker-end="url(#ahC)"/>
+        <line x1="375" y1="274" x2="468" y2="274" stroke="#c7bca6" stroke-width="1.3" marker-end="url(#ahC)"/>
+        <line x1="375" y1="394" x2="468" y2="394" stroke="#c7bca6" stroke-width="1.3" marker-end="url(#ahC)"/>
+        <!-- C0 entry -->
+        <rect x="135" y="14" width="230" height="46" rx="9" fill="#b8402e"/>
+        <text x="250" y="36" text-anchor="middle" fill="#fff" font-size="11.5" font-weight="600">GET /v1/tasks</text>
+        <text x="250" y="51" text-anchor="middle" fill="#f4ded6" font-size="9">handleList()</text>
+        <!-- C1 -->
+        <rect x="135" y="74" width="230" height="42" rx="8" fill="#f0e5c9" stroke="#ddc79a"/>
+        <text x="250" y="100" text-anchor="middle" fill="#b07d2b" font-size="9.5" font-weight="600">list(), snapshot of all tasks (RLock)</text>
+        <!-- C2 -->
+        <rect x="125" y="130" width="250" height="50" rx="8" fill="#dee5ee" stroke="#b9c8da"/>
+        <text x="250" y="151" text-anchor="middle" fill="#37607f" font-size="9.5" font-weight="600">è stato fatto un bool valido?</text>
+        <text x="250" y="166" text-anchor="middle" fill="#5b5347" font-size="8">strconv.ParseBool</text>
+        <text x="415" y="150" text-anchor="middle" fill="#8d8475" font-size="7.5">no</text>
+        <text x="262" y="192" fill="#8d8475" font-size="7.5">valido v</text>
+        <rect x="468" y="132" width="234" height="46" rx="8" fill="#f4ded6" stroke="#e3c4b8"/>
+        <text x="585" y="153" text-anchor="middle" fill="#b8402e" font-size="9.5" font-weight="600">400 Richiesta errata</text>
+        <text x="585" y="168" text-anchor="middle" fill="#b8402e" font-size="7.5">fatto -&gt; vero o falso</text>
+        <!-- C3 -->
+        <rect x="135" y="194" width="230" height="40" rx="8" fill="#ece3d4" stroke="#d8cfbe"/>
+        <text x="250" y="219" text-anchor="middle" fill="#5b5347" font-size="9.5">filtro: fatto + titolo (sottostringa)</text>
+        <!-- C4 -->
+        <rect x="125" y="248" width="250" height="54" rx="8" fill="#dee5ee" stroke="#b9c8da"/>
+        <text x="250" y="269" text-anchor="middle" fill="#37607f" font-size="9.5" font-weight="600">sortBy nella lista consentita?</text>
+        <text x="250" y="284" text-anchor="middle" fill="#5b5347" font-size="8.5">&amp; sortOrder asc | disc?</text>
+        <text x="415" y="268" text-anchor="middle" fill="#8d8475" font-size="7.5">no</text>
+        <text x="118" y="268" text-anchor="end" fill="#8d8475" font-size="7.5">valori predefiniti:</text>
+        <text x="118" y="280" text-anchor="end" fill="#8d8475" font-size="7.5">creatoA/desc</text>
+        <rect x="468" y="250" width="234" height="50" rx="8" fill="#f4ded6" stroke="#e3c4b8"/>
+        <text x="585" y="271" text-anchor="middle" fill="#b8402e" font-size="9.5" font-weight="600">400 Richiesta errata</text>
+        <text x="585" y="286" text-anchor="middle" fill="#b8402e" font-size="7.5">sortBy / sortOrder errato</text>
+        <!-- C5 -->
+        <rect x="135" y="316" width="230" height="40" rx="8" fill="#ece3d4" stroke="#d8cfbe"/>
+        <text x="250" y="341" text-anchor="middle" fill="#5b5347" font-size="9.5">sort.Slice(attività, ...)</text>
+        <!-- C6 -->
+        <rect x="125" y="370" width="250" height="50" rx="8" fill="#dee5ee" stroke="#b9c8da"/>
+        <text x="250" y="391" text-anchor="middle" fill="#37607f" font-size="9.5" font-weight="600">pagina &gt;= 1 e limite &gt;= 1?</text>
+        <text x="250" y="406" text-anchor="middle" fill="#5b5347" font-size="8">parsePositiveInt</text>
+        <text x="415" y="390" text-anchor="middle" fill="#8d8475" font-size="7.5">no</text>
+        <text x="118" y="386" text-anchor="end" fill="#8d8475" font-size="7.5">valori predefiniti:</text>
+        <text x="118" y="398" text-anchor="end" fill="#8d8475" font-size="7.5">pagina 1 / limite 10</text>
+        <text x="118" y="410" text-anchor="end" fill="#8d8475" font-size="7.5">limite 100</text>
+        <rect x="468" y="372" width="234" height="46" rx="8" fill="#f4ded6" stroke="#e3c4b8"/>
+        <text x="585" y="393" text-anchor="middle" fill="#b8402e" font-size="9.5" font-weight="600">400 Richiesta errata</text>
+        <text x="585" y="408" text-anchor="middle" fill="#b8402e" font-size="7.5">pagina/limite deve essere &gt;= 1</text>
+        <!-- C7 -->
+        <rect x="120" y="434" width="260" height="50" rx="8" fill="#ece3d4" stroke="#d8cfbe"/>
+        <text x="250" y="455" text-anchor="middle" fill="#5b5347" font-size="9.5" font-weight="600">tagliare la pagina/cap 100</text>
+        <text x="250" y="470" text-anchor="middle" fill="#8d8475" font-size="8">oltre la fine -&gt; [] (ancora 200)</text>
+        <!-- C8 success -->
+        <rect x="135" y="498" width="230" height="40" rx="8" fill="#e0e9dd" stroke="#bcd3b6"/>
+        <text x="250" y="516" text-anchor="middle" fill="#3f6f4e" font-size="11" font-weight="600">200 OK</text>
+        <text x="250" y="530" text-anchor="middle" fill="#3f6f4e" font-size="8">{dati, impaginazione}</text>
+      </svg>
+      <p class="dg-note">Quattro cancelli, ciascuno con un anticipo <strong>400</strong> uscire; tutto ciò che passa viene filtrato, ordinato e impaginato. Nota le due cose che sono <em>no</em> errori: un parametro mancante ritorna a un valore predefinito sensato e una pagina oltre la fine restituisce un file vuoto <code>[]</code> con a <strong>200</strong>: un elenco vuoto non è &quot;non trovato&quot; (<a href="#s8" class="ext">sec 08</a>).</p>
+    </div>
+
+    <h3>Ogni risposta che l'API può restituire</h3>
+    <p>Leggendo insieme i tre diagrammi, ecco la serie completa di risultati, ogni codice di stato che questo server può produrre e la condizione che li attiva.</p>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>Richiesta</th><th>Quando</th><th>Risposta</th></tr></thead>
+        <tbody>
+          <tr><td><code>GET /v1/tasks</code></td><td>Query valida o una pagina dopo la fine</td><td><strong>200</strong>: <code>{data, pagination}</code>; pagina vuota -&gt; <code>data: []</code></td></tr>
+          <tr><td><code>GET /v1/tasks</code></td><td><code>done</code>, <code>sortBy</code>, <code>sortOrder</code>, <code>page</code> o <code>limit</code> malformato</td><td><strong>400</strong>: messaggio che nomina il parametro errato</td></tr>
+          <tr><td><code>GET /v1/tasks/{id}</code></td><td>ID numerico esistente</td><td><strong>200</strong>: il compito</td></tr>
+          <tr><td><code>GET /v1/tasks/{id}</code></td><td>l'ID non è un numero</td><td><strong>400</strong>: <code>invalid id</code></td></tr>
+          <tr><td><code>GET /v1/tasks/{id}</code></td><td>ID numerico che non esiste</td><td><strong>404</strong>: <code>task not found</code></td></tr>
+          <tr><td><code>POST /v1/tasks</code></td><td>JSON valido con un valore non vuoto <code>title</code></td><td><strong>201</strong>: l'attività creata</td></tr>
+          <tr><td><code>POST /v1/tasks</code></td><td>Il corpo non è un JSON valido</td><td><strong>400</strong>: <code>invalid JSON body</code></td></tr>
+          <tr><td><code>POST /v1/tasks</code></td><td><code>title</code> mancante o vuoto</td><td><strong>400</strong>: <code>title is required</code></td></tr>
+          <tr><td><code>PUT /v1/tasks/{id}</code></td><td>ID valido + corpo valido</td><td><strong>200</strong>: l'attività aggiornata</td></tr>
+          <tr><td><code>PUT /v1/tasks/{id}</code></td><td>ID errato, JSON errato o titolo vuoto</td><td><strong>400</strong>: il messaggio corrispondente</td></tr>
+          <tr><td><code>PUT /v1/tasks/{id}</code></td><td>l'id non esiste</td><td><strong>404</strong>: <code>task not found</code></td></tr>
+          <tr><td><code>DELETE /v1/tasks/{id}</code></td><td>ID numerico esistente</td><td><strong>204</strong>: nessun corpo</td></tr>
+          <tr><td><code>DELETE /v1/tasks/{id}</code></td><td>Cattiva identità</td><td><strong>400</strong>: <code>invalid id</code></td></tr>
+          <tr><td><code>DELETE /v1/tasks/{id}</code></td><td>l'id non esiste</td><td><strong>404</strong>: <code>task not found</code></td></tr>
+          <tr><td><code>GET /healthz</code></td><td>Sempre</td><td><strong>200</strong>: <code>{status: "ok"}</code></td></tr>
+          <tr><td><em>qualsiasi altra cosa</em></td><td>Nessun percorso corrisponde al metodo + percorso</td><td><strong>404</strong>: mux predefinito</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>Il programma completo</h3>
+    <div class="code">
+      <div class="code-top"><span class="dots"><i></i><i></i><i></i></span>
+        <div class="tabs"><button class="tab active" data-lang="go">Vai</button></div>
+        <span class="code-cap">API attività / net/http / Go 1.22+</span>
+      </div>
+      <pre class="code-body" data-lang="go">// A REST API in Go (standard library) for managing "tasks".
+//
+// This version applies three REST-design rules from the course notes:
+//
+//	sec 3  URL versioning         -&gt; every route lives under /v1
+//	sec 6  List query parameters  -&gt; pagination + sorting + filtering
+//	sec 8  Consistent naming      -&gt; JSON fields use camelCase, with sane defaults
+//
+// Requires Go 1.22+ for the method-aware router.
+//
+//	Run:   go run ./RestAPI       (from the module root, where go.mod is)
+//	Then:  curl "http://localhost:8080/v1/tasks?limit=5&amp;sortBy=title&amp;sortOrder=asc&amp;done=false"
+
+///- stateless HTTP server that exposes one resource (tasks) as a REST API:
+package main
+
+import (
+	"encoding/json"
+	"errors"
+	"log"
+	"math"
+	"net/http"
+	"sort"
+	"strconv"
+	"strings"
+	"sync"
+	"time"
+)
+
+// ---------- Model ----------
+
+// Task is a single to-do item.
+//
+// sec 8 (consistent naming): every JSON field is camelCase, note `createdAt`,
+// NOT `created_at`. The Go field names stay idiomatic PascalCase; only the
+// json struct tags define the wire format the client sees.
+type Task struct {
+	ID        int       `json:"id"`
+	Title     string    `json:"title"`
+	Done      bool      `json:"done"`
+	CreatedAt time.Time `json:"createdAt"`
+}
+
+// ---------- Store (unchanged: thread-safe in-memory map) ----------
+
+var errNotFound = errors.New("task not found")
+
+type store struct {
+	mu     sync.RWMutex
+	tasks  map[int]Task
+	nextID int
+}
+
+func newStore() *store { return &amp;store{tasks: make(map[int]Task), nextID: 1} }
+
+func (s *store) list() []Task {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := make([]Task, 0, len(s.tasks)) // non-nil so an empty result encodes as [] not null
+	for _, t := range s.tasks {
+		out = append(out, t)
+	}
+	return out
+}
+
+func (s *store) get(id int) (Task, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	t, ok := s.tasks[id]
+	if !ok {
+		return Task{}, errNotFound
+	}
+	return t, nil
+}
+
+func (s *store) create(title string, done bool) Task {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	t := Task{ID: s.nextID, Title: title, Done: done, CreatedAt: time.Now()}
+	s.tasks[t.ID] = t
+	s.nextID++
+	return t
+}
+
+func (s *store) update(id int, title string, done bool) (Task, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	t, ok := s.tasks[id]
+	if !ok {
+		return Task{}, errNotFound
+	}
+	t.Title, t.Done = title, done
+	s.tasks[id] = t
+	return t, nil
+}
+
+func (s *store) delete(id int) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, ok := s.tasks[id]; !ok {
+		return errNotFound
+	}
+	delete(s.tasks, id)
+	return nil
+}
+
+// ---------- HTTP helpers ----------
+
+func writeJSON(w http.ResponseWriter, status int, v any) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	if v != nil {
+		_ = json.NewEncoder(w).Encode(v)
+	}
+}
+
+func writeError(w http.ResponseWriter, status int, msg string) {
+	writeJSON(w, status, map[string]string{"error": msg})
+}
+
+func idFromPath(r *http.Request) (int, error) { return strconv.Atoi(r.PathValue("id")) }
+
+// ---------- List endpoint: pagination, sorting, filtering (sec 6) ----------
+
+// listResponse is the envelope returned by GET /v1/tasks. Wrapping the array
+// in an object gives us a place to attach pagination metadata beside the data.
+// sec 8: these fields are camelCase too.
+type listResponse struct {
+	Data       []Task     `json:"data"`
+	Pagination pagination `json:"pagination"`
+}
+
+type pagination struct {
+	Page       int `json:"page"`
+	Limit      int `json:"limit"`
+	TotalItems int `json:"totalItems"`
+	TotalPages int `json:"totalPages"`
+}
+
+// sortableFields is an allowlist, clients may only sort by these, never by an
+// arbitrary field name they invent.
+var sortableFields = map[string]bool{"id": true, "title": true, "createdAt": true}
+
+func (s *server) handleList(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	tasks := s.store.list()
+
+	// --- Filtering (sec 6): narrow the set by matching query params. ---
+	if raw := q.Get("done"); raw != "" {
+		done, err := strconv.ParseBool(raw)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "query param 'done' must be true or false")
+			return
+		}
+		filtered := make([]Task, 0)
+		for _, t := range tasks {
+			if t.Done == done {
+				filtered = append(filtered, t)
+			}
+		}
+		tasks = filtered
+	}
+	if title := strings.TrimSpace(q.Get("title")); title != "" {
+		needle := strings.ToLower(title)
+		filtered := make([]Task, 0)
+		for _, t := range tasks {
+			if strings.Contains(strings.ToLower(t.Title), needle) {
+				filtered = append(filtered, t)
+			}
+		}
+		tasks = filtered
+	}
+
+	// --- Sorting (sec 6) with sane defaults (sec 8: default = createdAt, descending). ---
+	sortBy := q.Get("sortBy")
+	if sortBy == "" {
+		sortBy = "createdAt" // sane default
+	}
+	if !sortableFields[sortBy] {
+		writeError(w, http.StatusBadRequest, "query param 'sortBy' must be one of: id, title, createdAt")
+		return
+	}
+	sortOrder := q.Get("sortOrder")
+	if sortOrder == "" {
+		sortOrder = "desc" // sane default
+	}
+	if sortOrder != "asc" &amp;&amp; sortOrder != "desc" {
+		writeError(w, http.StatusBadRequest, "query param 'sortOrder' must be 'asc' or 'desc'")
+		return
+	}
+	sort.Slice(tasks, func(i, j int) bool {
+		var less bool
+		switch sortBy {
+		case "id":
+			less = tasks[i].ID &lt; tasks[j].ID
+		case "title":
+			less = strings.ToLower(tasks[i].Title) &lt; strings.ToLower(tasks[j].Title)
+		case "createdAt":
+			less = tasks[i].CreatedAt.Before(tasks[j].CreatedAt)
+		}
+		if sortOrder == "desc" {
+			return !less
+		}
+		return less
+	})
+
+	// --- Pagination (sec 6) with sane defaults (sec 8: default limit = 10). ---
+	page, err := parsePositiveInt(q.Get("page"), 1)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "query param 'page' must be a positive integer")
+		return
+	}
+	limit, err := parsePositiveInt(q.Get("limit"), 10)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "query param 'limit' must be a positive integer")
+		return
+	}
+	if limit &gt; 100 {
+		limit = 100 // cap the page size so a client can't ask for everything at once
+	}
+
+	totalItems := len(tasks)
+	totalPages := int(math.Ceil(float64(totalItems) / float64(limit)))
+
+	// Slice out the requested page. A page past the end yields an EMPTY data
+	// array, still 200 OK, never 404 (sec 7: an empty list is not "not found").
+	start := (page - 1) * limit
+	if start &gt; totalItems {
+		start = totalItems
+	}
+	end := start + limit
+	if end &gt; totalItems {
+		end = totalItems
+	}
+	data := tasks[start:end]
+	if data == nil {
+		data = []Task{} // guarantee [] rather than null in the JSON
+	}
+
+	writeJSON(w, http.StatusOK, listResponse{
+		Data: data,
+		Pagination: pagination{
+			Page:       page,
+			Limit:      limit,
+			TotalItems: totalItems,
+			TotalPages: totalPages,
+		},
+	})
+}
+
+// parsePositiveInt returns def when raw is empty, otherwise the parsed value if
+// it is a positive integer. Anything else (non-numeric, zero, negative) errors.
+func parsePositiveInt(raw string, def int) (int, error) {
+	if raw == "" {
+		return def, nil
+	}
+	n, err := strconv.Atoi(raw)
+	if err != nil || n &lt; 1 {
+		return 0, errors.New("invalid")
+	}
+	return n, nil
+}
+
+// ---------- Single-resource handlers (unchanged logic) ----------
+
+type server struct{ store *store }
+
+func (s *server) handleGet(w http.ResponseWriter, r *http.Request) {
+	id, err := idFromPath(r)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid id")
+		return
+	}
+	t, err := s.store.get(id)
+	if err != nil {
+		writeError(w, http.StatusNotFound, "task not found")
+		return
+	}
+	writeJSON(w, http.StatusOK, t)
+}
+
+func (s *server) handleCreate(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Title string `json:"title"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&amp;body); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+	if body.Title == "" {
+		writeError(w, http.StatusBadRequest, "title is required")
+		return
+	}
+	writeJSON(w, http.StatusCreated, s.store.create(body.Title, false))
+}
+
+func (s *server) handleUpdate(w http.ResponseWriter, r *http.Request) {
+	id, err := idFromPath(r)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid id")
+		return
+	}
+	var body struct {
+		Title string `json:"title"`
+		Done  bool   `json:"done"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&amp;body); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+	if body.Title == "" {
+		writeError(w, http.StatusBadRequest, "title is required")
+		return
+	}
+	t, err := s.store.update(id, body.Title, body.Done)
+	if err != nil {
+		writeError(w, http.StatusNotFound, "task not found")
+		return
+	}
+	writeJSON(w, http.StatusOK, t)
+}
+
+func (s *server) handleDelete(w http.ResponseWriter, r *http.Request) {
+	id, err := idFromPath(r)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid id")
+		return
+	}
+	if err := s.store.delete(id); err != nil {
+		writeError(w, http.StatusNotFound, "task not found")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// ---------- Wiring ----------
+
+func (s *server) routes() *http.ServeMux {
+	mux := http.NewServeMux()
+	// sec 3 (versioning): everything is namespaced under /v1, so a future breaking
+	// change can ship as /v2 without disturbing clients still using /v1.
+	mux.HandleFunc("GET /v1/tasks", s.handleList)
+	mux.HandleFunc("POST /v1/tasks", s.handleCreate)
+	mux.HandleFunc("GET /v1/tasks/{id}", s.handleGet)
+	mux.HandleFunc("PUT /v1/tasks/{id}", s.handleUpdate)
+	mux.HandleFunc("DELETE /v1/tasks/{id}", s.handleDelete)
+
+	// Health check stays unversioned, it's an infrastructure concern, not part
+	// of the versioned resource API.
+	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+	})
+	return mux
+}
+
+func main() {
+	srv := &amp;server{store: newStore()}
+
+	// Seed enough varied data to actually exercise pagination/sorting/filtering.
+	seed := []struct {
+		title string
+		done  bool
+	}{
+		{"Learn Go", true},
+		{"Build a REST API", true},
+		{"Add pagination", false},
+		{"Add sorting", false},
+		{"Add filtering", false},
+		{"Write unit tests", false},
+		{"Add request logging", false},
+		{"Write API docs", false},
+		{"Set up CI pipeline", false},
+		{"Dockerize the service", false},
+		{"Add authentication", false},
+		{"Deploy to staging", false},
+	}
+	for _, sd := range seed {
+		srv.store.create(sd.title, sd.done)
+	}
+
+	const addr = ":8080"
+	httpServer := &amp;http.Server{
+		Addr:         addr,
+		Handler:      srv.routes(),
+		ReadTimeout:  10 * time.Second,
+		WriteTimeout: 10 * time.Second,
+	}
+
+	log.Printf("listening on http://localhost%s  (try /v1/tasks)", addr)
+	log.Fatal(httpServer.ListenAndServe())
+}</pre>
+    </div>
+
+    <h3>Cosa implementa il codice</h3>
+    <p>Un file, tre livelli puliti, la stessa forma da cui nasce ogni vero servizio. Leggi dal basso verso l'alto, ogni strato conosce solo quello sottostante.</p>
+
+    <h4>1. Il modello</h4>
+    <p>Una struttura unica, <code>Task</code>, con quattro campi. Il <code>json</code> I tag struct svolgono un lavoro discreto ma importante: i campi Go rimangono idiomatici PascalCase (<code>CreatedAt</code>) mentre il formato wire visualizzato dal client è camelCase (<code>createdAt</code>, mai <code>created_at</code>). I tag sono l'unico luogo in cui si trova la convenzione di denominazione (<a href="#s10" class="ext">sec 10</a>) viene applicato.</p>
+
+    <h4>2. Il negozio</h4>
+    <p>Un in memoria <code>map[int]Task</code> custodito da a <code>sync.RWMutex</code>, il sostituto di un database. Legge (<code>list</code>, <code>get</code>) prendi una condivisione <code>RLock</code>; scrive (<code>create</code>, <code>update</code>, <code>delete</code>) prendi un'esclusiva <code>Lock</code>, quindi le richieste simultanee non possono danneggiare la mappa. Due dettagli contano per il contratto API: <code>list()</code> restituisce a <em>non zero</em> slice in modo che un risultato vuoto venga serializzato come <code>[]</code> piuttosto che <code>null</code>e una chiave mancante restituisce il file <code>errNotFound</code> sentinella che il livello HTTP si trasforma in un 404. Scambia questo livello con Postgres in seguito e non cambia un singolo gestore.</p>
+
+    <h4>3. Il livello HTTP</h4>
+    <p>È qui che vive REST. Tre piccoli aiutanti mantengono ogni handler onesto: <code>writeJSON</code> imposta il tipo di contenuto, scrive lo stato e codifica il corpo in un unico posto; <code>writeError</code> avvolge un messaggio in modo coerente <code>{"error": ...}</code> busta; <code>idFromPath</code> tira <code>{id}</code> fuori dall'URL. I cinque gestori di risorse più il controllo dello stato eseguono ciascuno un lavoro e <code>routes()</code> li lega a <code>"METHOD /path"</code> modelli in movimento 1.22 <code>ServeMux</code>, il router stesso codifica quale verbo appartiene a quale URL, quindi i gestori non devono mai controllare manualmente il metodo.</p>
+
+    <h3>Una richiesta, dall'inizio alla fine</h3>
+    <p>Prendi il comando esatto dalla parte superiore del file: <code>curl ".../v1/tasks?limit=5&amp;sortBy=title&amp;sortOrder=asc&amp;done=false"</code>. Seguendo il diagramma C: il router corrisponde <code>GET /v1/tasks</code> e chiamate <code>handleList</code>. Crea un'istantanea di tutte e dodici le attività seminate, filtrandole fino alle dieci esistenti <code>done=false</code>, convalida <code>sortBy=title</code> e <code>sortOrder=asc</code> (passano entrambi), ordina A-&gt;Z, quindi prende la pagina 1 a 5 per pagina, le prime cinque righe. La risposta:</p>
+    <div class="wire"><span class="h">GET</span> /v1/tasks?limit=5&amp;sortBy=title&amp;sortOrder=asc&amp;done=false   <span class="m">200 OK</span>
+{
+  <span class="v">&quot;dati&quot;</span>: [
+    { <span class="h">&quot;id&quot;</span>: <span class="v">5</span>, <span class="h">&quot;titolo&quot;</span>: <span class="v">&quot;Aggiungi filtro&quot;</span>, <span class="h">&quot;fatto&quot;</span>: <span class="v">falso</span>, <span class="h">&quot;creato a&quot;</span>: <span class="v">&quot;2026-07-02T...&quot;</span> },
+    <span class="cm">... altri quattro, ordinati per titolo A-&gt;Z ...</span>
+  ],
+  <span class="v">&quot;impaginazione&quot;</span>: { <span class="h">&quot;pagina&quot;</span>: <span class="v">1</span>, <span class="h">&quot;limite&quot;</span>: <span class="v">5</span>, <span class="h">&quot;Articoli totali&quot;</span>: <span class="v">10</span>, <span class="h">&quot;Pagine totali&quot;</span>: <span class="v">2</span> }
+}</div>
+    <p>Cambia una cosa e il ramo cambia con essa: <code>POST /v1/tasks</code> con un titolo ritorna <strong>201</strong> e la nuova riga; <code>GET /v1/tasks/999</code> ritorna <strong>404</strong>; <code>DELETE /v1/tasks/3</code> ritorna <strong>204</strong> senza corpo; e <code>?sortBy=colour</code> viene rifiutato in anticipo con <strong>400</strong> perché non è nella lista consentita.</p>
+
+    <h3>Quali principi dimostra</h3>
+    <p>Questo file tocca quasi tutte le regole del capitolo, ripetizione apposta, in modo da poter vedere la teoria approdare nel codice reale.</p>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>Principio</th><th>Dove appare nel codice</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Sostantivi di risorsa, plurale</strong> <a href="#s4" class="ext">sezione 04</a></td><td><code>/v1/tasks</code> e <code>/v1/tasks/{id}</code>, una cosa, mai un verbo come <code>/getTask</code></td></tr>
+          <tr><td><strong>Metodi per intenzione</strong> <a href="#s5" class="ext">sec 05</a></td><td><code>GET</code> legge/ <code>POST</code> crea/ <code>PUT</code> sostituisce / <code>DELETE</code> rimuove, un gestore ciascuno</td></tr>
+          <tr><td><strong>Codici di stato onesti</strong> <a href="#s8" class="ext">sec 08</a></td><td><code>200</code> / <code>201</code> / <code>204</code> / <code>400</code> / <code>404</code>, vedere la tabella dei risultati</td></tr>
+          <tr><td><strong>assenza di stato</strong> <a href="#s2" class="ext">sec 02</a></td><td>Nessuna sessione; il negozio è condiviso e ogni richiesta porta con sé tutto ciò di cui ha bisogno</td></tr>
+          <tr><td><strong>Coerenza</strong> <a href="#s10" class="ext">sec 10</a></td><td>camelCase JSON, uno <code>{data, pagination}</code> busta, impostazioni predefinite sensate ovunque</td></tr>
+          <tr><td><strong>Controllo delle versioni</strong> <a href="#s11" class="ext">sezione 11</a></td><td>Ogni risorsa viene instradata sotto <code>/v1</code>; <code>/healthz</code> lasciato deliberatamente senza versione</td></tr>
+          <tr><td><strong>Pagina/ordina/filtra</strong> <a href="#s7" class="ext">sec 07</a></td><td><code>?page ?limit ?sortBy ?sortOrder ?done ?title</code>, con <code>limit</code> limitato a 100</td></tr>
+          <tr><td><strong>Errori strutturati</strong> <a href="#s12" class="ext">sezione 12</a></td><td>Un coerente <code>{"error": ...}</code> corpo su ogni fallimento</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout tip">
+      <span class="clabel">Piccoli tocchi che vale la pena rubare</span>
+      <p>Il <strong>lista consentita</strong> su <code>sortBy</code> significa che un cliente può ordinare solo in base ai campi approvati, mai a un nome di colonna arbitrario inventato. Tappatura <code>limit</code> a <strong>100</strong> impedisce a una richiesta di richiedere l'intera tabella. Ritorno <code>[]</code> invece di <code>null</code> salva ogni consumatore un controllo nullo. E <code>DELETE</code> risposte <strong>204</strong> senza corpo, perché non c'è più niente di significativo da inviare.</p>
+    </div>
+
+    <div class="callout note">
+      <span class="clabel">Ciò che è stato intenzionalmente tralasciato</span>
+      <p>Questo è uno scheletro didattico, quindi alcuni problemi di produzione sono volutamente assenti: <strong>persistenza</strong> (scambia la mappa con un database reale dietro la stessa interfaccia del negozio), <strong>autenticazione</strong>, a <strong>PATCH</strong> percorso per aggiornamenti parziali (solo <code>PUT</code>/full-replace is here), and the richer <strong>RFC9457</strong> busta di errore da <a href="#s12" class="ext">sezione 12</a>. Ognuno di essi è un passo successivo naturale e nessuno di essi cambia la forma che vedi qui.</p>
+    </div>
+
+    <div class="callout model">
+      <span class="clabel">Il file in un fiato</span>
+      <p>Una risorsa, tre livelli, un router sensibile al metodo e un archivio in memoria dietro un mutex, ogni regola REST in questo capitolo applicata in un paio di centinaia di righe che puoi effettivamente <code>go run</code> e colpire con <code>curl</code>.</p>
+    </div>
+  </section>
+
+  <div class="footer">
+    <p>Il backend lens/manuale sul campo v2, capitolo 11.<br>
+    Ulteriori letture: <a href="https://developer.mozilla.org/en-US/docs/Glossary/REST">MDN / RESTO</a> / <a href="https://developer.mozilla.org/en-US/docs/Web/API">MDN/API Web</a> / Roy Fielding's 2000 dissertation on REST.</p>
+  </div>
+
+      <footer class="bfp-footer">Backend da Primi Principi / Capitolo 07 / REST. Il codice è destinato a Go 1.22+ e Python 3.11+.</footer>
+</main>
+</div>
+<script>
+// ---- code tab switching ----
+document.querySelectorAll('.code').forEach(block=>{
+  const tabs=block.querySelectorAll('.tab');
+  const bodies=block.querySelectorAll('.code-body');
+  tabs.forEach(tab=>tab.addEventListener('click',()=>{
+    const lang=tab.dataset.lang;
+    tabs.forEach(t=>t.classList.toggle('active',t===tab));
+    bodies.forEach(b=>b.classList.toggle('hidden',b.dataset.lang!==lang));
+  }));
+});
+
+// ---- lightweight Go / Python syntax highlighter ----
+function highlight(text,lang){
+  const kw = lang==='go'
+    ? ['func','package','import','var','const','type','struct','interface','map','return','if','else','for','range','switch','case','default','go','defer','chan','select','break','continue','nil','true','false','string','int','int64','bool','float64','error','make','append','len','any']
+    : ['def','class','import','from','as','return','if','elif','else','for','while','in','is','not','and','or','None','True','False','try','except','finally','with','lambda','yield','pass','raise','self','async','await','int','str','bool','float','list','dict','None'];
+  const isWord=c=>/[A-Za-z0-9_]/.test(c);
+  let out='',i=0;const n=text.length;
+  const esc=s=>s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  while(i<n){
+    const c=text[i];
+    if((lang==='python'&&c==='#')||(lang==='go'&&c==='/'&&text[i+1]==='/')){
+      let j=i;while(j<n&&text[j]!=='\n')j++;
+      out+='<span class="c-com">'+esc(text.slice(i,j))+'</span>';i=j;continue;
+    }
+    if(c==='"'||c==='\''||c==='`'){
+      const q=c;let j=i+1;while(j<n&&text[j]!==q){if(text[j]==='\\')j++;j++;}
+      j=Math.min(j+1,n);
+      out+='<span class="c-str">'+esc(text.slice(i,j))+'</span>';i=j;continue;
+    }
+    if(/[A-Za-z_]/.test(c)){
+      let j=i;while(j<n&&isWord(text[j]))j++;
+      const w=text.slice(i,j);
+      if(kw.includes(w))out+='<span class="c-kw">'+esc(w)+'</span>';
+      else if(text[j]==='(')out+='<span class="c-fn">'+esc(w)+'</span>';
+      else out+=esc(w);
+      i=j;continue;
+    }
+    if(/[0-9]/.test(c)){
+      let j=i;while(j<n&&/[0-9._]/.test(text[j]))j++;
+      out+='<span class="c-num">'+esc(text.slice(i,j))+'</span>';i=j;continue;
+    }
+    out+=esc(c);i++;
+  }
+  return out;
+}
+document.querySelectorAll('.code-body').forEach(el=>{
+  el.innerHTML=highlight(el.textContent,el.dataset.lang);
+});
+
+</script>
+<!-- CHAPTER NAVIGATION -->
+<nav class="chapter-nav" id="chapterNav">
+  <a href="../../6.controllers-services-repositories-middlewares-and-request-context/html_notes/notes.html" class="nav-chapter-link"><span class="nav-arrow"><svg class="ico-arrow" width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="13.5" y1="8" x2="3.5" y2="8"/><polyline points="7.5,4 3.5,8 7.5,12"/></svg></span><span class="nav-label"><span class="nav-small">Capitolo 6</span>Controller, servizi e middleware</span></a>
+  <a href="../../index.html" class="nav-indicator"><span class="nav-dot"></span> Capitolo 7 <span class="nav-sep">/</span> 24</a>
+  <a href="../../8.Database-with-backend/html_notes/notes.html" class="nav-chapter-link nav-next"><span class="nav-label"><span class="nav-small">Capitolo 8</span>Database</span><span class="nav-arrow"><svg class="ico-arrow" width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="2.5" y1="8" x2="12.5" y2="8"/><polyline points="8.5,4 12.5,8 8.5,12"/></svg></span></a>
+</nav>
+  <script src="../../assets/copy-button.js"></script>
+  <script src="../../assets/enhancements.js"></script>
+<script src="../../assets/shell.js"></script>
+</body>
+
+</html>

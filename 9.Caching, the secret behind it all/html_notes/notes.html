@@ -1,0 +1,1818 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8"/>
+<meta name="referrer" content="no-referrer"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Caching / Capitolo 09 / Backend dai principi primi</title>
+  <meta name="description" content="Capitolo 09 di Backend dai primi principi: memorizzazione nella cache. Note sui principi primi, diagrammi ed esempi eseguibili in Go e Python.">
+  <meta name="theme-color" content="#f3ede2">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2032%2032'%3E%3Crect%20width='32'%20height='32'%20rx='7'%20fill='%23b8402e'/%3E%3Ctext%20x='16'%20y='23'%20font-family='Georgia,serif'%20font-size='19'%20font-weight='700'%20fill='%23f3ede2'%20text-anchor='middle'%3EB%3C/text%3E%3C/svg%3E">
+<style>
+  :root{
+  --bg: #f3ede2;
+  --surface: #ece3d4;
+  --surface2: #e6dcca;
+  --ink: #211e1a;
+  --ink2: #5b5347;
+  --ink3: #8d8475;
+  --red: #b8402e;
+  --red-bg: #f4ded6;
+  --red-border: #e3c4b8;
+  --sidebar: #ece3d4;
+  --sidebar-text: #211e1a;
+  --sidebar-muted: #5b5347;
+  --sidebar-accent: #b8402e;
+  --code-bg: #232019;
+  --code-text: #e9e2d3;
+  --code-comment: #7d7468;
+  --code-keyword: #e0896a;
+  --code-string: #a9c98a;
+  --code-number: #7fb0c9;
+  --code-type: #d8b66a;
+  --border: #d8cfbe;
+  --accent-gold: #b07d2b;
+  --accent-gold-bg: #f0e5c9;
+  --teal: #3f6f4e;
+  --teal-bg: #e0e9dd;
+  --chapter-num: #b8402e;
+  --divider: #d8cfbe;
+}
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family:"Spline Sans", system-ui, sans-serif;
+    font-size: 17px;
+    line-height: 1.7;
+    
+    min-height: 100vh;
+  }
+
+  /* -- CHAPTER HEADER -- */
+  .chapter-eyebrow {
+    font-family:"JetBrains Mono", ui-monospace, monospace;
+    font-size: 11px;
+    letter-spacing: 0.18em;
+    color: var(--chapter-num);
+    text-transform: uppercase;
+    margin-bottom: 0.75rem;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .chapter-eyebrow::after {
+    content: '';
+    flex: 1;
+    max-width:60px;
+    height: 1px;
+    background: var(--chapter-num);
+    opacity: 0.5;
+  }
+  .chapter-title {
+    font-family:"Fraunces", Georgia, serif;
+    font-size: 52px;
+    font-weight: 700;
+    line-height: 1.05;
+    letter-spacing: -0.02em;
+    color: var(--ink);
+    margin-bottom: 1rem;
+  }
+  .chapter-subtitle {
+    font-size: 19px;
+    font-weight: 300;
+    color: var(--ink3);
+    font-style: italic;
+    margin-bottom: 2.5rem;
+    max-width:560px;
+  }
+  .chapter-divider {
+    border: none;
+    border-top: 1px solid var(--divider);
+    margin: 2.5rem 0;
+  }
+
+  /* -- SECTION HEADINGS -- */
+  .section-num {
+    font-family:"JetBrains Mono", ui-monospace, monospace;
+    font-size: 10px;
+    color: var(--red);
+    letter-spacing: 0.12em;
+    display: inline-block;
+    background: var(--red-bg);
+    padding: 3px 8px;
+    border-radius: 3px;
+    margin-bottom: 10px;
+  }
+  h2 {
+    font-family:"Fraunces", Georgia, serif;
+    font-size: 30px;
+    font-weight: 700;
+    line-height: 1.2;
+    color: var(--ink);
+    margin: 3rem 0 0.75rem;
+  }
+  h2:first-of-type { margin-top: 0; }
+  h3 {
+    font-family:"Fraunces", Georgia, serif;
+    font-size: 21px;
+    font-weight: 700;
+    color: var(--ink);
+    margin: 2.25rem 0 0.6rem;
+  }
+  h4 {
+    font-family:"Spline Sans", system-ui, sans-serif;
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--ink2);
+    margin: 1.5rem 0 0.4rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  p { margin-bottom: 1rem; }
+  a { color: var(--red); text-decoration: none; border-bottom: 1px solid var(--red-border); }
+  a:hover { border-bottom-color: var(--red); }
+
+  /* -- CALLOUT BOXES -- */
+  .callout {
+    border-left: 3px solid var(--red);
+    background: var(--red-bg);
+    padding: 1rem 1.25rem;
+    margin: 1.5rem 0;
+    border-radius: 0 6px 6px 0;
+  }
+  .callout-label {
+    font-family:"JetBrains Mono", ui-monospace, monospace;
+    font-size: 10px;
+    letter-spacing: 0.15em;
+    color: var(--red);
+    text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+  .callout p { margin: 0; font-size: 15px; color: var(--ink2); }
+
+  .callout-gold {
+    border-left-color: var(--accent-gold);
+    background: var(--accent-gold-bg);
+  }
+  .callout-gold .callout-label { color: var(--accent-gold); }
+
+  .callout-teal {
+    border-left-color: var(--teal);
+    background: var(--teal-bg);
+  }
+  .callout-teal .callout-label { color: var(--teal); }
+
+  /* -- CODE BLOCKS -- */
+  pre {
+    background: var(--code-bg);
+    color: var(--code-text);
+    border-radius: 8px;
+    padding: 1.25rem 1.5rem;
+    overflow-x: auto;
+    font-family:"JetBrains Mono", ui-monospace, monospace;
+    font-size: 13.5px;
+    line-height: 1.65;
+    margin: 1.25rem 0;
+    border: 1px solid rgba(255,255,255,0.06);
+  }
+  code {
+    font-family:"JetBrains Mono", ui-monospace, monospace;
+    font-size: 13px;
+    background: var(--surface2);
+    color: var(--red);
+    padding: 2px 6px;
+    border-radius: 3px;
+  }
+  pre code { background: none; color: inherit; padding: 0; font-size: inherit; }
+
+  .kw  { color: var(--code-keyword); }
+  .str { color: var(--code-string); }
+  .num { color: var(--code-number); }
+  .ty  { color: var(--code-type); }
+  .cm  { color: var(--code-comment); font-style: italic; }
+  .fn  { color: #7fb0c9; }
+
+  /* -- CODE FILE HEADER -- */
+  .code-file {
+    background: #1a1813;
+    border-radius: 8px 8px 0 0;
+    padding: 8px 1.5rem;
+    font-family:"JetBrains Mono", ui-monospace, monospace;
+    font-size: 11px;
+    color: #7d7468;
+    border: 1px solid rgba(255,255,255,0.06);
+    border-bottom: none;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 1.25rem;
+  }
+  .code-file + pre { border-radius: 0 0 8px 8px; margin-top: 0; }
+  .code-dot { width:10px; height: 10px; border-radius: 50%; }
+  .dot-r { background: #d05a47; }
+  .dot-y { background: #cf9f4b; }
+  .dot-g { background: #5a9a5f; }
+
+  /* -- DEFINITION TERMS -- */
+  .def-term {
+    font-family:"Fraunces", Georgia, serif;
+    font-style: italic;
+    font-weight: 700;
+    font-size: 18px;
+    color: var(--ink);
+    border-bottom: 2px solid var(--red);
+    display: inline;
+  }
+
+  /* -- DIAGRAM SVG CONTAINERS -- */
+  .diagram-wrap {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 1.5rem;
+    margin: 1.75rem 0;
+    overflow: hidden;
+  }
+  .diagram-caption {
+    font-family:"JetBrains Mono", ui-monospace, monospace;
+    font-size: 11px;
+    color: var(--ink3);
+    margin-top: 0.75rem;
+    text-align: center;
+    letter-spacing: 0.05em;
+  }
+
+  /* -- COMPARISON TABLE -- */
+  .compare-table {
+    width:100%;
+    border-collapse: collapse;
+    font-size: 14px;
+    margin: 1.5rem 0;
+  }
+  .compare-table th {
+    background: var(--sidebar);
+    color: var(--sidebar-text);
+    font-family:"JetBrains Mono", ui-monospace, monospace;
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    padding: 10px 14px;
+    text-align: left;
+    font-weight: 500;
+  }
+  .compare-table td {
+    padding: 9px 14px;
+    border-bottom: 1px solid var(--border);
+    color: var(--ink2);
+    vertical-align: top;
+  }
+  .compare-table tr:nth-child(even) td { background: var(--surface); }
+  .compare-table tr:last-child td { border-bottom: none; }
+  .tag-fast { color: var(--teal); font-weight: 600; }
+  .tag-slow { color: var(--red); font-weight: 600; }
+
+  /* -- STRATEGY CARDS -- */
+  .strategy-grid {
+    display: grid;
+    grid-template-columns:1fr 1fr;
+    gap: 1rem;
+    margin: 1.5rem 0;
+  }
+  .strategy-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1.2rem 1.4rem;
+  }
+  .strategy-card-label {
+    font-family:"JetBrains Mono", ui-monospace, monospace;
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    color: var(--ink3);
+    text-transform: uppercase;
+    margin-bottom: 4px;
+  }
+  .strategy-card h4 {
+    font-family:"Fraunces", Georgia, serif;
+    font-size: 17px;
+    color: var(--ink);
+    margin: 0 0 8px;
+    text-transform: none;
+    letter-spacing: 0;
+    font-style: italic;
+  }
+  .strategy-card p { font-size: 14px; color: var(--ink2); margin: 0; }
+
+  /* -- EVICTION POLICY BADGES -- */
+  .policy-list { list-style: none; margin: 1rem 0 1.5rem; }
+  .policy-list li {
+    display: flex;
+    gap: 14px;
+    align-items: flex-start;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .policy-list li:last-child { border-bottom: none; }
+  .policy-badge {
+    font-family:"JetBrains Mono", ui-monospace, monospace;
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    padding: 4px 10px;
+    border-radius: 4px;
+    white-space: nowrap;
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+  .badge-none { background: var(--surface2); color: var(--ink3); }
+  .badge-lru  { background: var(--teal-bg); color: var(--teal); }
+  .badge-lfu  { background: var(--accent-gold-bg); color: var(--accent-gold); }
+  .badge-ttl  { background: var(--red-bg); color: var(--red); }
+
+  /* -- USE-CASE TILES -- */
+  .usecase-grid {
+    display: grid;
+    grid-template-columns:repeat(2, 1fr);
+    gap: 1rem;
+    margin: 1.5rem 0;
+  }
+  .usecase-tile {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-top: 3px solid var(--red);
+    border-radius: 0 0 8px 8px;
+    padding: 1rem 1.2rem;
+  }
+  .usecase-tile h4 {
+    font-family:"Fraunces", Georgia, serif;
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--ink);
+    margin: 0 0 6px;
+    text-transform: none;
+    letter-spacing: 0;
+  }
+  .usecase-tile p { font-size: 13.5px; color: var(--ink2); margin: 0; }
+
+  /* -- REFERENCE LINKS -- */
+  .ref-box {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1rem 1.25rem;
+    margin: 1rem 0;
+  }
+  .ref-box-label {
+    font-family:"JetBrains Mono", ui-monospace, monospace;
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    color: var(--ink3);
+    text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+  .ref-box a { font-size: 13.5px; display: block; margin-bottom: 4px; }
+
+  /* -- PULL QUOTE -- */
+  .pull-quote {
+    border-top: 2px solid var(--ink);
+    border-bottom: 2px solid var(--ink);
+    padding: 1.25rem 0;
+    margin: 2rem 0;
+    font-family:"Fraunces", Georgia, serif;
+    font-size: 22px;
+    font-style: italic;
+    font-weight: 400;
+    color: var(--ink);
+    line-height: 1.4;
+  }
+
+  /* -- INLINE TERM HIGHLIGHT -- */
+  .term { color: var(--red); font-weight: 600; font-style: italic; }
+
+  /* -- SVG -- */
+  svg text { font-family:"Spline Sans", system-ui, sans-serif; }
+
+  /* -- PRINT / SCROLL -- */
+  @media (max-width:900px) {
+    .chapter-title { font-size: 36px; }
+    .strategy-grid, .usecase-grid { grid-template-columns:1fr; }}
+
+  /* Smooth scroll */
+  html { scroll-behavior: smooth; }
+
+  /* Section spacing */
+  section { padding-top: 1rem; }</style>
+<style>
+.chapter-nav{position:fixed;bottom:0;left:0;right:0;z-index:9998;display:flex;align-items:center;justify-content:space-between;padding:14px clamp(16px,4vw,48px);background:rgba(243,237,226,.88);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border-top:1.5px solid #c7bca6;box-shadow:0 -8px 32px -16px rgba(40,30,20,.18);font-family:"JetBrains Mono", ui-monospace, monospace;}
+.nav-chapter-link{display:flex;align-items:center;gap:12px;text-decoration:none;color:#5b5347;padding:10px 18px;border-radius:10px;transition:all .2s ease;max-width:38%;}
+.nav-chapter-link:hover{background:rgba(184,64,46,.08);color:#b8402e;transform:translateY(-1px);}
+.nav-chapter-link.nav-next{text-align:right;flex-direction:row;}
+.nav-arrow{font-size:22px;color:#b8402e;font-weight:700;flex:none;}
+.nav-label{display:flex;flex-direction:column;gap:2px;font-size:13.5px;line-height:1.3;}
+.nav-small{font-size:10px;letter-spacing:.22em;text-transform:uppercase;color:#8d8475;font-weight:600;}
+.nav-indicator{font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:#b8402e;font-weight:700;text-decoration:none;padding:8px 16px;border:1.5px solid #c7bca6;border-radius:40px;background:rgba(255,255,255,.5);transition:all .2s;white-space:nowrap;}
+.nav-indicator:hover{background:#b8402e;color:#fff;border-color:#b8402e;}
+.nav-dot{display:inline-block;width:7px;height:7px;background:#b8402e;border-radius:50%;margin-right:4px;vertical-align:middle;}
+.nav-sep{color:#c7bca6;margin:0 2px;}
+.nav-disabled{visibility:hidden;pointer-events:none;}
+@media(max-width:700px){.nav-label{font-size:11.5px;}.nav-chapter-link{padding:8px 10px;max-width:38%;}.chapter-nav{padding:10px 12px;}.nav-small{font-size:9px;letter-spacing:.16em;}}
+@media(max-width:520px){.nav-label{display:none;}.nav-chapter-link{max-width:none;padding:8px 12px;}.nav-arrow{font-size:20px;}.nav-indicator{font-size:11px;padding:7px 13px;letter-spacing:.12em;}}
+body{padding-bottom:80px;}
+</style>
+  <link rel="stylesheet" href="../../assets/copy-button.css">
+  <link rel="stylesheet" href="../../assets/enhancements.css">
+  <link rel="stylesheet" href="../../assets/shell.css">
+  <link rel="stylesheet" href="../../assets/theme.css">
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;0,9..144,900;1,9..144,400;1,9..144,600&family=Spline+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="../../assets/theme.js"></script>
+</head>
+<body>
+<button class="bfp-toc-toggle" id="bfpTocToggle" aria-controls="bfpToc" aria-expanded="false"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><line x1="2" y1="4" x2="14" y2="4"/><line x1="2" y1="8" x2="14" y2="8"/><line x1="2" y1="12" x2="14" y2="12"/></svg>Contenuto</button>
+<div class="bfp-toc-scrim" id="bfpTocScrim"></div>
+<div class="bfp-shell">
+    <aside class="bfp-toc" id="bfpToc">
+      <div class="bfp-brand"><span class="bfp-brand-name">Memorizzazione nella cache</span><span class="bfp-brand-slash">/</span><span class="bfp-brand-lens">l'obiettivo del back-end</span></div>
+      <div class="bfp-brand-sub">Capitolo 09/Manuale da campo</div>
+      <div class="bfp-toc-rule"></div>
+      <nav class="bfp-toc-nav">
+        <a class="bfp-toc-link" href="#what-is-caching"><span class="bfp-toc-num">01</span><span class="bfp-toc-text">Cos'è la memorizzazione nella cache?</span></a>
+        <a class="bfp-toc-link" href="#real-world"><span class="bfp-toc-num">02</span><span class="bfp-toc-text">Esempi del mondo reale</span></a>
+        <a class="bfp-toc-link" href="#levels"><span class="bfp-toc-num">03</span><span class="bfp-toc-text">Livelli di memorizzazione nella cache</span></a>
+        <a class="bfp-toc-link" href="#network"><span class="bfp-toc-num">04</span><span class="bfp-toc-text">Cache a livello di rete</span></a>
+        <a class="bfp-toc-link is-sub" href="#cdn"><span class="bfp-toc-num"></span><span class="bfp-toc-text">CDN</span></a>
+        <a class="bfp-toc-link is-sub" href="#dns"><span class="bfp-toc-num"></span><span class="bfp-toc-text">Cache DNS</span></a>
+        <a class="bfp-toc-link" href="#hardware"><span class="bfp-toc-num">05</span><span class="bfp-toc-text">Cache a livello hardware</span></a>
+        <a class="bfp-toc-link is-sub" href="#ram-vs-disk"><span class="bfp-toc-num"></span><span class="bfp-toc-text">RAM contro disco</span></a>
+        <a class="bfp-toc-link" href="#inmemory"><span class="bfp-toc-num">06</span><span class="bfp-toc-text">Database in memoria</span></a>
+        <a class="bfp-toc-link" href="#strategies"><span class="bfp-toc-num">07</span><span class="bfp-toc-text">Strategie di memorizzazione nella cache</span></a>
+        <a class="bfp-toc-link" href="#eviction"><span class="bfp-toc-num">08</span><span class="bfp-toc-text">Politiche di sfratto</span></a>
+        <a class="bfp-toc-link" href="#usecases"><span class="bfp-toc-num">09</span><span class="bfp-toc-text">Casi d'uso di Redis</span></a>
+        <a class="bfp-toc-link" href="#code"><span class="bfp-toc-num">10</span><span class="bfp-toc-text">Esempi di codici</span></a>
+        <div class="bfp-toc-part">Riferimenti</div>
+        <a class="bfp-toc-link" href="#refs"><span class="bfp-toc-num">11</span><span class="bfp-toc-text">Documenti e collegamenti</span></a>
+      </nav>
+    </aside>
+    <main class="bfp-content">
+
+  <!-- CHAPTER HEADER -->
+  <div class="chapter-eyebrow">Capitolo 09 / Memorizzazione nella cache</div>
+  <h1 class="chapter-title">Memorizzazione nella cache</h1>
+  <p class="chapter-subtitle">Comprendere il meccanismo che rende veloci i sistemi backend ad alte prestazioni, da Ricerca Google a Netflix a Redis.</p>
+  <hr class="chapter-divider"/>
+
+  <!-- SECTION 1: WHAT IS CACHING -->
+  <section id="what-is-caching">
+    <div class="section-num">01/DEFINIZIONE</div>
+    <h2>Cos'è la memorizzazione nella cache?</h2>
+
+    <div class="pull-quote">
+      La memorizzazione nella cache è un meccanismo mediante il quale riduciamo la quantità di tempo e impegno necessari per eseguire alcune operazioni.
+    </div>
+
+    <p>Quella riga è l'intero concetto riassunto. Ma analizziamolo correttamente perché le implicazioni sono profonde in tutta l'ingegneria di backend.</p>
+
+    <h3>La definizione in due parti</h3>
+    <p>Esistono due modi per comprendere la memorizzazione nella cache, una versione in inglese semplice e una tecnica. Entrambi dicono esattamente la stessa cosa, solo a diversi livelli di precisione:</p>
+
+    <div class="callout">
+      <div class="callout-label">Definizione inglese semplice</div>
+      <p>La memorizzazione nella cache è un meccanismo mediante il quale riduciamo la quantità di tempo e impegno necessari per eseguire una certa quantità di lavoro. Questa è la spiegazione in linea di cosa sia esattamente la memorizzazione nella cache.</p>
+    </div>
+
+    <div class="callout callout-teal">
+      <div class="callout-label">Definizione tecnica</div>
+      <p>La memorizzazione nella cache lo è <strong>mantenendo un sottoinsieme di alcuni dati</strong>: diciamo che abbiamo una fonte dati primaria, quando conserviamo a <strong>sottoinsieme</strong> (non tutti i dati, un sottoinsieme) di tali dati, <strong>a seconda degli usi dei dati, della frequenza degli usi, della probabilità del prossimo utilizzo, del tempo, ecc.</strong>: a seconda di molti parametri, manteniamo quel sottoinsieme in a <strong>posizione a cui è più veloce accedere</strong>, che richiede meno tempo e anche meno sforzo. Quindi, tecnicamente parlando, il caching è un meccanismo mediante il quale possiamo ridurre la quantità di tempo e lo sforzo necessari per recuperare o eseguire qualche tipo di operazione.</p>
+    </div>
+
+    <h3>Perché &quot;Sottoinsieme&quot; è la parola più importante</h3>
+    <p>La definizione dice <em>sottoinsieme</em>, non tutti i dati, non una copia di tutto, ma uno scelto con cura <strong>porzione</strong> dei dati primari. Questo è fondamentale per due ragioni:</p>
+
+    <ul style="margin: 0.5rem 0 1rem 1.5rem; color: var(--ink2);">
+      <li style="margin-bottom:10px"><strong>La memorizzazione nella cache è più costosa dell'archiviazione su disco.</strong> L'archiviazione dei dati in una cache (in genere nella RAM) costa molto di più per gigabyte rispetto all'archiviazione dei dati su un disco rigido o SSD. Semplicemente non puoi permetterti di memorizzare tutto nella cache. Gli archivi su disco sono relativamente più economici e offrono anche molta capacità, questo è il motivo per cui non inseriamo tutto nella memoria cache.</li>
+      <li style="margin-bottom:10px"><strong>La capacità della cache è limitata.</strong> La RAM è scarsa rispetto alla memoria secondaria. Un server tipico potrebbe avere 64 GB o 128 GB di RAM ma più terabyte di disco. Devi essere selettivo.</li>
+      <li style="margin-bottom:10px"><strong>Memorizzare tutto nella cache vanifica lo scopo.</strong> Se memorizzassi tutto nella cache, duplicheresti semplicemente lo spazio di archiviazione a un costo molto più elevato. Il punto è memorizzare nella cache il file <em>giusto</em> cose, i dati a cui si potrà effettivamente accedere nuovamente presto.</li>
+    </ul>
+
+    <h3>Parametri che determinano cosa memorizzare nella cache</h3>
+    <p>Quando si progetta un livello di caching, questi sono i parametri da valutare per decidere cosa merita di essere nella cache:</p>
+
+    <ul style="margin: 0.5rem 0 1rem 1.5rem; color: var(--ink2);">
+      <li style="margin-bottom:8px"><strong>Frequenza d'uso</strong>: Con quale frequenza si accede a questi dati? I dati a cui si accede migliaia di volte al minuto sono un candidato di gran lunga migliore rispetto ai dati a cui si accede una volta al giorno.</li>
+      <li style="margin-bottom:8px"><strong>Probabilità di prossimo utilizzo</strong>: Sulla base dei modelli di accesso, qual è la probabilità statistica che questi dati vengano richiesti nuovamente a breve? I modelli di apprendimento automatico vengono utilizzati su larga scala (Netflix, Twitter) per prevederlo.</li>
+      <li style="margin-bottom:8px"><strong>Attualità</strong>: è stato effettuato l'accesso a questi dati di recente? È statisticamente più probabile che i dati consultati di recente vengano consultati di nuovo presto (il principio della località temporale).</li>
+      <li style="margin-bottom:8px"><strong>Costo del ricalcolo</strong>: Quanto costa rigenerare questi dati se non sono nella cache? Una semplice ricerca nel DB è economica. Un calcolo ML di argomenti di tendenza su miliardi di tweet è estremamente costoso. Quanto più costoso è il calcolo, tanto più forte è la necessità di memorizzare nella cache.</li>
+      <li style="margin-bottom:8px"><strong>Volatilità dei dati</strong>: Con quale frequenza cambiano questi dati? I dati altamente volatili (ad esempio i prezzi delle azioni in tempo reale) sono un cattivo candidato per la memorizzazione nella cache perché diventano immediatamente obsoleti. I dati statici (descrizioni dei prodotti, profili utente) sono un ottimo candidato.</li>
+    </ul>
+
+    <h3>Perché la memorizzazione nella cache è importante: il contesto ad alte prestazioni</h3>
+    <p>Questo singolo meccanismo, il caching, è a <strong>fattore enorme in molte applicazioni ad alte prestazioni</strong>. Quando parliamo di prestazioni elevate, intendiamo applicazioni che tengono traccia della latenza in microsecondi o millisecondi a due cifre. Su questa scala, anche una differenza di 5 ms nel tempo di risposta è evidente e una differenza di 50 ms è inaccettabile.</p>
+
+    <p>Senza caching, i sistemi ad alto traffico si trovano ad affrontare due colli di bottiglia impossibili:</p>
+
+    <div class="callout callout-gold">
+      <div class="callout-label">I due scenari principali in cui la memorizzazione nella cache è essenziale</div>
+      <p><strong>1. Calcolo pesante</strong>: quando la generazione di un risultato richiede notevoli risorse di CPU, GPU o memoria (inferenza ML, join complessi su milioni di righe, pipeline di aggregazione). Non vuoi ripeterlo per ogni singola richiesta dell'utente.<br/><br/>
+      <strong>2. Trasferimento dati intenso</strong>: Quando i dati inviati sono di grandi dimensioni (file video, librerie di immagini, payload JSON di grandi dimensioni) e inviarli in rete per ogni richiesta sarebbe lento e costoso. Vuoi che i dati siano già vicini all'utente.</p>
+    </div>
+
+    <p>Questi due scenari, evitare costosi ricalcoli ed evitare trasferimenti di dati pesanti e ridondanti, sono i modelli che riconoscerai in ogni singolo caso d'uso della memorizzazione nella cache che incontrerai nella tua carriera. Ogni volta che vedi una di queste due situazioni, il tuo primo istinto dovrebbe essere: <em>&quot;Possiamo nasconderlo?&quot;</em></p>
+  </section>
+
+  <hr class="chapter-divider"/>
+
+  <!-- SECTION 2: REAL WORLD EXAMPLES -->
+  <section id="real-world">
+    <div class="section-num">02 / ESEMPI DEL MONDO REALE</div>
+    <h2>Esempi del mondo reale</h2>
+    <p>Prima di approfondire i meccanismi, è utile capire perché la memorizzazione nella cache è importante su scala di produzione. Esaminiamo tre esempi che illustrano il concetto e i due scenari principali in cui la memorizzazione nella cache viene sempre visualizzata. Dopo questi esempi, inizierai a vedere lo schema ovunque.</p>
+
+    <!-- GOOGLE -->
+    <h3 id="google-example">Esempio 1: Ricerca Google</h3>
+    <p>Praticamente tutti noi utilizziamo o abbiamo utilizzato Ricerca Google nei nostri browser. Cosa succede esattamente quando digiti qualcosa nella barra di ricerca di Google e premi Invio?</p>
+
+    <p>Tale query viene elaborata dal motore di ricerca di Google attraverso un algoritmo e un flusso di lavoro piuttosto complessi. Ogni query passa attraverso una pipeline che in genere comporta:</p>
+    <ul style="margin:0.5rem 0 1rem 1.5rem; color:var(--ink2)">
+      <li style="margin-bottom:8px"><strong>Strisciando</strong>: i bot di Google scansionano continuamente il Web, scoprendo e scaricando miliardi di pagine</li>
+      <li style="margin-bottom:8px"><strong>Indicizzazione</strong>: il contenuto sottoposto a scansione viene analizzato e aggiunto a un vasto indice ricercabile</li>
+      <li style="margin-bottom:8px"><strong>Classifica</strong>: quando arriva una query, centinaia di algoritmi di classificazione determinano quali risultati sono più pertinenti</li>
+    </ul>
+
+    <p>L'intero processo lo è <strong>computazionalmente costoso</strong>: quando diciamo costoso intendiamo computazionalmente costoso. Richiede molta potenza di calcolo, molta CPU, molte risorse di memoria, ecc.</p>
+
+    <p>Consideriamo ora una query del tipo <em>&quot;che tempo fa oggi&quot;</em>, vengono cercate query come questa <strong>milioni e milioni di volte ogni giorno</strong>. Senza la memorizzazione nella cache, senza implementare questo meccanismo chiamato memorizzazione nella cache, i server di Google avrebbero bisogno di farlo <strong>ricalcolare tutti i risultati per ogni singola query</strong>. Ogni singola query riguardante il meteo attuale di una località richiederebbe di esaminare tutto l’indice, eseguire tutti gli algoritmi di classificazione e recuperare i risultati, il che a sua volta rallenterebbe notevolmente i tempi di risposta e porterebbe a un carico molto elevato del server.</p>
+
+    <h4>Cosa fa invece Google</h4>
+    <p>Google utilizza a <span class="term">sistema di caching in memoria distribuito</span> per memorizzare i risultati. La parola chiave qui è <em>distribuito</em>, i server del sistema di caching sono sparsi in tutto il mondo. Non sono concentrati solo in una singola posizione ma sparsi in tutto il mondo e quei server di cache memorizzano i risultati, qualunque siano i risultati restituiti da tutti quegli algoritmi di classificazione e dai diversi algoritmi coinvolti nell'intero flusso di lavoro di Ricerca Google. Vengono memorizzati nella cache o archiviati in questi server.</p>
+
+    <p>Quando un utente effettua una ricerca, il sistema controlla innanzitutto se i risultati di quella particolare query sono presenti nella cache oppure no:</p>
+
+    <div class="diagram-wrap">
+      <svg width="100%" viewBox="0 0 720 200" role="img">
+        <title>Flusso della cache di Ricerca Google con passaggi dettagliati</title>
+        <defs>
+          <marker id="arr" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </marker>
+        </defs>
+        <!-- User query -->
+        <rect x="20" y="80" width="130" height="50" rx="8" fill="#f4ded6" stroke="#b8402e" stroke-width="0.8"/>
+        <text x="85" y="100" text-anchor="middle" font-size="12" font-weight="600" fill="#211e1a">Domanda dell'utente</text>
+        <text x="85" y="116" text-anchor="middle" font-size="11" fill="#8d8475">&quot;tempo a Delhi&quot;</text>
+        <!-- arrow1 -->
+        <line x1="152" y1="105" x2="195" y2="105" stroke="#8d8475" stroke-width="1.2" marker-end="url(#arr)"/>
+        <!-- Cache check -->
+        <rect x="197" y="72" width="155" height="66" rx="8" fill="#e0e9dd" stroke="#3f6f4e" stroke-width="0.8"/>
+        <text x="274" y="96" text-anchor="middle" font-size="12" font-weight="600" fill="#211e1a">Cache distribuita</text>
+        <text x="274" y="112" text-anchor="middle" font-size="11" fill="#3f6f4e">archivio in memoria</text>
+        <text x="274" y="128" text-anchor="middle" font-size="10" fill="#8d8475">server globali</text>
+        <!-- HIT path -->
+        <text x="430" y="50" text-anchor="middle" font-size="10" fill="#3f6f4e" font-style="italic">CACHE HIT, trovato!</text>
+        <line x1="353" y1="84" x2="400" y2="68" stroke="#3f6f4e" stroke-width="1.2" marker-end="url(#arr)" stroke-dasharray="4 3"/>
+        <rect x="402" y="52" width="148" height="40" rx="6" fill="#e0e9dd" stroke="#3f6f4e" stroke-width="0.8"/>
+        <text x="476" y="67" text-anchor="middle" font-size="11" fill="#3f6f4e" font-weight="600">Ritorna immediatamente</text>
+        <text x="476" y="82" text-anchor="middle" font-size="10" fill="#3f6f4e">recupero molto veloce</text>
+        <!-- MISS path -->
+        <text x="430" y="158" text-anchor="middle" font-size="10" fill="#b8402e" font-style="italic">CACHE MISS, non trovata</text>
+        <line x1="353" y1="126" x2="400" y2="142" stroke="#b8402e" stroke-width="1.2" marker-end="url(#arr)" stroke-dasharray="4 3"/>
+        <rect x="402" y="145" width="148" height="48" rx="6" fill="#f4ded6" stroke="#b8402e" stroke-width="0.8"/>
+        <text x="476" y="164" text-anchor="middle" font-size="11" fill="#211e1a" font-weight="600">Viene eseguita l'intera pipeline</text>
+        <text x="476" y="179" text-anchor="middle" font-size="10" fill="#8d8475">scansione -&gt; classifica -&gt; risultati</text>
+        <!-- store back arrow -->
+        <path d="M550 169 Q620 169 620 120 Q620 60 552 56" fill="none" stroke="#b8402e" stroke-width="1" stroke-dasharray="3 3" marker-end="url(#arr)"/>
+        <text x="635" y="118" font-size="9" fill="#b8402e" text-anchor="middle">conservare in</text>
+        <text x="635" y="130" font-size="9" fill="#b8402e" text-anchor="middle">cache</text>
+      </svg>
+      <div class="diagram-caption">Fig 1.1: Ricerca Google: flusso di cache hit e cache miss con ciclo di archiviazione dei risultati</div>
+    </div>
+
+    <p>Tracciamo precisamente entrambi i percorsi:</p>
+    <ul style="margin:0.5rem 0 1rem 1.5rem; color:var(--ink2)">
+      <li style="margin-bottom:10px"><strong>Hit della cache</strong>: Se la query è stata cercata in precedenza (ad esempio, &quot;meteo a Delhi&quot; è stata cercata 5 minuti fa da qualcun altro), il sistema la trova nella cache e restituisce i risultati <em>istantaneamente</em>. Il recupero dei dati da una cache è molto veloce, questo è uno dei motivi principali per cui utilizziamo una cache.</li>
+      <li style="margin-bottom:10px"><strong>Signorina cache</strong>: Se la query non è mai stata cercata prima o la cache è scaduta, il sistema esegue il normale flusso di lavoro completo, tutta la classifica, tutto l'ordinamento, qualunque algoritmo sia coinvolto. Quindi ci vuole quel risultato, <strong>lo memorizza nella cache</strong>e lo restituisce all'utente. Pertanto, la prossima volta che lo stesso utente o un altro utente digita la stessa query, tali risultati possono essere recuperati direttamente dalla cache.</li>
+    </ul>
+
+    <div class="callout callout-gold">
+      <div class="callout-label">Vocabolario chiave introdotto</div>
+      <p><strong>Hit della cache</strong>: Quando cerchi dati nella cache e <em>trovalo</em>. Percorso veloce. Non è necessario alcun ricalcolo.<br/><br/>
+      <strong>Signorina cache</strong>: Quando cerchi i dati nella cache ed è <em>non lì</em>. È necessario accedere alla fonte primaria, calcolare il risultato e quindi archiviarlo per un uso futuro.</p>
+    </div>
+
+    <!-- NETFLIX -->
+    <h3 id="netflix-example">Esempio 2: Netflix e CDN</h3>
+    <p>Netflix è un'enorme piattaforma di streaming globale che offre diversi tipi di contenuti, film, serie, anime, ecc. a milioni di utenti in tutto il mondo. Trasmette grandi volumi di dati e, quando diciamo grandi, possono essere diversi terabyte, a causa del modo in cui funzionano queste piattaforme di streaming.</p>
+
+    <h4>Come Netflix archivia un singolo film</h4>
+    <p>Per un singolo video, diciamo un singolo film chiamato Movie One, passa attraverso un processo chiamato <span class="term">codifica</span>. Si prepara <strong>risoluzioni diverse per dispositivi diversi e velocità di rete diverse</strong>. Per una spiegazione di alto livello, diciamo che ha:</p>
+    <ul style="margin:0.5rem 0 0.75rem 1.5rem; color:var(--ink2)">
+      <li style="margin-bottom:4px">1080p, per Internet veloce e dispositivi di fascia alta</li>
+      <li style="margin-bottom:4px">720p, per connessioni moderate</li>
+      <li style="margin-bottom:4px">480p, per connessioni lente o dati mobili</li>
+      <li style="margin-bottom:4px">e più formati per diversi codec e dispositivi</li>
+    </ul>
+    <p>A seconda della velocità della tua rete e del dispositivo che stai utilizzando, Netflix <strong>invia dinamicamente una versione ottimizzata</strong> di quei contenuti in modo da non sprecare la larghezza di banda e diminuire anche il carico sui server di Netflix. È tutta una questione di codifica. Ma la vera domanda è: come fa Netflix a fornire effettivamente centinaia e migliaia di terabyte di dati a milioni di utenti sparsi in tutto il mondo, con un buffering minimo?</p>
+
+    <h4>La risposta: CDN (rete per la distribuzione di contenuti)</h4>
+    <p>Netflix ha i propri server di origine, diciamo che sono da qualche parte negli Stati Uniti, in diversi data center e luoghi, con rack di server che archiviano i film veri e propri. Ma Netflix fa uno sforzo in più. In tutto il mondo, in luoghi diversi, Netflix colloca quelli che vengono chiamati <span class="term">Posizioni periferiche</span>.</p>
+
+    <p>Questi sono chiamati <em>Posizioni periferiche</em> perché questi server lo sono <strong>posizionato strategicamente in modo che la latenza per gli utenti in quella regione sia minima</strong>. Se è presente un server in India, per gli utenti indiani la latenza delle richieste di dati servite da quel server sarà minima, rispetto a tutte le richieste che passano attraverso il server di origine situato negli Stati Uniti.</p>
+
+    <p>Pensa a cosa accadrebbe senza questo: tutte le persone in India che vogliono guardare un film su Netflix invierebbero richieste fino al data center degli Stati Uniti. Dal punto di vista geografico, la distanza da percorrere per i dati è lunga. Il tempo di risposta sarebbe elevato e si verificherebbe il buffering. Ma con un edge server a Mumbai o Chennai, quella distanza crolla quasi a zero.</p>
+
+    <div class="diagram-wrap">
+      <svg width="100%" viewBox="0 0 720 275" role="img">
+        <title>Diagramma dell'architettura della CDN Netflix</title>
+        <defs>
+          <marker id="arr2" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </marker>
+        </defs>
+        <!-- Origin server -->
+        <rect x="280" y="14" width="160" height="55" rx="8" fill="#232019" stroke="#7d7468" stroke-width="0.8"/>
+        <text x="360" y="36" text-anchor="middle" font-size="12" fill="#e9e2d3" font-weight="600">Server di origine (Stati Uniti)</text>
+        <text x="360" y="52" text-anchor="middle" font-size="10" fill="#7d7468">film reali memorizzati qui</text>
+        <text x="360" y="64" text-anchor="middle" font-size="9" fill="#4A4840">Centro dati Netflix USA</text>
+        <!-- Edge servers -->
+        <rect x="20" y="150" width="130" height="52" rx="8" fill="#e0e9dd" stroke="#3f6f4e" stroke-width="0.8"/>
+        <text x="85" y="170" text-anchor="middle" font-size="11" font-weight="600" fill="#211e1a">Bordo/Europa</text>
+        <text x="85" y="184" text-anchor="middle" font-size="10" fill="#3f6f4e">PoP, memorizzato nella cache</text>
+        <text x="85" y="196" text-anchor="middle" font-size="9" fill="#8d8475">Francoforte/Londra</text>
+
+        <rect x="188" y="150" width="130" height="52" rx="8" fill="#e0e9dd" stroke="#3f6f4e" stroke-width="0.8"/>
+        <text x="253" y="170" text-anchor="middle" font-size="11" font-weight="600" fill="#211e1a">Bordo / India</text>
+        <text x="253" y="184" text-anchor="middle" font-size="10" fill="#3f6f4e">PoP, memorizzato nella cache</text>
+        <text x="253" y="196" text-anchor="middle" font-size="9" fill="#8d8475">Mumbai/Chennai</text>
+
+        <rect x="390" y="150" width="130" height="52" rx="8" fill="#e0e9dd" stroke="#3f6f4e" stroke-width="0.8"/>
+        <text x="455" y="170" text-anchor="middle" font-size="11" font-weight="600" fill="#211e1a">Bordo / Sud-est asiatico</text>
+        <text x="455" y="184" text-anchor="middle" font-size="10" fill="#3f6f4e">PoP, memorizzato nella cache</text>
+        <text x="455" y="196" text-anchor="middle" font-size="9" fill="#8d8475">Singapore/Tokio</text>
+
+        <rect x="570" y="150" width="130" height="52" rx="8" fill="#e0e9dd" stroke="#3f6f4e" stroke-width="0.8"/>
+        <text x="635" y="170" text-anchor="middle" font-size="11" font-weight="600" fill="#211e1a">Bordo / Americhe</text>
+        <text x="635" y="184" text-anchor="middle" font-size="10" fill="#3f6f4e">PoP, memorizzato nella cache</text>
+        <text x="635" y="196" text-anchor="middle" font-size="9" fill="#8d8475">New York/LA/San Paolo</text>
+
+        <!-- Lines from origin to edges -->
+        <line x1="330" y1="69" x2="85" y2="148" stroke="#b07d2b" stroke-width="1" stroke-dasharray="5 3" marker-end="url(#arr2)"/>
+        <line x1="345" y1="69" x2="253" y2="148" stroke="#b07d2b" stroke-width="1" stroke-dasharray="5 3" marker-end="url(#arr2)"/>
+        <line x1="375" y1="69" x2="455" y2="148" stroke="#b07d2b" stroke-width="1" stroke-dasharray="5 3" marker-end="url(#arr2)"/>
+        <line x1="390" y1="69" x2="635" y2="148" stroke="#b07d2b" stroke-width="1" stroke-dasharray="5 3" marker-end="url(#arr2)"/>
+
+        <!-- Users -->
+        <ellipse cx="85" cy="244" rx="34" ry="16" fill="#f3ede2" stroke="#8d8475" stroke-width="0.8"/>
+        <text x="85" y="248" text-anchor="middle" font-size="10" fill="#5b5347">Utenti dell'UE</text>
+        <ellipse cx="253" cy="244" rx="34" ry="16" fill="#f3ede2" stroke="#8d8475" stroke-width="0.8"/>
+        <text x="253" y="248" text-anchor="middle" font-size="10" fill="#5b5347">Negli utenti</text>
+        <ellipse cx="455" cy="244" rx="34" ry="16" fill="#f3ede2" stroke="#8d8475" stroke-width="0.8"/>
+        <text x="455" y="248" text-anchor="middle" font-size="10" fill="#5b5347">Utenti SEA</text>
+        <ellipse cx="635" cy="244" rx="34" ry="16" fill="#f3ede2" stroke="#8d8475" stroke-width="0.8"/>
+        <text x="635" y="248" text-anchor="middle" font-size="10" fill="#5b5347">Utenti statunitensi</text>
+
+        <!-- Lines from edges to users -->
+        <line x1="85" y1="202" x2="85" y2="228" stroke="#3f6f4e" stroke-width="1.5" marker-end="url(#arr2)"/>
+        <line x1="253" y1="202" x2="253" y2="228" stroke="#3f6f4e" stroke-width="1.5" marker-end="url(#arr2)"/>
+        <line x1="455" y1="202" x2="455" y2="228" stroke="#3f6f4e" stroke-width="1.5" marker-end="url(#arr2)"/>
+        <line x1="635" y1="202" x2="635" y2="228" stroke="#3f6f4e" stroke-width="1.5" marker-end="url(#arr2)"/>
+
+        <!-- TTL label -->
+        <text x="360" y="124" text-anchor="middle" font-size="10" fill="#b07d2b" font-style="italic">sottoinsieme di contenuti memorizzati nella cache nelle edge location, basati su TTL, selezionati da ML</text>
+      </svg>
+      <div class="diagram-caption">Fig 1.2: CDN Netflix: contenuto distribuito dall'origine ai server Edge/PoP a livello globale, servito agli utenti vicini</div>
+    </div>
+
+    <p>Termini chiave di questo esempio, questi sono un vocabolario importante che utilizzerai durante la tua carriera:</p>
+    <ul style="margin:0.5rem 0 1rem 1.5rem; color:var(--ink2)">
+      <li style="margin-bottom:10px"><strong>CDN (rete per la distribuzione dei contenuti)</strong>: una rete di server distribuita a livello globale che memorizza nella cache e distribuisce contenuti da posizioni geograficamente più vicine all'utente finale. Netflix ha un proprio CDN (chiamato Open Connect). Altri fornitori CDN includono Cloudflare, Akamai, Fastly, AWS CloudFront.</li>
+      <li style="margin-bottom:10px"><strong>Edge Location/Edge Server/Edge Computing</strong>: Ogni volta che vedi la parola &quot;edge&quot; in contesti infrastrutturali, significa fondamentalmente un server più vicino all'utente invece di un server centralizzato o di origine. Il &quot;bordo&quot; è il bordo della rete, vicino agli utenti finali.</li>
+      <li style="margin-bottom:10px"><strong>PoP (punto di presenza)</strong>: Un PoP è solo un termine di fantasia che sostanzialmente indica una regione particolare in cui sono presenti più server periferici. Una raccolta di più server edge concentrati in una particolare regione è chiamata PoP. Ad esempio, Netflix potrebbe avere un PoP a Mumbai composto da 10-20 server edge.</li>
+      <li style="margin-bottom:10px"><strong>Server di origine</strong>: il server master/primario in cui risiedono i dati canonici effettivi. I server periferici ottengono i loro contenuti da qui, li memorizzano nella cache locale e servono gli utenti dalla propria copia.</li>
+      <li style="margin-bottom:10px"><strong>TTL (Tempo di vivere)</strong>: una durata configurata sul contenuto memorizzato nella cache, dopo la quale viene considerato obsoleto. Quando il TTL scade, l'edge server deve recuperare il contenuto dal server di origine per ottenere una nuova copia. Le aziende stabiliscono una &quot;durata equa&quot;, questo contenuto dovrebbe essere memorizzato nella cache solo per le prossime ore perché dopo potrebbe avere una nuova versione.</li>
+    </ul>
+
+    <div class="callout callout-gold">
+      <div class="callout-label">Caching intelligente di Netflix / Non tutto viene memorizzato nella cache ovunque</div>
+      <p>Netflix non memorizza nella cache tutti i suoi dati in tutte le edge location. Ciò comporterebbe costi enormi e richiederebbe anche molte risorse. Invece, usano <strong>algoritmi di machine learning, analisi delle tendenze, dati regionali in tempo reale</strong>e molti altri calcoli complessi per decidere cosa <em>sottoinsieme</em> di dati da memorizzare nella cache in ciascuna edge location specifica. Un server a Mumbai potrebbe memorizzare film famosi di Bollywood e spettacoli indiani di tendenza, mentre un server a Tokyo memorizza anime e drammi J. Si tratta di caching intelligente, regionale e basato sui dati, non di replica a forza bruta.</p>
+    </div>
+
+    <p><strong>La CDN non è solo per lo streaming video.</strong> Piattaforme come <strong>Vercello</strong> utilizza la stessa identica strategia per servire risorse web statiche, pacchetti JavaScript, file HTML, CSS, immagini, dal bordo più vicino all'utente richiedente. Quando distribuisci un'app Next.js su Vercel, questa viene automaticamente distribuita alla loro rete edge globale. Ecco perché le implementazioni Vercel si caricano quasi istantaneamente, indipendentemente da dove ti trovi nel mondo. Stesso principio, stesso meccanismo, diverso tipo di contenuto.</p>
+
+    <!-- TWITTER -->
+    <h3 id="twitter-example">Esempio 3: Twitter / X (Argomenti di tendenza)</h3>
+    <p>Prendiamo una piattaforma chiamata X, precedentemente nota come Twitter. Puoi applicare questo esempio a qualsiasi piattaforma di social media, Facebook, LinkedIn, YouTube, implementano tutte lo stesso tipo di strategia.</p>
+
+    <p>Se hai familiarità con il funzionamento di Twitter, c'è una sezione chiamata <strong>Argomenti di tendenza</strong>. Ciò che fa Twitter è identificare gli argomenti di tendenza in base a <strong>analizzando milioni e miliardi di tweet in tempo reale</strong>. Analizza tutti i tweet che le persone fanno in tutto il mondo, estrae modelli e tendenze e calcola ciò che è di tendenza.</p>
+
+    <h4>Perché questo calcolo è costoso</h4>
+    <p>Questo calcolo è molto costoso. Implica:</p>
+    <ul style="margin:0.5rem 0 1rem 1.5rem; color:var(--ink2)">
+      <li style="margin-bottom:8px">Algoritmi basati sull'apprendimento automatico per l'elaborazione del linguaggio naturale, il clustering di argomenti e il rilevamento delle tendenze</li>
+      <li style="margin-bottom:8px">Grandi quantità di GPU e infrastrutture pesanti</li>
+      <li style="margin-bottom:8px">Elaborando terabyte di dati, stiamo parlando di analizzare i tweet di milioni e miliardi di persone in tutto il mondo</li>
+    </ul>
+
+    <h4>Cosa succede senza memorizzazione nella cache</h4>
+    <p>Immagina se Twitter facesse tutti questi calcoli <em>ogni volta che un utente accedeva alla sezione delle tendenze</em>. Se anche la metà dei miliardi di utenti di Twitter tentassero di accedere alla sezione delle tendenze e ogni utente attivasse questo costoso calcolo, il server non sarebbe in grado di gestirlo, si bloccherebbe <strong>minuti o secondi</strong>. Ci sono miliardi di persone e se ogni singola richiesta attiva l'intera pipeline di ML, è impossibile da sostenere.</p>
+
+    <h4>Cosa fa realmente Twitter</h4>
+    <p>Per evitare di eseguire calcoli così pesanti per ogni richiesta, Twitter <strong>memorizza nella cache gli argomenti di tendenza</strong>. Ogni pochi minuti, e ovviamente non conosciamo l'algoritmo esatto o la durata esatta utilizzata da Twitter, ma facciamo una stima approssimativa per il bene di questo esempio: <strong>ogni pochi minuti</strong>, Twitter prende tutti questi dati da diverse regioni, esegue diversi algoritmi di apprendimento automatico e algoritmi di rilevamento delle tendenze a un livello molto elevato, quindi <strong>memorizza i risultati in un archivio di valori-chiave in memoria come Redis</strong>.</p>
+
+    <p>Quando gli utenti richiedono la sezione delle tendenze, invece di calcolarla di nuovo, semplicemente <strong>prende i dati dalla cache e li invia all'utente</strong>. Questo è il motivo per cui nel momento in cui apri il telefono ottieni i dati immediatamente, non vedi alcun tipo di tempo di caricamento significativo. Se disponi di una connessione Internet generalmente veloce, l'intera interazione dell'interfaccia utente è molto veloce.</p>
+
+    <div class="callout">
+      <div class="callout-label">Perché gli argomenti di tendenza sono sicuri da memorizzare nella cache</div>
+      <p>Affinché una tendenza cambi in una particolare regione, supponiamo che nel tuo paese siano in corso le elezioni e che le elezioni siano l'argomento di tendenza, non è qualcosa che è soggetto a cambiamenti in pochi secondi o minuti. Per lo meno rimarrà nella sezione delle tendenze per un paio d'ore o un paio di giorni. Poiché questi dati sono <strong>non modificato dinamicamente minuto per minuto</strong>, è molto sicuro memorizzarlo nella cache. Il TTL può essere impostato su pochi minuti o anche di più senza alcuna notevole perdita di freschezza per l'utente.</p>
+    </div>
+
+    <h3>Il modello: riconoscere quando memorizzare nella cache</h3>
+    <p>Dopo questi tre esempi, ora dovresti vedere chiaramente lo schema. Ogni volta che si verifica una situazione in cui si tratta di:</p>
+    <ul style="margin:0.5rem 0 1rem 1.5rem; color:var(--ink2)">
+      <li style="margin-bottom:8px"><strong>Facendo molti calcoli pesanti</strong>: come gli algoritmi di ranking di Google o il rilevamento delle tendenze basato su ML di Twitter, non vuoi ricalcolare per ogni singola richiesta</li>
+      <li style="margin-bottom:8px"><strong>Invio di grandi quantità di dati a molti utenti</strong>: come Netflix che invia terabyte di contenuti video a livello globale, non vuoi servire sempre da un'unica posizione centralizzata</li>
+    </ul>
+    <p>Questi sono i due scenari comuni in cui entra in gioco la memorizzazione nella cache. Riconoscere uno di questi in una discussione sulla progettazione del sistema e la memorizzazione nella cache è quasi sempre parte della soluzione.</p>
+  </section>
+
+  <hr class="chapter-divider"/>
+
+  <!-- SECTION 3: LEVELS OF CACHING -->
+  <section id="levels">
+    <div class="section-num">03 / TASSONOMIA</div>
+    <h2>Livelli di memorizzazione nella cache</h2>
+    <p>La memorizzazione nella cache esiste a più livelli di un sistema informatico. In qualità di ingegnere backend, incontrerai tre livelli più frequentemente:</p>
+
+    <div class="diagram-wrap">
+      <svg width="100%" viewBox="0 0 720 90" role="img">
+        <title>Tre livelli di memorizzazione nella cache</title>
+        <rect x="20" y="20" width="200" height="50" rx="8" fill="#f4ded6" stroke="#b8402e" stroke-width="0.8"/>
+        <text x="120" y="42" text-anchor="middle" font-size="13" font-weight="600" fill="#211e1a">1. Livello di rete</text>
+        <text x="120" y="58" text-anchor="middle" font-size="11" fill="#8d8475">CDN/DNS</text>
+        <rect x="260" y="20" width="200" height="50" rx="8" fill="#e0e9dd" stroke="#3f6f4e" stroke-width="0.8"/>
+        <text x="360" y="42" text-anchor="middle" font-size="13" font-weight="600" fill="#211e1a">2. Livello hardware</text>
+        <text x="360" y="58" text-anchor="middle" font-size="11" fill="#8d8475">Cache/RAM L1/L2/L3</text>
+        <rect x="500" y="20" width="200" height="50" rx="8" fill="#f0e5c9" stroke="#b07d2b" stroke-width="0.8"/>
+        <text x="600" y="42" text-anchor="middle" font-size="13" font-weight="600" fill="#211e1a">3. Livello software</text>
+        <text x="600" y="58" text-anchor="middle" font-size="11" fill="#8d8475">Redis/Memcached/ElastiCache</text>
+      </svg>
+      <div class="diagram-caption">Fig 2.1: I tre livelli principali di memorizzazione nella cache incontrati da un ingegnere di backend</div>
+    </div>
+
+    <div class="callout callout-gold">
+      <div class="callout-label">Nota sulla memorizzazione nella cache &quot;basata su software&quot;.</div>
+      <p>&quot;Basato su software&quot; non significa puramente software. Redis utilizza la RAM dell'hardware. Si chiama <em>basato su software</em> poiché interagisci con esso tramite una libreria o un'API, il mezzo di interazione è il software. Le prestazioni provengono ancora dall'hardware sottostante (RAM).</p>
+    </div>
+  </section>
+
+  <hr class="chapter-divider"/>
+
+  <!-- SECTION 4: NETWORK LEVEL -->
+  <section id="network">
+    <div class="section-num">04 / LIVELLO DI RETE</div>
+    <h2>Cache a livello di rete</h2>
+    <p>I due principali casi d'uso a livello di rete di cui si occupano gli ingegneri backend sono la memorizzazione nella cache CDN e DNS.</p>
+
+    <!-- CDN -->
+    <h3 id="cdn">4.1: CDN (rete per la distribuzione di contenuti)</h3>
+    <p>L'idea centrale della CDN è quella di <strong>memorizzare nella cache i contenuti su server geograficamente più vicini agli utenti finali</strong>. Qualsiasi server posizionato vicino all'utente al &quot;bordo&quot; della rete è chiamato an <span class="term">Nodo Edge, Server Edge o Edge Computing</span>.</p>
+
+    <h4>Come scorre una richiesta CDN</h4>
+
+    <div class="diagram-wrap">
+      <svg width="100%" viewBox="0 0 720 310" role="img">
+        <title>Flusso della richiesta CDN passo dopo passo</title>
+        <defs>
+          <marker id="arr3" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </marker>
+        </defs>
+        <!-- Step boxes -->
+        <!-- 1: User -->
+        <rect x="20" y="20" width="130" height="54" rx="8" fill="#f4ded6" stroke="#b8402e" stroke-width="0.8"/>
+        <text x="85" y="43" text-anchor="middle" font-size="12" font-weight="600" fill="#211e1a">1. Browser dell'utente</text>
+        <text x="85" y="60" text-anchor="middle" font-size="10" fill="#8d8475">inserisce l'URL</text>
+        <!-- 2: DNS -->
+        <rect x="20" y="110" width="130" height="54" rx="8" fill="#f0e5c9" stroke="#b07d2b" stroke-width="0.8"/>
+        <text x="85" y="133" text-anchor="middle" font-size="12" font-weight="600" fill="#211e1a">2. DNS CDN</text>
+        <text x="85" y="150" text-anchor="middle" font-size="10" fill="#8d8475">risolve il PoP più vicino</text>
+        <!-- 3: PoP -->
+        <rect x="20" y="200" width="130" height="54" rx="8" fill="#e0e9dd" stroke="#3f6f4e" stroke-width="0.8"/>
+        <text x="85" y="222" text-anchor="middle" font-size="12" font-weight="600" fill="#211e1a">3. Server periferico</text>
+        <text x="85" y="239" text-anchor="middle" font-size="10" fill="#8d8475">PoP, regione più vicina</text>
+
+        <!-- Arrows: vertical left column -->
+        <line x1="85" y1="74" x2="85" y2="108" stroke="#8d8475" stroke-width="1.2" marker-end="url(#arr3)"/>
+        <line x1="85" y1="164" x2="85" y2="198" stroke="#8d8475" stroke-width="1.2" marker-end="url(#arr3)"/>
+
+        <!-- Right side: HIT path -->
+        <rect x="340" y="190" width="140" height="44" rx="8" fill="#e0e9dd" stroke="#3f6f4e" stroke-width="0.8"/>
+        <text x="410" y="210" text-anchor="middle" font-size="11" font-weight="600" fill="#211e1a">HIT nella cache </text>
+        <text x="410" y="225" text-anchor="middle" font-size="10" fill="#3f6f4e">servire direttamente all'utente</text>
+        <line x1="150" y1="227" x2="338" y2="212" stroke="#3f6f4e" stroke-width="1.2" marker-end="url(#arr3)" stroke-dasharray="5 3"/>
+        <text x="245" y="205" text-anchor="middle" font-size="10" fill="#3f6f4e" font-style="italic">nella cache?</text>
+
+        <!-- MISS path: goes to origin -->
+        <rect x="340" y="260" width="140" height="44" rx="8" fill="#232019" stroke="#7d7468" stroke-width="0.8"/>
+        <text x="410" y="280" text-anchor="middle" font-size="11" font-weight="600" fill="#e9e2d3">Cache MISS</text>
+        <text x="410" y="296" text-anchor="middle" font-size="10" fill="#7d7468">recuperare dal server di origine</text>
+        <line x1="150" y1="240" x2="338" y2="268" stroke="#b8402e" stroke-width="1.2" marker-end="url(#arr3)" stroke-dasharray="5 3"/>
+
+        <!-- Origin server -->
+        <rect x="560" y="245" width="130" height="44" rx="8" fill="#232019" stroke="#7d7468" stroke-width="0.8"/>
+        <text x="625" y="265" text-anchor="middle" font-size="11" fill="#e9e2d3" font-weight="600">Server di origine</text>
+        <text x="625" y="281" text-anchor="middle" font-size="10" fill="#7d7468">fonte di verità</text>
+        <line x1="480" y1="282" x2="558" y2="267" stroke="#b8402e" stroke-width="1.2" marker-end="url(#arr3)"/>
+        <!-- Store back label -->
+        <path d="M560 260 Q520 220 480 210" fill="none" stroke="#b8402e" stroke-width="0.8" stroke-dasharray="3 3" marker-end="url(#arr3)"/>
+        <text x="510" y="225" font-size="9" fill="#b8402e">cache + TTL</text>
+
+        <!-- TTL concept box -->
+        <rect x="340" y="20" width="350" height="70" rx="8" fill="#f0e5c9" stroke="#b07d2b" stroke-width="0.8"/>
+        <text x="515" y="44" text-anchor="middle" font-size="13" font-weight="600" fill="#211e1a">TTL, tempo di vivere</text>
+        <text x="515" y="62" text-anchor="middle" font-size="11" fill="#5b5347">Ogni elemento memorizzato nella cache ha una durata di scadenza.</text>
+        <text x="515" y="78" text-anchor="middle" font-size="11" fill="#8d8475">Dopo la scadenza del TTL -&gt; recupera nuovamente il nuovo contenuto dall'origine.</text>
+      </svg>
+      <div class="diagram-caption">Fig 3.1: Flusso di richiesta CDN completo: DNS -&gt; PoP -&gt; Cache Hit/Miss -&gt; Origin</div>
+    </div>
+
+    <p>Le decisioni di routing della CDN considerano più parametri:</p>
+    <ul style="margin:0.5rem 0 1rem 1.5rem; color:var(--ink2)">
+      <li style="margin-bottom:6px"><strong>Posizione geografica dell'utente</strong>: trova il PoP più vicino</li>
+      <li style="margin-bottom:6px"><strong>Condizioni della rete</strong>: un utente con una connessione lenta potrebbe essere indirizzato verso un PoP con contenuti a risoluzione inferiore (es. 480p anziché 1080p)</li>
+      <li style="margin-bottom:6px"><strong>Carico del server</strong>: evita il routing verso un edge server sovraccarico</li>
+    </ul>
+
+    <!-- DNS -->
+    <h3 id="dns">4.2: Cache DNS</h3>
+    <p>DNS (Domain Name System) traduce nomi di dominio leggibili dall'uomo (come <code>example.com</code>) negli indirizzi IP che i browser utilizzano per connettersi ai server. Questo processo di risoluzione, senza memorizzazione nella cache, lo è <strong>profondamente ricorsivo e lento</strong>.</p>
+
+    <h4>La catena di risoluzione DNS (senza cache)</h4>
+
+    <div class="diagram-wrap">
+      <svg width="100%" viewBox="0 0 720 200" role="img">
+        <title>Catena di risoluzione DNS</title>
+        <defs>
+          <marker id="arr4" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </marker>
+        </defs>
+        <!-- Chain boxes -->
+        <rect x="10" y="75" width="110" height="50" rx="8" fill="#f4ded6" stroke="#b8402e" stroke-width="0.8"/>
+        <text x="65" y="96" text-anchor="middle" font-size="11" font-weight="600" fill="#211e1a">Dispositivo utente</text>
+        <text x="65" y="112" text-anchor="middle" font-size="10" fill="#8d8475">tipi URL</text>
+
+        <line x1="122" y1="100" x2="148" y2="100" stroke="#8d8475" stroke-width="1" marker-end="url(#arr4)"/>
+
+        <rect x="150" y="75" width="120" height="50" rx="8" fill="#f0e5c9" stroke="#b07d2b" stroke-width="0.8"/>
+        <text x="210" y="96" text-anchor="middle" font-size="11" font-weight="600" fill="#211e1a">Ricorsivo</text>
+        <text x="210" y="110" text-anchor="middle" font-size="11" font-weight="600" fill="#211e1a">Risolutore</text>
+        <text x="210" y="124" text-anchor="middle" font-size="9" fill="#8d8475">ISP/Google/Cloudflare</text>
+
+        <line x1="272" y1="100" x2="298" y2="100" stroke="#8d8475" stroke-width="1" marker-end="url(#arr4)"/>
+
+        <rect x="300" y="75" width="110" height="50" rx="8" fill="#e0e9dd" stroke="#3f6f4e" stroke-width="0.8"/>
+        <text x="355" y="96" text-anchor="middle" font-size="11" font-weight="600" fill="#211e1a">Server principale</text>
+        <text x="355" y="112" text-anchor="middle" font-size="10" fill="#8d8475">13-14 a livello globale</text>
+
+        <line x1="412" y1="100" x2="438" y2="100" stroke="#8d8475" stroke-width="1" marker-end="url(#arr4)"/>
+
+        <rect x="440" y="75" width="120" height="50" rx="8" fill="#e0e9dd" stroke="#3f6f4e" stroke-width="0.8"/>
+        <text x="500" y="96" text-anchor="middle" font-size="11" font-weight="600" fill="#211e1a">Server TLD</text>
+        <text x="500" y="112" text-anchor="middle" font-size="10" fill="#8d8475">.com/.in/.org</text>
+
+        <line x1="562" y1="100" x2="588" y2="100" stroke="#8d8475" stroke-width="1" marker-end="url(#arr4)"/>
+
+        <rect x="590" y="75" width="120" height="50" rx="8" fill="#232019" stroke="#7d7468" stroke-width="0.8"/>
+        <text x="650" y="96" text-anchor="middle" font-size="11" font-weight="600" fill="#e9e2d3">Autorevole</text>
+        <text x="650" y="110" text-anchor="middle" font-size="11" font-weight="600" fill="#e9e2d3">Server dei nomi</text>
+        <text x="650" y="124" text-anchor="middle" font-size="9" fill="#7d7468">ha l'IP </text>
+
+        <!-- Label: recursive -->
+        <text x="360" y="28" text-anchor="middle" font-size="11" fill="#b8402e" font-style="italic">Recursive Resolver va in profondità finché non trova l'IP</text>
+        <text x="360" y="44" text-anchor="middle" font-size="10" fill="#8d8475">esempio.com -&gt; TLD .com -&gt; server di autenticazione esempio.com -&gt; IP</text>
+      </svg>
+      <div class="diagram-caption">Fig 3.2: Catena di risoluzione DNS: Utente -&gt; Resolver -&gt; Root -&gt; TLD -&gt; Authoritative Name Server</div>
+    </div>
+
+    <p>L'intero viaggio ricorsivo è costoso. Il DNS risolve questo problema con <strong>più livelli di memorizzazione nella cache</strong>:</p>
+
+    <div class="diagram-wrap">
+      <svg width="100%" viewBox="0 0 720 130" role="img">
+        <title>Gerarchia della cache DNS</title>
+        <defs>
+          <marker id="arr5" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </marker>
+        </defs>
+        <text x="360" y="18" text-anchor="middle" font-size="12" fill="#8d8475" font-style="italic">Ogni livello viene controllato prima di procedere a quello successivo</text>
+        <rect x="20" y="35" width="140" height="50" rx="8" fill="#f4ded6" stroke="#b8402e" stroke-width="0.8"/>
+        <text x="90" y="56" text-anchor="middle" font-size="11" font-weight="600" fill="#211e1a">Cache DNS del sistema operativo</text>
+        <text x="90" y="72" text-anchor="middle" font-size="10" fill="#8d8475">Windows/Mac/Linux</text>
+        <line x1="162" y1="60" x2="190" y2="60" stroke="#8d8475" stroke-width="1" marker-end="url(#arr5)"/>
+        <rect x="192" y="35" width="140" height="50" rx="8" fill="#f0e5c9" stroke="#b07d2b" stroke-width="0.8"/>
+        <text x="262" y="56" text-anchor="middle" font-size="11" font-weight="600" fill="#211e1a">Cache del browser</text>
+        <text x="262" y="72" text-anchor="middle" font-size="10" fill="#8d8475">Chrome, Firefox, ecc.</text>
+        <line x1="334" y1="60" x2="362" y2="60" stroke="#8d8475" stroke-width="1" marker-end="url(#arr5)"/>
+        <rect x="364" y="35" width="160" height="50" rx="8" fill="#e0e9dd" stroke="#3f6f4e" stroke-width="0.8"/>
+        <text x="444" y="56" text-anchor="middle" font-size="11" font-weight="600" fill="#211e1a">Risolutore ricorsivo</text>
+        <text x="444" y="72" text-anchor="middle" font-size="10" fill="#8d8475">ISP/Google DNS/Cloudflare</text>
+        <line x1="526" y1="60" x2="554" y2="60" stroke="#8d8475" stroke-width="1" marker-end="url(#arr5)"/>
+        <rect x="556" y="35" width="144" height="50" rx="8" fill="#232019" stroke="#7d7468" stroke-width="0.8"/>
+        <text x="628" y="56" text-anchor="middle" font-size="11" font-weight="600" fill="#e9e2d3">Risoluzione completa</text>
+        <text x="628" y="72" text-anchor="middle" font-size="10" fill="#7d7468">root -&gt; TLD -&gt; autorevole</text>
+        <text x="90" y="100" text-anchor="middle" font-size="10" fill="#b8402e">Livello 1</text>
+        <text x="262" y="100" text-anchor="middle" font-size="10" fill="#b8402e">Livello 2</text>
+        <text x="444" y="100" text-anchor="middle" font-size="10" fill="#b8402e">Livello 3</text>
+        <text x="628" y="100" text-anchor="middle" font-size="10" fill="#8d8475">Ripiego</text>
+      </svg>
+      <div class="diagram-caption">Fig 3.3: Gerarchia della cache DNS: quattro livelli prima che venga attivata la risoluzione completa</div>
+    </div>
+
+    <p>Il <span class="term">Risolutore ricorsivo</span> è chiamato &quot;ricorsivo&quot; perché interroga ricorsivamente diversi server (root -&gt; TLD -&gt; autorevole) finché non trova la risposta. Viene fornito dal tuo ISP o dai provider DNS pubblici come Google (<code>8.8.8.8</code>) o Cloudflare (<code>1.1.1.1</code>).</p>
+
+    <div class="ref-box">
+      <div class="ref-box-label">Riferimento MDN</div>
+      <a href="https://developer.mozilla.org/en-US/docs/Glossary/DNS" target="_blank">MDN, Glossario DNS</a>
+      <a href="https://developer.mozilla.org/en-US/docs/Web/Performance/dns-prefetch" target="_blank">MDN, Prefetch DNS (tecnica di caching DNS lato browser)</a>
+    </div>
+  </section>
+
+  <hr class="chapter-divider"/>
+
+  <!-- SECTION 5: HARDWARE -->
+  <section id="hardware">
+    <div class="section-num">05 / LIVELLO HARDWARE</div>
+    <h2>Cache a livello hardware</h2>
+
+    <h3>Gerarchia della cache della CPU (L1, L2, L3)</h3>
+    <p>La CPU non legge direttamente dalla RAM per ogni operazione, sarebbe troppo lento. Mantiene invece una gerarchia di memorie più piccole e veloci chiamate <span class="term">livelli di cache</span>:</p>
+
+    <div class="diagram-wrap">
+      <svg width="100%" viewBox="0 0 720 200" role="img">
+        <title>Gerarchia della memoria da CPU a disco</title>
+        <!-- Nested rectangles representing the hierarchy -->
+        <!-- Outermost: HDD/Network -->
+        <rect x="10" y="10" width="700" height="180" rx="12" fill="#f3ede2" stroke="#d8cfbe" stroke-width="1"/>
+        <text x="620" y="30" font-size="11" fill="#9c948a" font-style="italic">HDD/SSD/Rete</text>
+        <!-- RAM -->
+        <rect x="30" y="30" width="560" height="148" rx="10" fill="#f0e5c9" stroke="#b07d2b" stroke-width="0.8"/>
+        <text x="540" y="50" font-size="11" fill="#b07d2b" font-style="italic">RAM (memoria principale)</text>
+        <!-- L3 -->
+        <rect x="50" y="50" width="420" height="110" rx="8" fill="#e0e9dd" stroke="#3f6f4e" stroke-width="0.8"/>
+        <text x="430" y="68" font-size="11" fill="#3f6f4e" font-style="italic">L3 (condiviso)</text>
+        <!-- L2 -->
+        <rect x="70" y="68" width="290" height="78" rx="8" fill="#f4ded6" stroke="#b8402e" stroke-width="0.8"/>
+        <text x="326" y="83" font-size="11" fill="#b8402e" font-style="italic">L2</text>
+        <!-- L1 -->
+        <rect x="90" y="85" width="175" height="50" rx="8" fill="#b8402e" stroke="#b8402e" stroke-width="0.8"/>
+        <text x="178" y="107" text-anchor="middle" font-size="12" font-weight="700" fill="white">Cache L1</text>
+        <text x="178" y="123" text-anchor="middle" font-size="10" fill="#f4ded6">Il più veloce/il più piccolo</text>
+        <!-- Size/speed labels -->
+        <text x="640" y="100" font-size="10" fill="#8d8475">Lento</text>
+        <text x="640" y="130" font-size="10" fill="#8d8475">Grande</text>
+        <text x="640" y="160" font-size="10" fill="#8d8475">Economico</text>
+        <line x1="695" y1="35" x2="695" y2="185" stroke="#8d8475" stroke-width="0.5"/>
+        <line x1="688" y1="35" x2="695" y2="35" stroke="#8d8475" stroke-width="0.5"/>
+        <line x1="688" y1="185" x2="695" y2="185" stroke="#8d8475" stroke-width="0.5"/>
+      </svg>
+      <div class="diagram-caption">Fig 4.1: Gerarchia della memoria della CPU: livelli annidati dal più veloce/più piccolo (L1) al più lento/più grande (HDD)</div>
+    </div>
+
+    <h4>Perché gli array sono più veloci per l'accesso sequenziale</h4>
+    <p>Un'importante conseguenza pratica della memorizzazione nella cache della CPU: quando inizi a attraversare un array in sequenza, i file della CPU <strong>algoritmi di prefetch/predittivi</strong> rilevare il modello sequenziale e caricare l'intero array (o una parte di grandi dimensioni) nella cache L1/L2 in modo proattivo. Questo è il motivo <code>for</code> i cicli sugli array sono estremamente veloci, i dati sono già nella cache nel momento in cui la CPU ne ha bisogno.</p>
+  </section>
+
+  <!-- SECTION 5b: RAM vs DISK -->
+  <section id="ram-vs-disk">
+    <h3>RAM vs disco: perché la RAM è più veloce (la fisica)</h3>
+    <p>Questo è il <strong>motivo fondamentale</strong> perché i database in memoria come Redis sono molto più veloci dei database basati su disco come PostgreSQL o MySQL. Comprendere l'effettiva differenza hardware è importante, non è magia, è fisica e ingegneria.</p>
+
+    <h4>Come funziona l'archiviazione su disco rigido</h4>
+    <p>In un tradizionale disco rigido (HDD), è presente una sorta di <strong>testa meccanica</strong> che ruota attorno al disco. Quando vuoi leggere i dati, il disco gira, la testa si sposta sulla traccia giusta e così <em>trova fisicamente</em> i dati. È un <strong>funzionamento meccanico</strong>. Pensaci, un braccio fisico letterale deve spostarsi in una posizione su un piatto rotante. Questo movimento meccanico richiede tempo, millisecondi, che in termini informatici è un'eternità.</p>
+
+    <h4>Come funziona la RAM</h4>
+    <p>La memoria ad accesso casuale è fondamentalmente diversa. Ha un sacco di condensatori e transistor e attraverso l'uso di <strong>segnali elettrici</strong> combinato con <strong>accesso diretto basato sull'indirizzo</strong>, può accedere a qualsiasi posizione della memoria con un singolo segnale elettrico. Non c'è movimento fisico, nessuna ricerca, nessuna rotazione. Si accede ai dati inviando un segnale elettrico a uno specifico indirizzo di memoria, e ciò avviene quasi alla velocità dell'elettricità stessa.</p>
+
+    <p>Anche per questo si chiama <span class="term">Memoria ad accesso casuale</span>, lo fa <em>non importa da quale direzione provi ad accedere ai dati</em>. La velocità e il tempo sono quasi costanti indipendentemente da dove si trovano i dati nella memoria. Se accedi all'indirizzo <code>0x0001</code> o indirizzo <code>0xFFFF</code>, il tempo di recupero è essenzialmente lo stesso. Questa proprietà si chiama <strong>O(1) tempo di accesso</strong> nella terminologia delle strutture dati.</p>
+
+    <p>Confrontalo con un disco rigido: l'accesso ai dati in sequenza (dall'indirizzo 0 a 100) è veloce perché la testa non deve muoversi molto. Ma accedere ai dati in modo casuale (saltando dall'indirizzo da 0 a 9000 a da 200 a 7000) è estremamente lento perché la testa deve cercare fisicamente ogni volta posizioni diverse. Ecco perché gli HDD preferiscono modelli di accesso sequenziale.</p>
+
+    <table class="compare-table">
+      <thead>
+        <tr>
+          <th>Proprietà</th>
+          <th>RAM (memoria primaria)</th>
+          <th>HDD (memoria secondaria)</th>
+          <th>SSD (memoria secondaria)</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Meccanismo di accesso</td>
+          <td>Segnale elettrico -&gt; indirizzo di memoria</td>
+          <td>La testa meccanica cerca il piatto rotante</td>
+          <td>Celle di memoria flash, elettriche</td>
+        </tr>
+        <tr>
+          <td>Orario di accesso</td>
+          <td class="tag-fast">~60-100 nanosecondi</td>
+          <td class="tag-slow">~5-10 millisecondi</td>
+          <td>~50-150 microsecondi</td>
+        </tr>
+        <tr>
+          <td>Velocità relativa</td>
+          <td class="tag-fast">~100.000 volte più veloce dell'HDD</td>
+          <td class="tag-slow">Linea di base</td>
+          <td>~100 volte più veloce dell'HDD</td>
+        </tr>
+        <tr>
+          <td>Accesso casuale</td>
+          <td class="tag-fast">O(1), costante a prescindere</td>
+          <td class="tag-slow">È necessaria una ricerca meccanica lenta</td>
+          <td>Buono, nessuna parte meccanica</td>
+        </tr>
+        <tr>
+          <td>Volatilità</td>
+          <td class="tag-slow">Volatile, dati persi allo spegnimento</td>
+          <td class="tag-fast">Persistente, sopravvive allo spegnimento</td>
+          <td class="tag-fast">Persistente, sopravvive allo spegnimento</td>
+        </tr>
+        <tr>
+          <td>Capacità (server tipico)</td>
+          <td class="tag-slow">64GB, 512GB</td>
+          <td class="tag-fast">TB multipli</td>
+          <td class="tag-fast">TB multipli</td>
+        </tr>
+        <tr>
+          <td>Costo per GB</td>
+          <td class="tag-slow">~$5-10/GB</td>
+          <td class="tag-fast">~$0,02-0,05/GB</td>
+          <td>~$0,10-0,20/GB</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h4>Il compromesso fondamentale</h4>
+    <p>Quando si tratta di memoria ad accesso casuale, stiamo facendo affari <strong>non volatilità e capacità di velocità</strong>. Questo è il compromesso dichiarato chiaramente. La RAM è incredibilmente veloce ma:</p>
+
+    <ul style="margin:0.5rem 0 1rem 1.5rem; color:var(--ink2)">
+      <li style="margin-bottom:8px"><strong>È volatile.</strong> Ogni volta che spegni il dispositivo, qualunque dato sia memorizzato nella RAM, scompare. Si cancella da solo. Ricomincia da capo ogni volta che avvii il computer. Ciò è dovuto al modo in cui funzionano i condensatori, che necessitano di una fornitura costante di elettricità per mantenere il loro stato. Tagliamo il potere, lo Stato scompare.</li>
+      <li style="margin-bottom:8px"><strong>Ha una capacità limitata.</strong> Anche se abbiamo velocità a nostra disposizione con la RAM, non ne abbiamo in abbondanza. Il costo di produzione della RAM su larga scala significa che i server hanno molta meno RAM rispetto allo storage su disco.</li>
+    </ul>
+
+    <p>Questo è il motivo per cui tu <strong>non può sostituire completamente un disco rigido o un tradizionale sistema di archiviazione basato su disco con RAM</strong>. Hanno il loro ruolo, sono veloci quando si tratta di accesso e recupero dei dati, ma non sostituiscono l'archiviazione secondaria. La memorizzazione dei dati nella memoria secondaria lo è <em>permanente</em>, non volatile. Non importa se il tuo programma vi accede o meno, se il tuo computer è acceso o spento, i dati persistono lì perché sta scrivendo fisicamente i dati sul disco.</p>
+
+    <div class="callout">
+      <div class="callout-label">Archiviazione primaria e secondaria/Riepilogo</div>
+      <p><strong>Memoria primaria (RAM)</strong>: Accesso ai dati molto veloce, capacità limitata, volatile (perdita di dati allo spegnimento). Utilizzato per i dati che devono essere elaborati in questo momento o recuperati immediatamente.<br/><br/>
+      <strong>Memoria secondaria (HDD/SSD)</strong>: Accesso ai dati più lento, capacità abbondante, non volatile (i dati persistono). Utilizzato per l'archiviazione permanente di tutti i tuoi dati.</p>
+    </div>
+
+    <h4>Come Redis unisce entrambi i mondi</h4>
+    <p>Tecnologie come Redis e Memcached utilizzano questa memoria ad accesso casuale (memoria primaria/memoria principale) per archiviare i propri dati, ecco perché le operazioni di accesso ai dati da questi database sono molto veloci. Ma per quanto riguarda la persistenza? Che dire del fatto che la RAM perde dati allo spegnimento?</p>
+
+    <p>Dietro le quinte, per la persistenza, queste tecnologie fanno uso anche dello storage secondario. Con una sorta di meccanismo, all'avvio del programma, prende i dati dalla memoria secondaria e li carica nuovamente nella memoria principale, in modo da avere la persistenza dei dati. Ma quando effettivamente recuperi i dati o li modifichi, ciò accade con la memoria primaria. Il database in memoria è responsabile dell'implementazione di questo livello di persistenza, che si tratti degli snapshot RDB di Redis o del registro AOF (Append-Only File).</p>
+
+    <div class="ref-box">
+      <div class="ref-box-label">Riferimento MDN</div>
+      <a href="https://developer.mozilla.org/en-US/docs/Glossary/Cache" target="_blank">MDN, Glossario della cache</a>
+    </div>
+  </section>
+
+  <hr class="chapter-divider"/>
+
+  <!-- SECTION 6: IN-MEMORY DATABASES -->
+  <section id="inmemory">
+    <div class="section-num">06 / DATABASE IN MEMORIA</div>
+    <h2>Database NoSQL con valori-chiave in memoria</h2>
+    <p>Tornando al contesto dello sviluppo backend, tecnologie come <strong>Redis</strong>, <strong>Memcached</strong>, e se parliamo di tecnologie Cloud allora <strong>AWS ElastiCache</strong>: entrano in gioco questi. Forniscono un qualche tipo di spazio di archiviazione e tale spazio di archiviazione si basa sulla memoria primaria (RAM). Questo è il motivo per cui le operazioni di accesso ai dati da questi database sono molto veloci.</p>
+
+    <p>Chiamiamo queste tecnologie <span class="term">Database NoSQL con valori-chiave in memoria</span>. Quel nome è composto da quattro parti e ognuna ti dice qualcosa di importante:</p>
+
+    <div class="usecase-grid">
+      <div class="usecase-tile">
+        <h4>In memoria</h4>
+        <p>Rispetto ai database tradizionali come PostgreSQL o MySQL, questi lo sono <strong>non memorizzato su disco</strong>. La memoria si basa sulla RAM (memoria primaria). Questo è il motivo per cui le operazioni di accesso ai dati sono estremamente veloci, abbiamo appena capito nella sezione hardware esattamente perché la RAM è ordini di grandezza più veloce dell'accesso basato su disco. Redis legge e scrive sulla RAM, non sul disco.</p>
+      </div>
+      <div class="usecase-tile">
+        <h4>Valore-chiave</h4>
+        <p>Rispetto ai tradizionali database relazionali che hanno uno schema molto rigido, devi creare tabelle, creare righe, definire colonne con tipi, ecc., qui la struttura dei dati è molto semplice. Sì <strong>chiavi e valori</strong>. Hai una chiave particolare e per quella chiave puoi memorizzare qualsiasi cosa, può essere una lista, un oggetto JSON, una stringa, un numero, un hash, un set. Diverse tecnologie offrono diversi tipi di dati, ma l'interfaccia è sempre: dammi una chiave, ti darò il suo valore.</p>
+      </div>
+      <div class="usecase-tile">
+        <h4>NoSQL</h4>
+        <p>Loro <strong>non imporre la rigidità dei database SQL tradizionali</strong>. Nessuno schema, nessun join, nessuna query complessa. L'API è volutamente semplice. In Redis, essenzialmente hai <code>SET key value</code> e <code>GET key</code> come operazioni principali. Non è complesso come le query SQL con aggregazione, GRUPPO BY, ecc., l'accesso è piuttosto semplice.</p>
+      </div>
+      <div class="usecase-tile">
+        <h4>Banca dati</h4>
+        <p>Nonostante siano &quot;solo&quot; un archivio di valori-chiave, si tratta di database completi con funzionalità come scadenza basata su TTL, opzioni di persistenza, messaggistica pub/sub, scripting Lua (Redis), clustering e replica. L'etichetta di &quot;database&quot; è guadagnata, gestiscono i dati in modo affidabile, non solo come una cache effimera.</p>
+      </div>
+    </div>
+
+    <h3>Perché la semplicità del valore-chiave è una caratteristica, non una limitazione</h3>
+    <p>Potresti chiederti: perché dovrei utilizzare un database senza query complesse? La risposta è questa <strong>tutta quella complessità che non hai sono le prestazioni che ottieni</strong>. Quando Redis riceve un comando GET, cerca letteralmente semplicemente una tabella hash in memoria. Non è prevista l'analisi delle query, né la pianificazione delle query, né l'I/O del disco, né l'attraversamento dell'indice. È una ricerca di memoria O(1), ecco perché Redis può eseguire milioni di operazioni al secondo.</p>
+
+    <p>Questo è ciò di cui ti occuperai come ingegnere di backend, prendi qualunque libreria compatibile sia disponibile nel tuo linguaggio di programmazione corrispondente (Node.js ha <code>node-redis</code> o <code>ioredis</code>, Vai ha <code>go-redis</code>, Python ha <code>redis-py</code>) e, a seconda di ciò, usi semplicemente la libreria. Fornisci una chiave, fornisci un valore, lo memorizzi. E quando vuoi recuperarlo, fornisci la chiave e ottieni il valore. È piuttosto semplice, non presenta complessità come query SQL e aggregazione. Ma tutta questa familiarità tecnica con come funziona la tecnologia dietro le quinte, quali sono i componenti principali, ti aiuta a dare un senso al tutto e a prendere decisioni migliori.</p>
+
+    <h3>Come Redis gestisce la persistenza</h3>
+    <p>Redis utilizza due meccanismi principali per garantire che i dati non vadano persi al riavvio del processo:</p>
+    <ul style="margin:0.5rem 0 1rem 1.5rem; color:var(--ink2)">
+      <li style="margin-bottom:10px"><strong>Istantanee RDB (database Redis).</strong>: A intervalli configurati (ad esempio ogni 5 minuti o quando si sono verificate N scritture), Redis effettua un fork del processo e scrive l'intero set di dati in memoria su un file binario <code>.rdb</code> file su disco. All'avvio, Redis carica nuovamente questo file in memoria. Riavvio veloce, ma potresti perdere fino a N minuti di dati.</li>
+      <li style="margin-bottom:10px"><strong>AOF (file di sola aggiunta)</strong>: ogni operazione di scrittura viene registrata in un file di sola aggiunta su disco. Al riavvio, Redis ripete tutte queste operazioni per ricostruire lo stato in memoria. Perdita di dati prossima allo zero, ma riavvio più lento e il file diventa più grande nel tempo (Redis lo compatta periodicamente tramite uno sfondo <em>riscrivere</em> processo).</li>
+      <li style="margin-bottom:10px"><strong>Entrambi insieme</strong>: Redis consiglia di utilizzare sia RDB che AOF in produzione per il miglior equilibrio tra prestazioni e durata.</li>
+    </ul>
+
+    <p>L'intuizione chiave: <strong>i dati vengono sempre letti e scritti nella RAM durante il normale funzionamento</strong>. Il disco è coinvolto solo per la persistenza (salvataggio dello stato per il ripristino). Il percorso caldo, il percorso seguito da ogni richiesta dell'utente, non tocca mai il disco.</p>
+
+    <div class="ref-box">
+      <div class="ref-box-label">Documenti ufficiali Redis</div>
+      <a href="https://redis.io/docs/management/persistence/" target="_blank">Redis Docs, Persistence (RDB e AOF spiegati in dettaglio)</a>
+      <a href="https://redis.io/docs/data-types/" target="_blank">Documenti Redis, tipi di dati (stringa, elenco, hash, set, set ordinato, flusso)</a>
+    </div>
+  </section>
+
+  <hr class="chapter-divider"/>
+
+  <!-- SECTION 7: CACHING STRATEGIES -->
+  <section id="strategies">
+    <div class="section-num">07 / STRATEGIE</div>
+    <h2>Strategie di memorizzazione nella cache</h2>
+    <p>Esistono due strategie principali di memorizzazione nella cache che incontrerai nello sviluppo quotidiano del backend. Rispondono a diverse domande: <em>quando popoli la cache?</em> e <em>quando lo aggiorni?</em></p>
+
+    <div class="strategy-grid">
+      <div class="strategy-card">
+        <div class="strategy-card-label">Strategia 1</div>
+        <h4>Caching lento (Cache-Aside)</h4>
+        <p>La cache viene popolata solo quando i dati vengono richiesti per la prima volta. Non viene eseguita la precompilazione proattiva.</p>
+      </div>
+      <div class="strategy-card">
+        <div class="strategy-card-label">Strategia 2</div>
+        <h4>Caching write-through</h4>
+        <p>Ogni scrittura nel database viene scritta contemporaneamente nella cache. La cache è sempre fresca.</p>
+      </div>
+    </div>
+
+    <h3>Strategia 1: caching lento (cache-aside)</h3>
+
+    <div class="diagram-wrap">
+      <svg width="100%" viewBox="0 0 720 190" role="img">
+        <title>Diagramma di flusso della cache pigra</title>
+        <defs>
+          <marker id="arr6" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </marker>
+        </defs>
+        <rect x="20" y="75" width="100" height="44" rx="8" fill="#f4ded6" stroke="#b8402e" stroke-width="0.8"/>
+        <text x="70" y="100" text-anchor="middle" font-size="12" font-weight="600" fill="#211e1a">Cliente</text>
+        <line x1="122" y1="97" x2="160" y2="97" stroke="#8d8475" stroke-width="1.2" marker-end="url(#arr6)"/>
+        <rect x="162" y="75" width="110" height="44" rx="8" fill="#232019" stroke="#7d7468" stroke-width="0.8"/>
+        <text x="217" y="95" text-anchor="middle" font-size="11" font-weight="600" fill="#e9e2d3">Server</text>
+        <text x="217" y="110" text-anchor="middle" font-size="10" fill="#7d7468">controlla la cache</text>
+        <!-- HIT -->
+        <text x="390" y="55" text-anchor="middle" font-size="10" fill="#3f6f4e" font-style="italic">HIT -&gt; ritorna immediatamente</text>
+        <line x1="274" y1="88" x2="350" y2="72" stroke="#3f6f4e" stroke-width="1.2" stroke-dasharray="4 3" marker-end="url(#arr6)"/>
+        <rect x="352" y="58" width="100" height="36" rx="6" fill="#e0e9dd" stroke="#3f6f4e" stroke-width="0.8"/>
+        <text x="402" y="80" text-anchor="middle" font-size="11" font-weight="600" fill="#3f6f4e">Cache </text>
+        <!-- MISS -->
+        <text x="390" y="140" text-anchor="middle" font-size="10" fill="#b8402e" font-style="italic">MISS -&gt; prendi, memorizza, restituisci</text>
+        <line x1="274" y1="107" x2="350" y2="126" stroke="#b8402e" stroke-width="1.2" stroke-dasharray="4 3" marker-end="url(#arr6)"/>
+        <rect x="352" y="115" width="100" height="36" rx="6" fill="#f4ded6" stroke="#b8402e" stroke-width="0.8"/>
+        <text x="402" y="137" text-anchor="middle" font-size="11" font-weight="600" fill="#b8402e">DB</text>
+        <!-- Store back to cache -->
+        <line x1="454" y1="133" x2="510" y2="95" stroke="#b07d2b" stroke-width="1" stroke-dasharray="3 3" marker-end="url(#arr6)"/>
+        <rect x="512" y="75" width="100" height="44" rx="6" fill="#f0e5c9" stroke="#b07d2b" stroke-width="0.8"/>
+        <text x="562" y="95" text-anchor="middle" font-size="11" font-weight="600" fill="#b07d2b">Conservare</text>
+        <text x="562" y="110" text-anchor="middle" font-size="11" font-weight="600" fill="#b07d2b">cache</text>
+        <!-- Return to client -->
+        <line x1="562" y1="119" x2="70" y2="140" stroke="#8d8475" stroke-width="0.8" stroke-dasharray="3 3" marker-end="url(#arr6)"/>
+        <text x="320" y="175" text-anchor="middle" font-size="10" fill="#8d8475" font-style="italic">risultato restituito; cache popolata per richieste future</text>
+      </svg>
+      <div class="diagram-caption">Fig 5.1: Caching lento (Cache-Aside): popolato al primo errore</div>
+    </div>
+
+    <p><strong>Caratteristiche del Lazy Caching:</strong></p>
+    <ul style="margin:0.5rem 0 1rem 1.5rem; color:var(--ink2)">
+      <li style="margin-bottom:6px">La cache viene popolata solo quando i dati vengono effettivamente richiesti, senza alcuna precompilazione sprecata</li>
+      <li style="margin-bottom:6px">La prima richiesta di dati comporta sempre un errore nella cache (latenza leggermente superiore per il primo utente)</li>
+      <li style="margin-bottom:6px">Rischio di dati obsoleti, se il DB sottostante cambia, il valore memorizzato nella cache può essere obsoleto fino alla scadenza del TTL o all'invalidazione manuale</li>
+      <li style="margin-bottom:6px">Semplice da implementare e molto comune nella pratica</li>
+    </ul>
+
+    <h3>Strategia 2: memorizzazione nella cache write-through</h3>
+    <p>Ogni volta che un'operazione di scrittura (POST, PUT, PATCH) modifica i dati nel database, si verifica la stessa modifica <strong>applicati contemporaneamente alla cache</strong> all'interno dello stesso flusso di esecuzione della chiamata API.</p>
+
+    <div class="callout callout-teal">
+      <div class="callout-label">Vantaggio</div>
+      <p>La cache lo è <strong>sempre fresco</strong>. Non fornisci mai dati obsoleti perché la cache viene aggiornata esattamente nello stesso momento del database.</p>
+    </div>
+    <div class="callout">
+      <div class="callout-label">Compromesso</div>
+      <p>Ogni operazione di scrittura porta <strong>spese generali aggiuntive</strong>: è necessario aggiornare atomicamente (o quasi atomicamente) sia il database che la cache. Ciò aumenta la latenza delle operazioni di scrittura. Se le operazioni di scrittura sono molto frequenti, ciò può diventare un collo di bottiglia.</p>
+    </div>
+
+    <h4>Quando usare quale?</h4>
+    <table class="compare-table">
+      <thead>
+        <tr><th>Scenario</th><th>Strategia</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Scritture poco frequenti e con molte letture (pagine di prodotti, profili)</td><td>Caching lento + TTL</td></tr>
+        <tr><td>Necessita di cache sempre aggiornata (dati finanziari, inventario)</td><td>Scrivi attraverso</td></tr>
+        <tr><td>Modelli di accesso sconosciuti, implementazione graduale</td><td>Caching lento (avvio più sicuro)</td></tr>
+        <tr><td>Carico di lavoro di scrittura pesante (registrazione, flussi di eventi)</td><td>Evita il write-through</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <hr class="chapter-divider"/>
+
+  <!-- SECTION 8: EVICTION POLICIES -->
+  <section id="eviction">
+    <div class="section-num">08 / POLITICHE DI SFRATTO</div>
+    <h2>Politiche di sfratto</h2>
+    <p>Qualcos'altro di cui dovremmo essere consapevoli quando lavoriamo con cache in memoria come Redis è il file <span class="term">politica di sfratto</span>. Cosa significa? Innanzitutto capiamo il problema.</p>
+
+    <h3>Perché è necessario lo sfratto</h3>
+    <p>Quando si dispone di una cache e, come già sappiamo, le cache in memoria come Redis utilizzano la memoria primaria (RAM), che ha una capacità limitata rispetto alla memoria secondaria, è abbastanza ovvio che a un certo punto si esaurirà la memoria. Sia che tu stia eseguendo Redis sul tuo server e la RAM si riempia, o che tu stia utilizzando un servizio gestito come AWS ElastiCache che ha un limite di archiviazione, ad un certo punto raggiungerai il limite.</p>
+
+    <p>A quel punto devi decidere: vuoi conservare <em>nuovo</em> dati nella cache, ma non c'è spazio. Devi farlo <strong>eliminare qualcosa di vecchio</strong> per fare spazio a qualcosa di nuovo. E ovviamente, come abbiamo già discusso nella parte iniziale di questo argomento, la cache è solo un sottoinsieme dei dati, i dati a cui si accede frequentemente archiviati in una posizione diversa e più veloce. Le parole chiave su cui concentrarsi: a <strong>sottoinsieme</strong> dello storage primario. Non possiamo archiviare tutta la memoria primaria nella cache. Quindi dobbiamo decidere cosa resta e cosa va.</p>
+
+    <div class="callout callout-gold">
+      <div class="callout-label">La questione centrale dello sfratto</div>
+      <p>Quale pezzo di dati memorizzato nella cache è <strong>meno prezioso</strong> mantenere? Sfrattalo, fai spazio ai nuovi dati che hanno una priorità più alta. Diverse politiche di sfratto rispondono a questa domanda in modo diverso.</p>
+    </div>
+
+    <ul class="policy-list">
+      <li>
+        <span class="policy-badge badge-none">NESSUN SFRATTO</span>
+        <div>
+          <strong>Nessuna politica di sfratto configurata.</strong> Questa è l'impostazione predefinita se non hai configurato alcuna politica di sfratto. Cosa succede quando la cache è piena e provi a inserire nuovi dati? Ottieni semplicemente un <strong>errore</strong>: la memoria è piena, operazione rifiutata. Ciò non ha molto senso per un caso d'uso della cache, ma esiste come configurazione perché ci sono situazioni in cui si desidera controllare esplicitamente la dimensione della cache e non eliminare mai i dati in modo silenzioso. Per un caso d'uso reale della memorizzazione nella cache, dovresti sempre configurare una delle policy seguenti.
+        </div>
+      </li>
+      <li>
+        <span class="policy-badge badge-lru">LRU</span>
+        <div>
+          <strong>Usato meno di recente.</strong> L'algoritmo controlla quali dati erano <em>accesso meno recente</em>. Tiene traccia di quando è stata l'ultima volta che è stato effettuato l'accesso a una determinata chiave.
+          <br/><br/>
+          <strong>Esempio dettagliato dalla lezione:</strong> Diciamo che abbiamo 4 chiavi nella cache, Chiave 1, Chiave 2, Chiave 3, Chiave 4, e la memoria è ora piena. Il database tiene traccia dell'ultimo accesso a ciascuna chiave:
+          <ul style="margin:0.5rem 0 0.75rem 1.75rem; color:var(--ink2)">
+            <li style="margin-bottom:4px">Chiave 1, accesso effettuato oggi</li>
+            <li style="margin-bottom:4px">Chiave 2, accesso effettuato oggi</li>
+            <li style="margin-bottom:4px">Chiave 3, accessibile oggi</li>
+            <li style="margin-bottom:4px">Tasto 4, accesso <strong>ieri</strong></li>
+          </ul>
+          Ora la chiave 5 vuole entrare nella cache. Con la politica di sfratto LRU, Redis verifica qual è il file <strong>con accesso più vecchio</strong> punto dati. Poiché ieri è stato effettuato l'accesso alla chiave 4 e oggi è stato effettuato l'accesso a tutte le altre, seleziona la chiave 4: &quot;tu uscirai e la chiave 5 entrerà&quot;. Si tratta dello sfratto utilizzato meno di recente.
+          <br/><br/>
+          <em>Quando usarlo:</em> LRU è la politica di sfratto più comunemente utilizzata. Funziona bene per i carichi di lavoro in cui è probabile che si accederà nuovamente presto ai dati a cui si è effettuato l'accesso di recente, il che è vero per la maggior parte delle applicazioni del mondo reale (località temporale).
+        </div>
+      </li>
+      <li>
+        <span class="policy-badge badge-lfu">LFU</span>
+        <div>
+          <strong>Usato meno frequentemente.</strong> Invece di tracciare <em>quando</em> è stato effettuato l'ultimo accesso a una chiave, tracce LFU <em>quante volte in totale</em> è stato eseguito l'accesso a ciascuna chiave. La chiave con il numero di accessi più basso verrà sfrattata.
+          <br/><br/>
+          <strong>Esempio dettagliato dalla lezione:</strong> Dimentica il tempo, diciamo che abbiamo 4 chiavi e la chiave 5 vuole entrare. Ogni chiave ha un contatore di frequenza di accesso:
+          <ul style="margin:0.5rem 0 0.75rem 1.75rem; color:var(--ink2)">
+            <li style="margin-bottom:4px">Chiave 1, accessibile <strong>5 volte</strong> finora</li>
+            <li style="margin-bottom:4px">Chiave 2, accesso <strong>10 volte</strong> finora</li>
+            <li style="margin-bottom:4px">Tasto 3, accesso <strong>6 volte</strong> finora</li>
+            <li style="margin-bottom:4px">Tasto 4, accesso <strong>23 volte</strong> finora</li>
+          </ul>
+          La chiave 5 arriva e ha bisogno di spazio. LFU controlla quale sia la chiave <em>meno frequentemente utilizzato</em>, quello con la frequenza più bassa. È stato effettuato l'accesso alla chiave 1 solo 5 volte, il minimo. Gli altri tasti vengono utilizzati più frequentemente. Quindi seleziona la chiave 1: &quot;tu uscirai, la chiave 5 entrerà&quot;.
+          <br/><br/>
+          <em>Quando usarlo:</em> LFU funziona meglio di LRU quando la tua applicazione ha un insieme stabile di articoli &quot;caldi&quot; che sono sempre popolari (come un catalogo di prodotti in cui i primi 100 prodotti ricevono l'80% del traffico). LRU potrebbe sfrattare un elemento importante a cui non è stato possibile accedere nell'ultimo minuto, mentre LFU lo manterrebbe a causa della sua elevata frequenza a lungo termine.
+        </div>
+      </li>
+      <li>
+        <span class="policy-badge badge-ttl">BASATO su TTL</span>
+        <div>
+          <strong>TTL volatile (sfratto basato sul tempo di vita).</strong> In Redis puoi configurare un TTL, un time-to-live, per chiavi diverse individualmente. Quando la cache è piena e deve eliminare qualcosa, con questa policy controlla quali chiavi hanno il file <strong>TTL rimanente più basso</strong>: ovvero quale chiave scadrà comunque prima.
+          <br/><br/>
+          <strong>Esempio di procedura dettagliata:</strong> Stesso scenario, 4 chiavi, la chiave 5 vuole entrare, la cache è piena. Ogni chiave ha un TTL:
+          <ul style="margin:0.5rem 0 0.75rem 1.75rem; color:var(--ink2)">
+            <li style="margin-bottom:4px">Chiave 1, scade tra 3 ore</li>
+            <li style="margin-bottom:4px">Chiave 2, scade tra 45 minuti</li>
+            <li style="margin-bottom:4px">Chiave 3, scade tra 2 ore</li>
+            <li style="margin-bottom:4px">Chiave 4, scade tra <strong>10 minuti</strong> (a breve scadenza)</li>
+          </ul>
+          Arriva la chiave 5. La policy seleziona la Chiave 4, scadrà comunque tra 10 minuti, quindi potremmo anche sfrattarla adesso e fare spazio alla Chiave 5. La logica: &quot;questa chiave sta per sparire presto a prescindere, quindi lasciala andare adesso.&quot;
+          <br/><br/>
+          <strong>Nota:</strong> TTL viene utilizzato anche indipendentemente dallo sfratto per far scadere semplicemente automaticamente i dati non aggiornati. Hai impostato una chiave con <code>SETEX weather_delhi "25 degC" 3600</code> e dopo 3600 secondi (1 ora), Redis lo elimina automaticamente. Non è mai necessario pulirlo manualmente. Questa è una delle funzionalità Redis più utili per la memorizzazione nella cache delle risposte API esterne.
+        </div>
+      </li>
+    </ul>
+
+    <div class="diagram-wrap">
+      <svg width="100%" viewBox="0 0 720 170" role="img">
+        <title>Visualizzazione passo passo dello sfratto LRU</title>
+        <text x="360" y="20" text-anchor="middle" font-size="12" fill="#8d8475" font-style="italic">Esempio LRU: cache piena (4 chiavi), arriva la chiave 5 -&gt; elimina la chiave con accesso più vecchio</text>
+        <!-- 4 existing keys -->
+        <rect x="20" y="35" width="130" height="60" rx="8" fill="#e0e9dd" stroke="#3f6f4e" stroke-width="0.8"/>
+        <text x="85" y="60" text-anchor="middle" font-size="13" font-weight="600" fill="#211e1a">Chiave 1</text>
+        <text x="85" y="76" text-anchor="middle" font-size="11" fill="#3f6f4e">ultimo accesso:</text>
+        <text x="85" y="89" text-anchor="middle" font-size="11" fill="#3f6f4e">oggi</text>
+
+        <rect x="165" y="35" width="130" height="60" rx="8" fill="#e0e9dd" stroke="#3f6f4e" stroke-width="0.8"/>
+        <text x="230" y="60" text-anchor="middle" font-size="13" font-weight="600" fill="#211e1a">Chiave 2</text>
+        <text x="230" y="76" text-anchor="middle" font-size="11" fill="#3f6f4e">ultimo accesso:</text>
+        <text x="230" y="89" text-anchor="middle" font-size="11" fill="#3f6f4e">oggi</text>
+
+        <rect x="310" y="35" width="130" height="60" rx="8" fill="#e0e9dd" stroke="#3f6f4e" stroke-width="0.8"/>
+        <text x="375" y="60" text-anchor="middle" font-size="13" font-weight="600" fill="#211e1a">Chiave 3</text>
+        <text x="375" y="76" text-anchor="middle" font-size="11" fill="#3f6f4e">ultimo accesso:</text>
+        <text x="375" y="89" text-anchor="middle" font-size="11" fill="#3f6f4e">oggi</text>
+
+        <!-- Key 4, to be evicted -->
+        <rect x="455" y="35" width="130" height="60" rx="8" fill="#f4ded6" stroke="#b8402e" stroke-width="2"/>
+        <text x="520" y="60" text-anchor="middle" font-size="13" font-weight="600" fill="#b8402e">Chiave 4</text>
+        <text x="520" y="76" text-anchor="middle" font-size="11" fill="#b8402e">ultimo accesso:</text>
+        <text x="520" y="89" text-anchor="middle" font-size="11" fill="#b8402e">ieri &lt;- PIÙ VECCHIO</text>
+        <text x="520" y="115" text-anchor="middle" font-size="12" fill="#b8402e" font-weight="600">^ SFRATTO</text>
+
+        <!-- Key 5, new arrival -->
+        <rect x="600" y="35" width="100" height="60" rx="8" fill="#f0e5c9" stroke="#b07d2b" stroke-width="2" stroke-dasharray="6 3"/>
+        <text x="650" y="60" text-anchor="middle" font-size="13" font-weight="600" fill="#b07d2b">Chiave 5</text>
+        <text x="650" y="76" text-anchor="middle" font-size="11" fill="#b07d2b">nuovo arrivo</text>
+        <text x="650" y="89" text-anchor="middle" font-size="11" fill="#b07d2b">ha bisogno di spazio</text>
+        <text x="650" y="115" text-anchor="middle" font-size="12" fill="#b07d2b" font-weight="600">^ ENTRA</text>
+
+        <text x="360" y="155" text-anchor="middle" font-size="11" fill="#8d8475" font-style="italic">La cache rimuove la chiave 4 (la più vecchia), inserisce la chiave 5, il totale rimane a 4 chiavi</text>
+      </svg>
+      <div class="diagram-caption">Fig 6.1: Sfratto LRU: Chiave 4 (accesso effettuato ieri, utilizzata meno di recente) sfrattata per fare spazio alla Chiave 5</div>
+    </div>
+
+    <div class="ref-box">
+      <div class="ref-box-label">Politiche di sfratto Redis / Documenti ufficiali</div>
+      <a href="https://redis.io/docs/reference/eviction/" target="_blank">redis.io, sfratto chiave (noeviction, allkeys-lru, allkeys-lfu, volatile-ttl, volatile-lru, volatile-lfu, allkeys-random)</a>
+    </div>
+  </section>
+
+  <hr class="chapter-divider"/>
+
+  <!-- SECTION 9: USE CASES -->
+  <section id="usecases">
+    <div class="section-num">09 / CASI D'USO</div>
+    <h2>Casi d'uso di Redis nello sviluppo backend</h2>
+    <p>Ora che abbiamo tutte le basi teoriche, diamo un'occhiata ai casi d'uso concreti in cui Redis e i database in memoria vengono utilizzati in un tipico flusso di lavoro di ingegneria backend. Queste sono le situazioni che incontrerai nei progetti reali.</p>
+
+    <!-- DB Query Caching -->
+    <h3>9.1: Caching delle query del database</h3>
+    <p>Uno dei casi d'uso principali. Supponiamo che tu abbia una query SQL che ha molti JOIN, tenta di unire più tabelle, esegue molte aggregazioni e alla fine termina con alcune righe. Si tratta di un'operazione ad alta intensità di calcolo perché hai un set di dati di grandi dimensioni (diciamo milioni e milioni di righe) e hai notato attraverso il monitoraggio che questa particolare API che chiama questa particolare query del database viene colpita abbastanza frequentemente, forse è la tua pagina di destinazione o una pagina dashboard che vengono colpite da molti utenti.</p>
+
+    <p>Cosa succede al tuo database senza memorizzazione nella cache? Ogni singolo utente che accede a quella pagina attiva lo stesso costoso JOIN multi-tavolo. Con mille utenti simultanei, stai facendo mille query identiche e costose al database. Ciò comporta un carico enorme sul server DB e aumenta la latenza della risposta API per tutti.</p>
+
+    <p><strong>Cosa fai con la memorizzazione nella cache:</strong> Prendi quel particolare risultato della query, mettilo nella cache con un po' di TTL (diciamo 1 ora) e da quel momento in poi, quando arriva la richiesta successiva, controlli se il risultato è presente nella cache. Se sì, servilo da lì. Altrimenti esegui il calcolo una volta, memorizzalo nella cache e restituiscilo. Ogni volta che si verifica una modifica ai dati sottostanti, è possibile invalidare manualmente la cache o eliminarla e la richiesta successiva la ricalcolerà di nuovo.</p>
+
+    <h4>L'esempio della pagina del prodotto Amazon</h4>
+    <p>Questa è una delle migliori illustrazioni del mondo reale. Immagina che ci sia una vendita in corso per un MacBook su Amazon. Se Amazon non memorizzasse nella cache i dettagli di quel prodotto MacBook, durante il periodo dei saldi milioni di utenti visiterebbero quella particolare pagina web. Recuperare l'immagine del MacBook, tutte le descrizioni dei prodotti, le specifiche, le recensioni, queste sono tutte operazioni del database.</p>
+
+    <p>Con milioni di utenti simultanei in vendita, <strong>il database riceverebbe un milione di richieste identiche per gli stessi identici dati</strong>e ciò comporta un carico significativo sul database senza alcun motivo, perché le informazioni come i dettagli del prodotto per un MacBook non cambiano molto spesso. Descrizioni dei prodotti, immagini, specifiche, questi sono dati statici. Potrebbero cambiare una volta al mese, se è così. Questo li rende <strong>un eccellente candidato per la memorizzazione nella cache</strong>.</p>
+
+    <p>Pertanto Amazon memorizza nella cache i dati statici come i dettagli dei prodotti e i prezzi in modo che possano ridurre il carico sul database e il database possa effettivamente svolgere il lavoro importante, come gestire le transazioni di pagamento, gli aggiornamenti dell'inventario e la gestione degli ordini, invece di spendere tutta la sua capacità servendo sempre la stessa pagina statica dei dettagli del prodotto.</p>
+
+    <h4>Caching dei profili dei social media</h4>
+    <p>Anche le piattaforme di social media come Twitter e Facebook memorizzano nella cache i dati del profilo utente. Pensaci, i dati del profilo utente non sono qualcosa che cambia molto spesso. Forse un paio di volte all'anno. Questo è il motivo per cui memorizzano nella cache i dati del profilo utente in modo che ogni volta che i dati vengono recuperati vengano serviti dalla cache anziché dal database.</p>
+
+    <p>Ora immagina se si tratta del profilo sui social media di qualche celebrità. Quella particolare pagina e quella particolare API per recuperare i dettagli del profilo utente di quella celebrità potrebbero essere visitate normalmente mille volte al giorno, o se hanno un film in uscita, forse un milione di volte al giorno. In tal caso, caricare tutto quel carico sul database non ha assolutamente senso, poiché le informazioni sul profilo utente sono piuttosto statiche per la maggior parte del tempo. Può fornire quel contenuto dalla cache e, anche se l'utente apporta alcune modifiche al proprio profilo, è possibile invalidare la cache e inserire la nuova voce. Si tratta di un'operazione con un numero elevato di operazioni di lettura e scritture molto rare, lo scenario ideale per la memorizzazione nella cache.</p>
+
+    <div class="callout callout-teal">
+      <div class="callout-label">Il modello ad alta lettura</div>
+      <p>Ogni volta che abbiamo a <strong>operazione di lettura pesante</strong> e la scrittura è piuttosto rara, possiamo utilizzare la memorizzazione nella cache. La memorizzazione nella cache delle query del database è uno dei principali esempi di utilizzo di tecnologie come Redis o database in memoria. Il modello: <em>le letture sono frequenti, i dati cambiano raramente, il calcolo è costoso</em> -&gt; memorizzalo nella cache.</p>
+    </div>
+
+    <!-- Session Storage -->
+    <h3>9.2: Archiviazione dei token di sessione</h3>
+    <p>Se hai guardato il video di autenticazione in questa playlist, potresti esserne a conoscenza. In un tipico flusso di autenticazione, dopo un'autenticazione riuscita, a <strong>il token di sessione viene generato per quel particolare utente</strong> e quel token di sessione è archiviato in una sorta di spazio di archiviazione.</p>
+
+    <p>Idealmente, è archiviato in Redis o in un database in memoria, non nel database relazionale principale. Ecco perché:</p>
+
+    <p>Ogni volta che l'utente effettua una richiesta o una chiamata API a qualsiasi endpoint sul tuo server, devi farlo <strong>convalidare quel token di sessione</strong>: recupera le informazioni sulla sessione e controlla se sono valide. Se non utilizzassi Redis, dovresti recuperarlo dal tuo database per <em>ogni singola chiamata API</em>. E come già sai, recuperare i dati dalla RAM (Redis) è molto più veloce che recuperare i dati da un database.</p>
+
+    <p>Considera cosa succede su larga scala: se hai 100.000 utenti attivi simultanei, ciascuno dei quali effettua più chiamate API al minuto, si tratta potenzialmente di milioni di query di database al minuto solo per la convalida della sessione, query che restituiscono esattamente gli stessi dati (la sessione è valida, l'ID utente è X) per lo stesso token di sessione ancora e ancora. Ciò comporta un carico non necessario sul database e aggiunge latenza a ogni singolo endpoint API nella tua applicazione.</p>
+
+    <p>Con Redis: il token di sessione è la chiave, i dati di sessione dell'utente (ID utente, autorizzazioni, metadati) sono il valore. La convalida è una singola <code>GET session:token_id</code>, una ricerca RAM O(1) che richiede nanosecondi. La sessione scade naturalmente anche tramite TTL, quindi non sono necessari lavori di pulizia.</p>
+
+    <!-- API Caching -->
+    <h3>9.3: Caching della risposta dell'API esterna</h3>
+    <p>Nel tuo backend, stai utilizzando alcune API esterne, diciamo alcune API meteorologiche, e stai prendendo le informazioni da queste e facendo una sorta di calcolo per servire il tuo frontend. Ora ogni volta che il tuo frontend effettua una richiesta alla tua API, se non utilizzi la memorizzazione nella cache, fai anche un'altra richiesta all'API meteo per recuperare i dati meteorologici.</p>
+
+    <p>Se hai molti utenti e stanno effettuando più chiamate API, finirai per effettuare migliaia di chiamate API a questa API esterna. Le API esterne solitamente hanno:</p>
+    <ul style="margin:0.5rem 0 1rem 1.5rem; color:var(--ink2)">
+      <li style="margin-bottom:8px"><strong>Limiti di tariffa</strong>: ad es. 1000 richieste all'ora. Raggiungi quel limite e ogni richiesta successiva fallisce finché la finestra non si ripristina.</li>
+      <li style="margin-bottom:8px"><strong>Prezzo per chiamata</strong>: molte API addebitano un costo per richiesta. Fai un milione di chiamate invece di mille e la tua bolletta aumenta proporzionalmente.</li>
+      <li style="margin-bottom:8px"><strong>Latenza di rete</strong>: ogni chiamata HTTP esterna aggiunge tempo di andata e ritorno della rete al tempo di risposta della tua API, rendendo la tua API più lenta.</li>
+    </ul>
+
+    <p>In questo caso i dati meteorologici non sono dati in tempo reale, nel senso che cambiano ogni secondo. I dati meteorologici non cambiano ogni secondo o minuto, ecco perché è un tipo di dati che lo è <strong>sicuro da memorizzare nella cache</strong>. Cosa fai: recuperi le informazioni dall'API meteo, le metti nella cache in Redis con un TTL di 1 ora e per la successiva 1 ora tutte le richieste dal tuo frontend utilizzeranno i dati meteorologici memorizzati nella cache. Dopo un'ora, la cache si invalida automaticamente e la prossima volta che arriva una richiesta recupererai nuovi dati meteorologici, li rimetterai nella cache con un nuovo TTL e li restituirai. Per l'ora successiva, tutte le richieste utilizzano nuovamente la nuova versione memorizzata nella cache.</p>
+
+    <div class="callout callout-gold">
+      <div class="callout-label">Quando la memorizzazione nella cache dell'API esterna è appropriata</div>
+      <p>Chiediti: quanto spesso questi dati cambiano effettivamente in modo significativo? Meteo -&gt; ogni ora. Tassi di cambio -&gt; ogni pochi minuti. Prezzi delle azioni -&gt; ogni secondo (troppo volatile per essere memorizzato nella cache). Titoli di notizie -&gt; ogni ora. La risposta determina il tuo TTL. Se i dati cambiano più lentamente della velocità del traffico, memorizzali nella cache.</p>
+    </div>
+
+    <!-- Rate Limiting -->
+    <h3>9.4: Limitazione della velocità</h3>
+    <p>Un ultimo caso d'uso che mi viene in mente, poiché stiamo parlando di limitazione della velocità, anche il meccanismo di limitazione della velocità viene implementato la maggior parte delle volte utilizzando una tecnologia come Redis o qualsiasi cache in memoria.</p>
+
+    <p>Il modo in cui viene implementata la limitazione della velocità: di solito è una sorta di <strong>middleware</strong> che si trova da qualche parte nel mezzo della pipeline delle richieste, ecco perché si chiama middleware. Prima che la richiesta venga passata al percorso o al controller, passa prima attraverso questo middleware del limite di velocità.</p>
+
+    <h4>Come funziona il middleware di limitazione della velocità passo dopo passo</h4>
+    <p>Il middleware prende un'intestazione dalla richiesta in entrata, una sorta di intestazione che fornisce l'indirizzo IP dell'utente. Di solito l'intestazione è qualcosa del genere <code>X-Forwarded-For</code>. Questa intestazione viene utilizzata principalmente per implementare la limitazione della velocità per scoprire l'indirizzo IP pubblico del client da qualunque parte provenga la richiesta. Questo di solito viene aggiunto da un proxy inverso come Nginx o qualunque cosa tu stia utilizzando.</p>
+
+    <p>Il compito di questo middleware è:</p>
+    <ol style="margin:0.5rem 0 1rem 1.5rem; color:var(--ink2)">
+      <li style="margin-bottom:8px">Estrai il <code>X-Forwarded-For</code> intestazione dalla richiesta in entrata per ottenere l'indirizzo IP del client</li>
+      <li style="margin-bottom:8px">Controlla Redis per un contatore associato a quell'indirizzo IP per la finestra temporale corrente (ad esempio, al minuto)</li>
+      <li style="margin-bottom:8px">Incrementa il contatore di 1</li>
+      <li style="margin-bottom:8px">Se il contatore supera il limite configurato (ad esempio, 50 richieste al minuto), <strong>bloccare la richiesta</strong> e restituire lo stato HTTP <code>429 Too Many Requests</code></li>
+      <li style="margin-bottom:8px">Se è inferiore al limite, passa la richiesta al gestore del percorso effettivo</li>
+    </ol>
+
+    <p>Diciamo che la condizione è: un determinato cliente può effettuare solo 50 richieste in 1 minuto. Quindi ogni volta che arriva una richiesta:</p>
+    <ul style="margin:0.5rem 0 1rem 1.5rem; color:var(--ink2)">
+      <li style="margin-bottom:6px">Richiesta 1: controlla la chiave su Redis <code>rate_limit:10.0.0.1:&lt;current_minute&gt;</code> -&gt; non trovato -&gt; imposta su 1 -&gt; consenti</li>
+      <li style="margin-bottom:6px">Richiesta 2: chiave trovata, il valore è 1 -&gt; incrementa a 2 -&gt; 2 &lt;= 50 -&gt; consenti</li>
+      <li style="margin-bottom:6px">Richiesta 3: il valore è 2 -&gt; incrementa a 3 -&gt; consenti</li>
+      <li style="margin-bottom:6px">... allo stesso modo 4, 5, 6 ... fino a 50 ...</li>
+      <li style="margin-bottom:6px">Richiesta 51: il valore è 50 -&gt; incremento a 51 -&gt; 51 &gt; 50 -&gt; <strong>blocco, ritorno 429</strong></li>
+    </ul>
+
+    <p>Il TTL sulla chiave è impostato su 1 minuto. Dopo 1 minuto, la chiave scade automaticamente, il contatore si azzera e il client può effettuare nuovamente richieste. Questa è una finestra pulita e automatica in cui non è necessario alcun codice di pulizia.</p>
+
+    <div class="diagram-wrap">
+      <svg width="100%" viewBox="0 0 720 175" role="img">
+        <title>Flusso del middleware con limitazione della velocità con procedura dettagliata del contatore</title>
+        <defs>
+          <marker id="arr7" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </marker>
+        </defs>
+        <rect x="10" y="65" width="90" height="50" rx="8" fill="#f4ded6" stroke="#b8402e" stroke-width="0.8"/>
+        <text x="55" y="87" text-anchor="middle" font-size="12" font-weight="600" fill="#211e1a">Cliente</text>
+        <text x="55" y="103" text-anchor="middle" font-size="10" fill="#b8402e">IP: 10.0.0.1</text>
+        <line x1="102" y1="90" x2="136" y2="90" stroke="#8d8475" stroke-width="1.2" marker-end="url(#arr7)"/>
+        <rect x="138" y="52" width="160" height="76" rx="8" fill="#f0e5c9" stroke="#b07d2b" stroke-width="0.8"/>
+        <text x="218" y="76" text-anchor="middle" font-size="12" font-weight="600" fill="#211e1a">Limite di velocità</text>
+        <text x="218" y="91" text-anchor="middle" font-size="11" fill="#b07d2b">Middleware</text>
+        <text x="218" y="106" text-anchor="middle" font-size="10" fill="#8d8475">legge X-Forwarded-For</text>
+        <text x="218" y="120" text-anchor="middle" font-size="10" fill="#8d8475">assegni + contatore incr</text>
+        <rect x="336" y="60" width="182" height="60" rx="8" fill="#e0e9dd" stroke="#3f6f4e" stroke-width="0.8"/>
+        <text x="427" y="82" text-anchor="middle" font-size="12" font-weight="600" fill="#211e1a">Contatore Redis</text>
+        <text x="427" y="97" text-anchor="middle" font-size="10" fill="#3f6f4e">&quot;velocità:10.0.0.1:&lt;minuto&gt;&quot; -&gt; 37</text>
+        <text x="427" y="111" text-anchor="middle" font-size="9" fill="#8d8475">TTL: 60s (si ripristina automaticamente ogni minuto)</text>
+        <line x1="300" y1="90" x2="334" y2="90" stroke="#3f6f4e" stroke-width="1.2" marker-end="url(#arr7)"/>
+        <rect x="556" y="40" width="140" height="38" rx="8" fill="#e0e9dd" stroke="#3f6f4e" stroke-width="0.8"/>
+        <text x="626" y="63" text-anchor="middle" font-size="11" font-weight="600" fill="#3f6f4e">conteggio &lt;= 50 -&gt; PASS</text>
+        <rect x="556" y="102" width="140" height="38" rx="8" fill="#f4ded6" stroke="#b8402e" stroke-width="0.8"/>
+        <text x="626" y="125" text-anchor="middle" font-size="11" font-weight="600" fill="#b8402e">contare &gt; 50 -&gt; 429</text>
+        <line x1="520" y1="78" x2="554" y2="59" stroke="#3f6f4e" stroke-width="1" marker-end="url(#arr7)"/>
+        <line x1="520" y1="102" x2="554" y2="116" stroke="#b8402e" stroke-width="1" marker-end="url(#arr7)"/>
+        <text x="626" y="158" text-anchor="middle" font-size="10" fill="#b8402e" font-style="italic">HTTP 429: troppe richieste</text>
+      </svg>
+      <div class="diagram-caption">Fig 7.1: Rate Limiting: il middleware legge l'IP -&gt; incrementa il contatore Redis -&gt; blocca alla 51a richiesta</div>
+    </div>
+
+    <h4>Perché Redis e non un database relazionale per la limitazione della velocità</h4>
+    <p>Questa è una domanda giusta. È possibile archiviare il contatore in PostgreSQL o MySQL, ha un'archiviazione persistente e possiamo recuperare i dati. Questo è possibile. Ma la differenza è: <strong>estrarre i dati da un database relazionale richiede più tempo</strong>. Anche una differenza di 20 o 30 millisecondi ha un impatto significativo sulla latenza dell'API, poiché la limitazione della velocità viene eseguita su ogni singola richiesta.</p>
+
+    <p>Se lo archiviassimo in un database relazionale, per ogni richiesta effettueremo una chiamata al database. A sua volta, in primo luogo, la latenza verrà aumentata per quella particolare API poiché stiamo effettuando una chiamata al database inutilmente per ogni richiesta. In secondo luogo, aumenta anche il carico sul nostro database, diciamo che ci sono mille utenti che fanno 100 richieste al minuto. Si tratta di 100.000 query di database al minuto solo per gli incrementi del contatore di limitazione della velocità. Il tuo database sarà inondato solo dal sovraccarico del livello di limitazione della velocità.</p>
+
+    <p>Questo è il motivo per cui vogliamo separarli, per due motivi. Innanzitutto, renderlo il più veloce possibile in modo da poter ridurre al minimo la latenza delle API. In secondo luogo, per ridurre il carico del database. Questo è il motivo per cui ogni volta che parliamo di implementare la limitazione della velocità, utilizziamo database in memoria come Redis invece di archiviarli nei nostri database relazionali. L'atomica di Redis <code>INCR</code> Il comando è particolarmente adatto: incrementa una chiave di 1 in una singola operazione atomica, senza condizioni di competizione, senza necessità di transazioni o blocchi.</p>
+  </section>
+
+  <hr class="chapter-divider"/>
+
+  <!-- SECTION 10: CODE EXAMPLES -->
+  <section id="code">
+    <div class="section-num">10/CODICE</div>
+    <h2>Esempi di codici</h2>
+    <p>Di seguito sono riportate le implementazioni pratiche dei modelli di memorizzazione nella cache utilizzando Go e Python, i due linguaggi a cui si fa riferimento in questo corso.</p>
+
+    <!-- GO: Lazy Cache -->
+    <h3>10.1: Caching lento (Cache-Aside) in Go</h3>
+    <div class="code-file">
+      <div class="code-dot dot-r"></div><div class="code-dot dot-y"></div><div class="code-dot dot-g"></div>
+      <span>cache_aside.go / Go + github.com/redis/go-redis/v9</span>
+    </div>
+<pre><code><span class="kw">package</span> main
+
+<span class="kw">import</span> (
+    <span class="str">"context"</span>
+    <span class="str">"encoding/json"</span>
+    <span class="str">"fmt"</span>
+    <span class="str">"time"</span>
+
+    <span class="str">"github.com/redis/go-redis/v9"</span>
+)
+
+<span class="kw">type</span> <span class="ty">Product</span> <span class="kw">struct</span> {
+    ID    <span class="ty">string</span> <span class="str">`json:"id"`</span>
+    Name  <span class="ty">string</span> <span class="str">`json:"name"`</span>
+    Price <span class="ty">float64</span> <span class="str">`json:"price"`</span>
+}
+
+<span class="kw">var</span> rdb = redis.NewClient(&amp;redis.Options{
+    Addr: <span class="str">"localhost:6379"</span>,
+})
+
+<span class="cm">// GetProduct implements Cache-Aside (Lazy) caching.</span>
+<span class="cm">// 1. Check Redis first</span>
+<span class="cm">// 2. On miss, fetch from DB, store in cache, return</span>
+<span class="kw">func</span> <span class="fn">GetProduct</span>(ctx context.Context, productID <span class="ty">string</span>) (*Product, error) {
+    cacheKey := <span class="str">"product:"</span> + productID
+
+    <span class="cm">// Step 1: Try cache first (Cache Hit path)</span>
+    cached, err := rdb.Get(ctx, cacheKey).Result()
+    <span class="kw">if</span> err == <span class="kw">nil</span> {
+        <span class="kw">var</span> product Product
+        json.Unmarshal([]byte(cached), &amp;product)
+        fmt.Println(<span class="str">"[CACHE HIT]"</span>, productID)
+        <span class="kw">return</span> &amp;product, <span class="kw">nil</span>
+    }
+
+    <span class="cm">// Step 2: Cache Miss, fetch from database (expensive operation)</span>
+    fmt.Println(<span class="str">"[CACHE MISS] fetching from DB..."</span>, productID)
+    product, err := fetchFromDatabase(productID) <span class="cm">// simulate DB call</span>
+    <span class="kw">if</span> err != <span class="kw">nil</span> {
+        <span class="kw">return</span> <span class="kw">nil</span>, err
+    }
+
+    <span class="cm">// Step 3: Store in cache with a 1-hour TTL</span>
+    data, _ := json.Marshal(product)
+    rdb.Set(ctx, cacheKey, data, 1*time.Hour)
+
+    <span class="kw">return</span> product, <span class="kw">nil</span>
+}
+
+<span class="cm">// Write-Through: update DB and cache simultaneously</span>
+<span class="kw">func</span> <span class="fn">UpdateProduct</span>(ctx context.Context, product *Product) error {
+    <span class="cm">// Step 1: Update in database</span>
+    <span class="kw">if</span> err := updateInDatabase(product); err != <span class="kw">nil</span> {
+        <span class="kw">return</span> err
+    }
+
+    <span class="cm">// Step 2: Write-through, update cache immediately</span>
+    cacheKey := <span class="str">"product:"</span> + product.ID
+    data, _ := json.Marshal(product)
+    rdb.Set(ctx, cacheKey, data, 1*time.Hour)
+
+    fmt.Println(<span class="str">"[WRITE-THROUGH] DB + cache updated for"</span>, product.ID)
+    <span class="kw">return</span> <span class="kw">nil</span>
+}</code></pre>
+
+    <!-- GO: Rate Limiting -->
+    <h3>10.2: Middleware di limitazione della velocità in Go</h3>
+    <div class="code-file">
+      <div class="code-dot dot-r"></div><div class="code-dot dot-y"></div><div class="code-dot dot-g"></div>
+      <span>rate_limiter.go / Go + go-redis</span>
+    </div>
+<pre><code><span class="kw">package</span> middleware
+
+<span class="kw">import</span> (
+    <span class="str">"context"</span>
+    <span class="str">"fmt"</span>
+    <span class="str">"net/http"</span>
+    <span class="str">"time"</span>
+
+    <span class="str">"github.com/redis/go-redis/v9"</span>
+)
+
+<span class="kw">const</span> (
+    maxRequests = <span class="num">50</span>
+    windowTime  = 1 * time.Minute
+)
+
+<span class="kw">func</span> <span class="fn">RateLimitMiddleware</span>(rdb *redis.Client) http.HandlerFunc {
+    <span class="kw">return</span> <span class="kw">func</span>(w http.ResponseWriter, r *http.Request) {
+        ctx := context.Background()
+
+        <span class="cm">// Extract client IP from X-Forwarded-For header</span>
+        <span class="cm">// (set by reverse proxy like Nginx or Caddy)</span>
+        clientIP := r.Header.Get(<span class="str">"X-Forwarded-For"</span>)
+        <span class="kw">if</span> clientIP == <span class="str">""</span> {
+            clientIP = r.RemoteAddr
+        }
+
+        <span class="cm">// Redis key: per IP, per minute window</span>
+        key := fmt.Sprintf(<span class="str">"rate_limit:%s:%d"</span>, clientIP, time.Now().Unix()/60)
+
+        <span class="cm">// INCR is atomic, no race condition even with concurrent requests</span>
+        count, err := rdb.Incr(ctx, key).Result()
+        <span class="kw">if</span> err != <span class="kw">nil</span> {
+            http.Error(w, <span class="str">"Internal Server Error"</span>, http.StatusInternalServerError)
+            <span class="kw">return</span>
+        }
+
+        <span class="cm">// Set TTL on first request of this window (key is new)</span>
+        <span class="kw">if</span> count == <span class="num">1</span> {
+            rdb.Expire(ctx, key, windowTime)
+        }
+
+        <span class="cm">// Check if limit exceeded</span>
+        <span class="kw">if</span> count > maxRequests {
+            w.Header().Set(<span class="str">"Retry-After"</span>, <span class="str">"60"</span>)
+            http.Error(w, <span class="str">"429 Too Many Requests"</span>, http.StatusTooManyRequests)
+            <span class="kw">return</span>
+        }
+
+        <span class="cm">// Proceed to actual handler</span>
+        w.Header().Set(<span class="str">"X-RateLimit-Remaining"</span>, fmt.Sprintf(<span class="str">"%d"</span>, maxRequests-count))
+    }
+}</code></pre>
+
+    <!-- PYTHON: Lazy Cache with decorator -->
+    <h3>10.3: Decoratore di memorizzazione nella cache in Python</h3>
+    <div class="code-file">
+      <div class="code-dot dot-r"></div><div class="code-dot dot-y"></div><div class="code-dot dot-g"></div>
+      <span>cache.py / Python + redis-py + FastAPI</span>
+    </div>
+<pre><code><span class="kw">import</span> json
+<span class="kw">import</span> functools
+<span class="kw">import</span> redis
+<span class="kw">from</span> fastapi <span class="kw">import</span> FastAPI
+
+app = FastAPI()
+
+<span class="cm"># Connect to Redis</span>
+r = redis.Redis(host=<span class="str">"localhost"</span>, port=<span class="num">6379</span>, decode_responses=<span class="kw">True</span>)
+
+<span class="kw">def</span> <span class="fn">cache_result</span>(ttl: int = <span class="num">3600</span>):
+    <span class="str">"""
+    Decorator that implements lazy (cache-aside) caching.
+    ttl: time-to-live in seconds (default 1 hour)
+    """</span>
+    <span class="kw">def</span> <span class="fn">decorator</span>(func):
+        @functools.wraps(func)
+        <span class="kw">async def</span> <span class="fn">wrapper</span>(*args, **kwargs):
+            <span class="cm"># Build cache key from function name + args</span>
+            cache_key = f<span class="str">"{func.__name__}:{args}:{kwargs}"</span>
+
+            <span class="cm"># Step 1: Check cache (Cache Hit)</span>
+            cached = r.get(cache_key)
+            <span class="kw">if</span> cached:
+                print(f<span class="str">"[CACHE HIT] {cache_key}"</span>)
+                <span class="kw">return</span> json.loads(cached)
+
+            <span class="cm"># Step 2: Cache Miss, execute the actual function</span>
+            print(f<span class="str">"[CACHE MISS] calling {func.__name__}..."</span>)
+            result = <span class="kw">await</span> func(*args, **kwargs)
+
+            <span class="cm"># Step 3: Store in Redis with TTL</span>
+            r.setex(cache_key, ttl, json.dumps(result))
+
+            <span class="kw">return</span> result
+        <span class="kw">return</span> wrapper
+    <span class="kw">return</span> decorator
+
+
+<span class="cm"># Usage: apply cache decorator to any route handler</span>
+@app.get(<span class="str">"/products/{product_id}"</span>)
+@cache_result(ttl=<span class="num">3600</span>)  <span class="cm"># cache for 1 hour</span>
+<span class="kw">async def</span> <span class="fn">get_product</span>(product_id: str):
+    <span class="cm"># Expensive DB query, only runs on cache miss</span>
+    product = <span class="kw">await</span> fetch_from_db(product_id)
+    <span class="kw">return</span> product
+
+
+<span class="cm"># TTL-based API Response Caching (e.g. weather)</span>
+@app.get(<span class="str">"/weather/{city}"</span>)
+<span class="kw">async def</span> <span class="fn">get_weather</span>(city: str):
+    cache_key = f<span class="str">"weather:{city}"</span>
+
+    <span class="cm"># Check cache (TTL = 1 hour, weather doesn't change every minute)</span>
+    cached = r.get(cache_key)
+    <span class="kw">if</span> cached:
+        <span class="kw">return</span> {<span class="str">"source"</span>: <span class="str">"cache"</span>, <span class="str">"data"</span>: json.loads(cached)}
+
+    <span class="cm"># Miss: call external weather API (costs money / rate limited)</span>
+    weather_data = <span class="kw">await</span> call_weather_api(city)
+
+    <span class="cm"># Store for 1 hour</span>
+    r.setex(cache_key, <span class="num">3600</span>, json.dumps(weather_data))
+
+    <span class="kw">return</span> {<span class="str">"source"</span>: <span class="str">"api"</span>, <span class="str">"data"</span>: weather_data}</code></pre>
+
+    <!-- PYTHON: Session in Redis -->
+    <h3>10.4: Gestione delle sessioni con Redis (Python)</h3>
+    <div class="code-file">
+      <div class="code-dot dot-r"></div><div class="code-dot dot-y"></div><div class="code-dot dot-g"></div>
+      <span>session.py / Python + redis-py</span>
+    </div>
+<pre><code><span class="kw">import</span> uuid
+<span class="kw">import</span> json
+<span class="kw">import</span> redis
+<span class="kw">from</span> datetime <span class="kw">import</span> timedelta
+
+r = redis.Redis(host=<span class="str">"localhost"</span>, port=<span class="num">6379</span>, decode_responses=<span class="kw">True</span>)
+
+<span class="kw">def</span> <span class="fn">create_session</span>(user_id: str, user_data: dict) -> str:
+    <span class="str">"""Create a session after successful login. Store in Redis."""</span>
+    session_id = str(uuid.uuid4())
+    session_key = f<span class="str">"session:{session_id}"</span>
+
+    <span class="cm"># Store session data with 24-hour TTL</span>
+    <span class="cm"># TTL ensures sessions auto-expire, no manual cleanup needed</span>
+    r.setex(
+        session_key,
+        timedelta(hours=<span class="num">24</span>),
+        json.dumps({<span class="str">"user_id"</span>: user_id, **user_data})
+    )
+
+    <span class="kw">return</span> session_id  <span class="cm"># returned to client as cookie/token</span>
+
+
+<span class="kw">def</span> <span class="fn">get_session</span>(session_id: str) -> dict | <span class="kw">None</span>:
+    <span class="str">"""
+    Validate session on every authenticated API request.
+    Redis O(1) lookup, microseconds, not milliseconds.
+    """</span>
+    session_key = f<span class="str">"session:{session_id}"</span>
+    data = r.get(session_key)
+
+    <span class="kw">if not</span> data:
+        <span class="kw">return None</span>  <span class="cm"># session expired or invalid</span>
+
+    <span class="cm"># Optionally: refresh TTL on activity (sliding window)</span>
+    r.expire(session_key, timedelta(hours=<span class="num">24</span>))
+
+    <span class="kw">return</span> json.loads(data)
+
+
+<span class="kw">def</span> <span class="fn">delete_session</span>(session_id: str):
+    <span class="str">"""Logout, delete session from Redis immediately."""</span>
+    r.delete(f<span class="str">"session:{session_id}"</span>)</code></pre>
+  </section>
+
+  <hr class="chapter-divider"/>
+
+  <!-- REFERENCES -->
+  <section id="refs">
+    <div class="section-num">RIFERIMENTI</div>
+    <h2>Ulteriori letture e documentazione</h2>
+
+    <h4>Documenti ufficiali Redis</h4>
+    <div class="ref-box">
+      <a href="https://redis.io/docs/" target="_blank">redis.io/docs, documentazione ufficiale di Redis</a>
+      <a href="https://redis.io/docs/data-types/" target="_blank">Tipi di dati Redis (stringa, hash, elenco, set, set ordinato, flusso)</a>
+      <a href="https://redis.io/docs/reference/eviction/" target="_blank">Politiche di sfratto Redis (noeviction, allkeys-lru, allkeys-lfu, volatile-ttl)</a>
+      <a href="https://redis.io/docs/management/persistence/" target="_blank">Persistenza Redis (istantanee RDB, registro di sola aggiunta AOF)</a>
+      <a href="https://redis.io/commands/incr/" target="_blank">Comando Redis INCR (contatore atomico, utilizzato nella limitazione della velocità)</a>
+      <a href="https://redis.io/commands/setex/" target="_blank">Comando Redis SETEX (impostato con TTL)</a>
+    </div>
+
+    <h4>Documenti Web MDN</h4>
+    <div class="ref-box">
+      <a href="https://developer.mozilla.org/en-US/docs/Glossary/Cache" target="_blank">MDN, Glossario della cache</a>
+      <a href="https://developer.mozilla.org/en-US/docs/Glossary/DNS" target="_blank">MDN, Glossario DNS</a>
+      <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Cache-Control" target="_blank">MDN, intestazione HTTP con controllo della cache</a>
+      <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/429" target="_blank">MDN, HTTP 429 Troppe richieste</a>
+      <a href="https://developer.mozilla.org/en-US/docs/Web/Performance/dns-prefetch" target="_blank">MDN, Prelettura DNS (caching DNS lato browser)</a>
+    </div>
+
+    <h4>Vai al client Redis</h4>
+    <div class="ref-box">
+      <a href="https://github.com/redis/go-redis" target="_blank">github.com/redis/go-redis, client ufficiale Go Redis</a>
+      <a href="https://redis.uptrace.dev/guide/" target="_blank">Guida go-redis, Nozioni di base, comandi, pipeline</a>
+    </div>
+
+    <h4>Client Redis Python</h4>
+    <div class="ref-box">
+      <a href="https://redis-py.readthedocs.io/en/stable/" target="_blank">redis-py Docs, client ufficiale Python Redis</a>
+    </div>
+
+    <h4>Cloudflare e CDN</h4>
+    <div class="ref-box">
+      <a href="https://www.cloudflare.com/learning/cdn/what-is-a-cdn/" target="_blank">Cloudflare, cos'è un CDN?</a>
+      <a href="https://www.cloudflare.com/learning/dns/what-is-dns/" target="_blank">Cloudflare, Come funziona il DNS (eccellenti diagrammi interattivi)</a>
+    </div>
+
+    <div style="margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid var(--divider);">
+      <p style="font-family:'JetBrains Mono', ui-monospace, monospace; font-size:11px; color:var(--ink3); letter-spacing:0.08em;">
+        MANUALE DI INGEGNERIA DEL BACKEND / V2 / CAPITOLO 12 / CACHING<br/>
+        Appunti compilati dalla trascrizione della lezione/esempi Go+Python/riferimenti MDN e Redis in linea
+      </p>
+    </div>
+  </section>
+
+
+      <footer class="bfp-footer">Backend da Primi Principi / Capitolo 09 / Caching. Il codice è destinato a Go 1.22+ e Python 3.11+.</footer>
+</main>
+</div>
+<!-- SIDEBAR -->
+
+
+<!-- MAIN -->
+
+
+
+<!-- CHAPTER NAVIGATION -->
+<nav class="chapter-nav" id="chapterNav">
+  <a href="../../8.Database-with-backend/html_notes/notes.html" class="nav-chapter-link"><span class="nav-arrow"><svg class="ico-arrow" width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="13.5" y1="8" x2="3.5" y2="8"/><polyline points="7.5,4 3.5,8 7.5,12"/></svg></span><span class="nav-label"><span class="nav-small">Capitolo 8</span>Database</span></a>
+  <a href="../../index.html" class="nav-indicator"><span class="nav-dot"></span> Capitolo 9 <span class="nav-sep">/</span> 24</a>
+  <a href="../../10.Task queues and background job/html_notes/notes.html" class="nav-chapter-link nav-next"><span class="nav-label"><span class="nav-small">Capitolo 10</span>Code di attività e lavori in background</span><span class="nav-arrow"><svg class="ico-arrow" width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="2.5" y1="8" x2="12.5" y2="8"/><polyline points="8.5,4 12.5,8 8.5,12"/></svg></span></a>
+</nav>
+  <script src="../../assets/copy-button.js"></script>
+  <script src="../../assets/enhancements.js"></script>
+<script src="../../assets/shell.js"></script>
+</body>
+
+</html>

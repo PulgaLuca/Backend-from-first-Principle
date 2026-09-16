@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="referrer" content="no-referrer">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Specifiche e documentazione OpenAPI / Capitolo 25 / Backend dai primi principi</title>
+<meta name="description" content="Capitolo 25 di Backend from First Principles: specifiche e documentazione OpenAPI. Un linguaggio contrattuale API: struttura, interfaccia utente Swagger, design-first o code-first, generazione di codice e mantenimento delle specifiche sincronizzate.">
+<meta name="theme-color" content="#2d3a4a">
+<link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2032%2032'%3E%3Crect%20width='32'%20height='32'%20rx='7'%20fill='%232d3a4a'/%3E%3Ctext%20x='16'%20y='23'%20font-family='Georgia,serif'%20font-size='19'%20font-weight='700'%20fill='%23f3ede2'%20text-anchor='middle'%3EO%3C/text%3E%3C/svg%3E">
+<style>
+:root{
+  --paper:#f3ede2; --paper-2:#ece3d4; --paper-3:#e6dcca;
+  --ink:#211e1a; --ink-soft:#5b5347; --ink-faint:#8d8475;
+  --accent:#b8402e; --accent-2:#8f2f20; --accent-soft:#f4ded6; --accent-line:#e3c4b8;
+  --green:#3f6f4e; --green-soft:#e0e9dd; --green-line:#bcd3b6;
+  --blue:#37607f; --blue-soft:#dee5ee;
+  --gold:#b07d2b; --gold-soft:#f0e5c9;
+  --border:#d8cfbe; --border-2:#c7bca6;
+  --code-bg:#232019; --code-2:#1a1813; --code-text:#e9e2d3; --code-faint:#9c948a;
+  --c-kw:#e0896a; --c-str:#a9c98a; --c-com:#7d7468; --c-num:#d8b66a; --c-fn:#7fb0c9;
+}
+*{box-sizing:border-box;}
+html{scroll-behavior:smooth;}
+body{margin:0;background:var(--paper);color:var(--ink);font-family:"Spline Sans",system-ui,sans-serif;font-size:17px;line-height:1.7;-webkit-font-smoothing:antialiased;}
+h1{font-size:2rem;margin:0 0 .5rem;line-height:1.2;}
+h2{font-size:1.5rem;margin:2rem 0 .75rem;color:var(--accent-2);border-bottom:2px solid var(--accent-line);padding-bottom:.3rem;}
+h3{font-size:1.2rem;margin:1.5rem 0 .5rem;}
+p{margin:.75rem 0;max-width:65ch;}
+code{background:var(--code-bg);color:var(--code-text);padding:2px 6px;border-radius:4px;font-size:.9em;font-family:"JetBrains Mono",monospace;}
+pre{background:var(--code-bg);color:var(--code-text);padding:1rem;border-radius:8px;overflow-x:auto;line-height:1.5;font-family:"JetBrains Mono",monospace;font-size:.85rem;}
+pre code{background:none;padding:0;color:var(--code-text);}
+table{border-collapse:collapse;width:100%;margin:1rem 0;}
+th,td{border:1px solid var(--border);padding:.5rem .75rem;text-align:left;font-size:.9rem;}
+th{background:var(--paper-2);font-weight:600;}
+.callout{background:var(--green-soft);border-left:4px solid var(--green);padding:1rem 1.25rem;margin:1.25rem 0;border-radius:0 8px 8px 0;}
+.callout-title{font-weight:700;margin-bottom:.35rem;color:var(--green);}
+.callout.warn{background:var(--gold-soft);border-left-color:var(--gold);}
+.callout.warn .callout-title{color:var(--gold);}
+.callout.info{background:var(--blue-soft);border-left-color:var(--blue);}
+.callout.info .callout-title{color:var(--blue);}
+.diagram{background:var(--paper-2);border:1px solid var(--border);border-radius:8px;padding:1rem;margin:1rem 0;overflow-x:auto;text-align:center;}
+.section-label{font-size:.85rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--accent);margin-bottom:.5rem;}
+.chapter-meta{color:var(--ink-soft);font-size:.9rem;margin-bottom:1rem;}
+.footer{margin-top:3rem;padding-top:1.5rem;border-top:1px solid var(--border);color:var(--ink-faint);font-size:.85rem;}
+</style>
+</head>
+<body>
+<main style="max-width:720px;margin:0 auto;padding:2rem 1.5rem;">
+
+<p class="section-label">Capitolo 25</p>
+<h1>Specifiche e documentazione OpenAPI</h1>
+<p class="chapter-meta">Parte II / Il livello contrattuale · ~2-3 ore · Leggi l'MDX completo <code>src/content/chapters/25-openapi-specification.mdx</code></p>
+
+<h2>Il problema risolto da OpenAPI</h2>
+<p>Ogni API inizia come un'idea tra due ingegneri. All'inizio il contratto risiede in un thread Slack o in un file di markdown e funziona, finché non funziona più. <strong>Deriva</strong> è la modalità di errore universale: Alice aggiunge un campo, il client di Bob si interrompe ed entrambi discutono su cosa fa effettivamente l'API. Un file di markdown è una conversazione; una conversazione va alla deriva.</p>
+
+<div class="diagram">
+<svg viewBox="0 0 720 220" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Due ingegneri il cui contratto API va alla deriva perché le specifiche vivono nella prosa"><rect x="40" y="30" width="140" height="80" rx="12" fill="var(--accent-soft)" stroke="var(--accent)"></rect><text x="110" y="62" font-size="13" font-weight="700" fill="var(--accent)" text-anchor="middle">Alice</text><text x="110" y="85" class="mono" font-size="9" fill="var(--ink-2)" text-anchor="middle">scrive il codice</text><rect x="280" y="30" width="160" height="80" rx="12" fill="var(--gold-soft)" stroke="var(--gold)"></rect><text x="360" y="62" font-size="13" font-weight="700" fill="var(--gold)" text-anchor="middle">Specificazione della prosa</text><text x="360" y="85" class="mono" font-size="9" fill="var(--ink-2)" text-anchor="middle">vive in ribasso</text><rect x="540" y="30" width="140" height="80" rx="12" fill="var(--accent-soft)" stroke="var(--accent)"></rect><text x="610" y="62" font-size="13" font-weight="700" fill="var(--accent)" text-anchor="middle">Bob</text><text x="610" y="85" class="mono" font-size="9" fill="var(--ink-2)" text-anchor="middle">legge la prosa</text><path d="M180 70 H280" stroke="var(--border)" stroke-width="1.5" stroke-dasharray="4 3"></path><path d="M440 70 H540" stroke="var(--border)" stroke-width="1.5" stroke-dasharray="4 3"></path><text x="90" y="200" font-size="9" fill="var(--gold)" text-anchor="end">deriva</text></svg>
+</div>
+
+<div class="callout">
+<div class="callout-title">L'unico cambiamento</div>
+<p>Sostituisci &quot;documentiamo l'API&quot; con &quot;let's <strong>spec</strong> l'API.&quot; Una specifica è un file che un computer può analizzare. Un documento è un file che un essere umano legge e ignora. La differenza è la differenza tra un contratto in vita e una pagina wiki morta.</p>
+</div>
+
+<h2>L'anatomia di una specifica OpenAPI</h2>
+<p>Una specifica OpenAPI è un singolo file YAML o JSON. Al centro ci sono queste chiavi:</p>
+
+<pre><code>openapi: 3.1.0
+info:
+  title: Bookstore API
+  version: 1.0.0
+servers:
+  - url: https://api.example.com/v1
+paths:
+  /books:
+    get:
+      operationId: listBooks
+      ...
+components:
+  schemas:
+    Book: ...</code></pre>
+
+<table>
+<tr><th>Chiave</th><th>Scopo</th><th>Obbligatorio</th></tr>
+<tr><td><code>openapi</code></td><td>Versione specifica (ad es. <code>3.1.0</code>)</td><td>Sì</td></tr>
+<tr><td><code>info</code></td><td>Titolo, descrizione, versione, contatto</td><td>Sì</td></tr>
+<tr><td><code>servers</code></td><td>URL di base per ambiente</td><td>No</td></tr>
+<tr><td><code>paths</code></td><td>Ogni endpoint e metodo HTTP</td><td>Sì</td></tr>
+<tr><td><code>components</code></td><td>Schemi riutilizzabili, schemi di sicurezza</td><td>No</td></tr>
+</table>
+
+<h2>Definizione di endpoint, schemi e codici di stato</h2>
+<p>I parametri risiedono nell'URL (<code>in: path</code>, <code>in: query</code>, <code>in: header</code>) o nell'organismo della richiesta. Le risposte sono codificate in base al codice di stato.</p>
+
+<pre><code>parameters:
+  - name: bookId
+    in: path
+    required: true
+    schema:
+      type: string
+  - name: page
+    in: query
+    schema:
+      type: integer
+      default: 1
+requestBody:
+  required: true
+  content:
+    application/json:
+      schema:
+        $ref: '#/components/schemas/CreateBook'</code></pre>
+
+<div class="callout">
+<div class="callout-title">Perché i componenti sono importanti</div>
+<p>Senza <code>components</code>, ogni risposta e ogni corpo della richiesta dovrebbero incorporare lo schema completo. Con <code>components</code>, a <code>Book</code> è definito una volta e viene fatto riferimento ovunque con <code>$ref: '#/components/schemas/Book'</code>. Ciò mantiene le specifiche ASCIUTTE e coerenti.</p>
+</div>
+
+<h2>Design-First o Code-First</h2>
+<p><strong>Il design innanzitutto</strong>: scrivere le specifiche prima del codice. Il contratto viene concordato in anticipo e sia i team frontend che backend lo implementano. <strong>Prima il codice</strong>: scrivi prima il codice del server e genera la specifica da esso: la specifica è sempre sincronizzata perché è derivata, non scritta a mano.</p>
+
+<table>
+<tr><th>Fattore</th><th>Il design innanzitutto</th><th>Prima il codice</th></tr>
+<tr><td>Dimensione della squadra</td><td>3+ ingegneri</td><td>Solo/piccola squadra</td></tr>
+<tr><td>Stabilità dell'API</td><td>Contratto stabile</td><td>In rapida evoluzione</td></tr>
+<tr><td>Consumatori esterni</td><td>Sì</td><td>Interno</td></tr>
+<tr><td>Velocità di iterazione</td><td>Iniziale più lenta</td><td>Più veloce</td></tr>
+</table>
+
+<div class="callout warn">
+<div class="callout-title">L'ibrido è il punto debole</div>
+<p>Scrivere prima le specifiche per il contratto iniziale (design-first), implementare il server nel codice (code-first) e utilizzare un controllo CI che convalidi le specifiche generate rispetto alle specifiche scritte a mano. Il meglio di entrambi i mondi.</p>
+</div>
+
+<h2>Interfaccia utente spavalda e documentazione interattiva</h2>
+<p>Servire le specifiche <strong>Interfaccia utente spavalda</strong> e ogni parte interessata ottiene un sito di documentazione live e interattivo. Gli utenti possono esplorare gli endpoint, provarli e vedere risposte di esempio, tutte generate automaticamente dalle specifiche.</p>
+
+<h2>Generazione del codice</h2>
+<p>Strumenti come <code>openapi-generator</code>, <code>orval</code>, e <code>swagger-typescript-api</code> leggere le specifiche e produrre SDK client tipizzati, stub di server e tipi TypeScript per ogni lingua. Una specifica guida documentazione, test, client e stub.</p>
+
+<h2>Mantenere le specifiche sincronizzate</h2>
+<p>Aggiungi la convalida CI che invia le richieste definite nelle specifiche e verifica che le risposte corrispondano agli schemi. Linting le specifiche con <code>spectral</code> o <code>openapi-lint</code>. Rileva la deriva confrontando la specifica generata con quella canonica. Versione delle specifiche insieme al codice in Git.</p>
+
+<div class="callout info">
+<div class="callout-title">Punto di partenza consigliato</div>
+<p>Se stai avviando una nuova API, prova <strong>code-first con FastAPI</strong> (Pitone) o <strong>NestJS</strong> (Script dattiloscritto). Entrambi generano una specifica OpenAPI valida dal tuo codice con zero configurazione. Aggiungi l'interfaccia utente Swagger per documenti interattivi e una fase di convalida CI per individuare le derive.</p>
+</div>
+
+<footer class="footer">
+<p><strong>Backend dai Primi Principi</strong> — Capitolo 25 · Specifiche e documentazione OpenAPI</p>
+<p>A cura di <a href="https://github.com/DsThakurRawat">@DsThakurRawat</a></p>
+</footer>
+
+</main>
+</body>
+</html>

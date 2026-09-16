@@ -1,0 +1,974 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="referrer" content="no-referrer">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Controller, servizi e middleware / Capitolo 06 / Backend dai principi primi</title>
+  <meta name="description" content="Capitolo 06 di Backend dai principi primi: controller, servizi e middleware. Note sui principi primi, diagrammi ed esempi eseguibili in Go e Python.">
+  <meta name="theme-color" content="#f3ede2">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2032%2032'%3E%3Crect%20width='32'%20height='32'%20rx='7'%20fill='%23b8402e'/%3E%3Ctext%20x='16'%20y='23'%20font-family='Georgia,serif'%20font-size='19'%20font-weight='700'%20fill='%23f3ede2'%20text-anchor='middle'%3EB%3C/text%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<style>
+  :root{
+  --paper: #f3ede2;
+  --paper-2: #ece3d4;
+  --ink: #211e1a;
+  --ink-soft: #5b5347;
+  --muted: #8d8475;
+  --muted-2: #8d8475;
+  --line: #d8cfbe;
+  --line-strong: #c7bca6;
+  --red: #b8402e;
+  --red-deep: #8f2f20;
+  --code-bg: #232019;
+  --code-ink: #e9e2d3;
+  --code-dim: #9c948a;
+  --code-red: #e0896a;
+  --code-amber: #d8b66a;
+  --code-green: #a9c98a;
+  --code-blue: #7fb0c9;
+  --maxw: 1180px;
+}
+  *{box-sizing:border-box;}
+  html{scroll-behavior:smooth;}
+  body{
+    margin:0;
+    background:var(--paper);
+    color:var(--ink);
+    font-family:"Spline Sans", system-ui, sans-serif;
+    font-size: 17px;
+    line-height: 1.7;
+    -webkit-font-smoothing:antialiased;
+    background-image:radial-gradient(circle at 1px 1px, rgba(120,108,86,.05) 1px, transparent 0);
+    background-size:22px 22px;
+  }
+  /* ---------- Sidebar ---------- */
+  aside{
+    border-right:1px solid var(--line);
+    padding:42px 30px 80px 14px;
+    position:sticky;top:0;height:100vh;overflow-y:auto;
+  }
+  /* ---------- Main ---------- */
+  .bfp-content{padding:42px 60px 120px;min-width:0;}
+  .eyebrow{font-family:"JetBrains Mono", ui-monospace, monospace;font-size:11px;letter-spacing:.26em;text-transform:uppercase;color:var(--red);margin-bottom:18px;}
+  h1.title{font-family:"Fraunces", Georgia, serif;font-weight:800;font-size:clamp(54px,8vw,104px);line-height:.92;letter-spacing:-.02em;margin:0 0 6px;}
+  h1.title .it{font-style:italic;color:var(--red);font-weight:800;display:block;}
+  .lede{font-size: 19px;line-height: 1.6;max-width:680px;margin:30px 0 30px;color:var(--ink-soft);}
+  .lede em{font-style:italic;}
+  .pills{display:flex;flex-wrap:wrap;gap:11px;margin-bottom:30px;}
+  .pill{font-family:"JetBrains Mono", ui-monospace, monospace;font-size:11px;letter-spacing:.06em;border:1px solid var(--line-strong);border-radius:30px;padding:8px 16px;color:var(--ink-soft);background:rgba(255,255,255,.18);}
+  .rule-sm{width:90px;height:3px;background:var(--red);margin:8px 0 0;}
+  /* ---------- Section ---------- */
+  section{margin-top:78px;scroll-margin-top:20px;}
+  .part-head{font-family:"JetBrains Mono", ui-monospace, monospace;font-size:11px;letter-spacing:.24em;text-transform:uppercase;color:var(--red);border-top:1px solid var(--line-strong);padding-top:14px;margin-bottom:30px;display:flex;justify-content:space-between;}
+  .part-head span:last-child{color:var(--muted-2);}
+  h2{font-family:"Fraunces", Georgia, serif;font-weight:800;font-size:clamp(34px,4.6vw,52px);line-height:1.02;letter-spacing:-.018em;margin:0 0 26px;display:flex;align-items:center;gap:18px;}
+  h2 .badge{display:inline-flex;align-items:center;justify-content:center;background:var(--red);color:#fff;font-family:"JetBrains Mono", ui-monospace, monospace;font-weight:700;font-size:18px;width:46px;height:46px;border-radius:9px;flex:none;box-shadow:3px 3px 0 rgba(143,47,32,.28);}
+  h3{font-family:"Fraunces", Georgia, serif;font-weight:700;font-size:27px;letter-spacing:-.01em;margin:46px 0 14px;}
+  h4{font-family:"JetBrains Mono", ui-monospace, monospace;font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:var(--red-deep);margin:30px 0 10px;}
+  p{margin:0 0 18px;max-width:760px;}
+  strong{font-weight:600;color:var(--ink);}
+  em{font-style:italic;}
+  code.inl{font-family:"JetBrains Mono", ui-monospace, monospace;font-size:.82em;background:var(--paper-2);border:1px solid var(--line);padding:1.5px 6px;border-radius:5px;color:var(--red-deep);}
+  a.x{color:var(--red);text-decoration:none;border-bottom:1px solid rgba(184,64,46,.3);}
+  /* ---------- Definition rows ---------- */
+  .def{display:grid;grid-template-columns:280px 1fr;gap:30px;border-top:1px solid var(--line);padding:22px 0;align-items:start;}
+  .def .label{font-family:"Fraunces", Georgia, serif;font-weight:700;font-size:21px;}
+  .def .label .tag{display:block;font-family:"JetBrains Mono", ui-monospace, monospace;font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:var(--red);margin-bottom:6px;font-weight:400;}
+  .def .body{max-width:660px;}
+  .def .body p{margin:0;}
+  /* ---------- Callout ---------- */
+  .note{border-left:3px solid var(--red);background:rgba(255,255,255,.28);padding:18px 22px;margin:26px 0;max-width:760px;border-radius:0 8px 8px 0;}
+  .note .h{font-family:"JetBrains Mono", ui-monospace, monospace;font-size:10.5px;letter-spacing:.18em;text-transform:uppercase;color:var(--red-deep);margin-bottom:8px;}
+  .note p{margin:0;font-size:17px;}
+  /* ---------- Steps ---------- */
+  ol.steps{list-style:none;counter-reset:s;padding:0;margin:24px 0;max-width:760px;}
+  ol.steps>li{counter-increment:s;position:relative;padding:16px 0 16px 58px;border-top:1px solid var(--line);}
+  ol.steps>li::before{content:counter(s,decimal-leading-zero);position:absolute;left:0;top:16px;font-family:"JetBrains Mono", ui-monospace, monospace;font-size:13px;font-weight:700;color:#fff;background:var(--ink);width:32px;height:32px;border-radius:7px;display:flex;align-items:center;justify-content:center;}
+  ol.steps>li .st-h{font-family:"Fraunces", Georgia, serif;font-weight:700;font-size:19px;margin-bottom:3px;}
+  ol.steps>li .st-b{font-size:16.5px;color:var(--ink-soft);}
+  ul.clean{max-width:760px;padding-left:0;list-style:none;}
+  ul.clean li{padding:7px 0 7px 26px;position:relative;border-bottom:1px dotted var(--line);}
+  ul.clean li::before{content:"";position:absolute;left:4px;top:18px;width:7px;height:7px;background:var(--red);border-radius:2px;transform:rotate(45deg);}
+  /* ---------- Code blocks ---------- */
+  .code{margin:26px 0;border-radius:11px;overflow:hidden;border:1px solid #35302a;box-shadow:0 14px 30px -18px rgba(35,32,25,.6);max-width:840px;}
+  .code-bar{background:#1a1813;display:flex;align-items:stretch;border-bottom:1px solid #35302a;}
+  .code-bar .dots{display:flex;gap:6px;align-items:center;padding:0 16px;}
+  .code-bar .dots i{width:11px;height:11px;border-radius:50%;display:block;}
+  .code-bar .fname{font-family:"JetBrains Mono", ui-monospace, monospace;font-size:11px;color:var(--code-dim);display:flex;align-items:center;letter-spacing:.04em;}
+  .tabs{margin-left:auto;display:flex;}
+  .tabs button{font-family:"JetBrains Mono", ui-monospace, monospace;font-size:11px;letter-spacing:.08em;background:transparent;border:none;color:var(--code-dim);padding:11px 18px;cursor:pointer;border-left:1px solid #35302a;transition:.15s;text-transform:uppercase;}
+  .tabs button.active{background:var(--code-bg);color:var(--code-amber);}
+  .tabs button:hover{color:var(--code-ink);}
+  pre{margin:0;background:var(--code-bg);color:var(--code-ink);font-family:"JetBrains Mono", ui-monospace, monospace;font-size:13px;line-height:1.7;padding:20px 22px;overflow-x:auto;}
+  pre[hidden]{display:none;}
+  pre .c{color:var(--code-dim);font-style:italic;}
+  pre .k{color:var(--code-red);}
+  pre .s{color:var(--code-green);}
+  pre .f{color:var(--code-blue);}
+  pre .n{color:var(--code-amber);}
+  pre::-webkit-scrollbar{height:8px;}
+  pre::-webkit-scrollbar-thumb{background:#4a443b;border-radius:4px;}
+  /* ---------- Diagram frame ---------- */
+  figure{margin:34px 0;max-width:840px;}
+  .diagram{background:rgba(255,255,255,.32);border:1px solid var(--line-strong);border-radius:12px;padding:26px 22px;}
+  figcaption{font-family:"JetBrains Mono", ui-monospace, monospace;font-size:11px;letter-spacing:.04em;color:var(--muted);margin-top:12px;text-align:center;}
+  figcaption b{color:var(--red-deep);font-weight:500;}
+  svg{display:block;width:100%;height:auto;}
+  .sv-lbl{font-family:"JetBrains Mono", ui-monospace, monospace;font-size:11px;letter-spacing:.06em;fill:var(--muted);text-transform:uppercase;}
+  .sv-ttl{font-family:"Fraunces", Georgia, serif;font-weight:700;}
+  .sv-sub{font-family:"Spline Sans", system-ui, sans-serif;font-style:italic;}
+  .sv-mono{font-family:"JetBrains Mono", ui-monospace, monospace;}
+  /* status chips */
+  .chips{display:flex;flex-wrap:wrap;gap:10px;margin:18px 0 24px;max-width:760px;}
+  .chip{font-family:"JetBrains Mono", ui-monospace, monospace;font-size:12px;padding:6px 13px;border-radius:6px;border:1px solid var(--line-strong);}
+  .chip.ok{background:rgba(120,160,90,.14);border-color:#bcd3b6;color:#3f6f4e;}
+  .chip.bad{background:rgba(184,64,46,.1);border-color:#e3c4b8;color:var(--red-deep);}
+  .chip.warn{background:rgba(220,160,60,.14);border-color:#ddc79a;color:#b07d2b;}
+  footer{margin-top:90px;border-top:1px solid var(--line-strong);padding-top:24px;font-family:"JetBrains Mono", ui-monospace, monospace;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px;}
+  /* mobile */
+  @media(max-width:920px){
+    .bfp-content{padding:34px 22px 90px;}
+    .def{grid-template-columns:1fr;gap:8px;}}
+  @media(max-width:560px){
+    body{font-size:17px;}}</style>
+<style>
+.chapter-nav{position:fixed;bottom:0;left:0;right:0;z-index:9998;display:flex;align-items:center;justify-content:space-between;padding:14px clamp(16px,4vw,48px);background:rgba(243,237,226,.88);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border-top:1.5px solid #c7bca6;box-shadow:0 -8px 32px -16px rgba(40,30,20,.18);font-family:"JetBrains Mono", ui-monospace, monospace;}
+.nav-chapter-link{display:flex;align-items:center;gap:12px;text-decoration:none;color:#5b5347;padding:10px 18px;border-radius:10px;transition:all .2s ease;max-width:38%;}
+.nav-chapter-link:hover{background:rgba(184,64,46,.08);color:#b8402e;transform:translateY(-1px);}
+.nav-chapter-link.nav-next{text-align:right;flex-direction:row;}
+.nav-arrow{font-size:22px;color:#b8402e;font-weight:700;flex:none;}
+.nav-label{display:flex;flex-direction:column;gap:2px;font-size:13.5px;line-height:1.3;}
+.nav-small{font-size:10px;letter-spacing:.22em;text-transform:uppercase;color:#8d8475;font-weight:600;}
+.nav-indicator{font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:#b8402e;font-weight:700;text-decoration:none;padding:8px 16px;border:1.5px solid #c7bca6;border-radius:40px;background:rgba(255,255,255,.5);transition:all .2s;white-space:nowrap;}
+.nav-indicator:hover{background:#b8402e;color:#fff;border-color:#b8402e;}
+.nav-dot{display:inline-block;width:7px;height:7px;background:#b8402e;border-radius:50%;margin-right:4px;vertical-align:middle;}
+.nav-sep{color:#c7bca6;margin:0 2px;}
+.nav-disabled{visibility:hidden;pointer-events:none;}
+@media(max-width:700px){.nav-label{font-size:11.5px;}.nav-chapter-link{padding:8px 10px;max-width:38%;}.chapter-nav{padding:10px 12px;}.nav-small{font-size:9px;letter-spacing:.16em;}}
+@media(max-width:520px){.nav-label{display:none;}.nav-chapter-link{max-width:none;padding:8px 12px;}.nav-arrow{font-size:20px;}.nav-indicator{font-size:11px;padding:7px 13px;letter-spacing:.12em;}}
+body{padding-bottom:80px;}
+</style>
+  <link rel="stylesheet" href="../../assets/copy-button.css">
+  <link rel="stylesheet" href="../../assets/enhancements.css">
+  <link rel="stylesheet" href="../../assets/shell.css">
+  <link rel="stylesheet" href="../../assets/theme.css">
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;0,9..144,900;1,9..144,400;1,9..144,600&family=Spline+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="../../assets/theme.js"></script>
+</head>
+<body>
+<button class="bfp-toc-toggle" id="bfpTocToggle" aria-controls="bfpToc" aria-expanded="false"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><line x1="2" y1="4" x2="14" y2="4"/><line x1="2" y1="8" x2="14" y2="8"/><line x1="2" y1="12" x2="14" y2="12"/></svg>Contenuto</button>
+<div class="bfp-toc-scrim" id="bfpTocScrim"></div>
+<div class="bfp-shell">
+    <aside class="bfp-toc" id="bfpToc">
+      <div class="bfp-brand"><span class="bfp-brand-name">Strati</span><span class="bfp-brand-slash">/</span><span class="bfp-brand-lens">l'obiettivo del back-end</span></div>
+      <div class="bfp-brand-sub">Capitolo 06/Manuale da campo</div>
+      <div class="bfp-toc-rule"></div>
+      <nav class="bfp-toc-nav">
+        <div class="bfp-toc-part">Parte I / Il viaggio della richiesta</div>
+        <a class="bfp-toc-link" href="#s1"><span class="bfp-toc-num">01</span><span class="bfp-toc-text">Cliente e server</span></a>
+        <a class="bfp-toc-link" href="#s2"><span class="bfp-toc-num">02</span><span class="bfp-toc-text">Il ciclo di vita della richiesta</span></a>
+        <a class="bfp-toc-link" href="#s3"><span class="bfp-toc-num">03</span><span class="bfp-toc-text">Punto di ingresso e percorso</span></a>
+        <a class="bfp-toc-link" href="#s4"><span class="bfp-toc-num">04</span><span class="bfp-toc-text">Perché tre strati?</span></a>
+        <div class="bfp-toc-part">Parte II / I tre strati</div>
+        <a class="bfp-toc-link" href="#s5"><span class="bfp-toc-num">05</span><span class="bfp-toc-text">Il Titolare/Responsabile</span></a>
+        <a class="bfp-toc-link" href="#s6"><span class="bfp-toc-num">06</span><span class="bfp-toc-text">Il livello di servizio</span></a>
+        <a class="bfp-toc-link" href="#s7"><span class="bfp-toc-num">07</span><span class="bfp-toc-text">Il livello del deposito</span></a>
+        <a class="bfp-toc-link" href="#s8"><span class="bfp-toc-num">08</span><span class="bfp-toc-text">Procedura dettagliata completa del ciclo di vita</span></a>
+        <div class="bfp-toc-part">Parte III/Middleware</div>
+        <a class="bfp-toc-link" href="#s9"><span class="bfp-toc-num">09</span><span class="bfp-toc-text">Cos'è il middleware</span></a>
+        <a class="bfp-toc-link" href="#s10"><span class="bfp-toc-num">10</span><span class="bfp-toc-text">La funzione next()</span></a>
+        <a class="bfp-toc-link" href="#s11"><span class="bfp-toc-num">11</span><span class="bfp-toc-text">Perché l'ordine è importante</span></a>
+        <a class="bfp-toc-link" href="#s12"><span class="bfp-toc-num">12</span><span class="bfp-toc-text">Middleware comuni</span></a>
+        <div class="bfp-toc-part">Parte IV/Contesto della richiesta</div>
+        <a class="bfp-toc-link" href="#s13"><span class="bfp-toc-num">13</span><span class="bfp-toc-text">Cos'è il contesto</span></a>
+        <a class="bfp-toc-link" href="#s14"><span class="bfp-toc-num">14</span><span class="bfp-toc-text">Passaggio dei dati di autenticazione</span></a>
+        <a class="bfp-toc-link" href="#s15"><span class="bfp-toc-num">15</span><span class="bfp-toc-text">Tracciamento e cancellazione</span></a>
+      </nav>
+    </aside>
+    <main class="bfp-content">
+  <div class="eyebrow">Un riferimento dettagliato al backend</div>
+  <h1 class="title">Gestori,<br>Servizi <span class="it">e repository.</span></h1>
+  <p class="lede">Una procedura dettagliata sui principi primi su come viaggia una singola richiesta HTTP <em>dentro</em> il tuo server, attraverso il routing, i tre livelli architettonici, la catena del middleware e il contesto della richiesta che lega il tutto. Implementazioni complete in <strong>Vai</strong> e <strong>Pitone</strong> mostrati fianco a fianco.</p>
+
+  <div class="pills">
+    <span class="pill">Separazione delle preoccupazioni</span>
+    <span class="pill">Richiedi il ciclo di vita</span>
+    <span class="pill">Catena del middleware</span>
+    <span class="pill">Vai + Python/codice completo</span>
+    <span class="pill">15 sezioni</span>
+  </div>
+  <div class="rule-sm"></div>
+
+<!-- PART I -->
+
+  <section id="s1">
+    <div class="part-head"><span>Parte I / Il viaggio della richiesta</span><span>01 / 15</span></div>
+    <h2><span class="badge">01</span>Cliente e server</h2>
+    <p>Tutto inizia con una conversazione tra due partecipanti <strong>HTTP</strong>: a <strong>cliente</strong> (un browser, un'app mobile, un altro servizio) e a <strong>servitore</strong>. Il client invia una richiesta; il server alla fine invia una risposta.</p>
+    <p>Abbiamo già studiato il ciclo di vita <em>esterno</em> al server, come la richiesta viene impacchettata, inviata attraverso la rete e come ritorna la risposta. Quello che abbiamo <em>no</em> ancora tracciato è ciò che accade <em>dentro</em> il server: la lunga sequenza di eventi tra l'istante in cui arriva una richiesta e l'istante in cui parte una risposta. Tale sequenza interna è l'oggetto del presente manuale.</p>
+
+    <figure>
+      <div class="diagram">
+        <svg viewBox="0 0 760 200" role="img" aria-label="Client e server che comunicano tramite HTTP">
+          <rect x="40" y="60" width="170" height="80" rx="10" fill="none" stroke="var(--ink)" stroke-width="2"/>
+          <text x="125" y="95" text-anchor="middle" class="sv-ttl" font-size="20" fill="var(--ink)">Cliente</text>
+          <text x="125" y="118" text-anchor="middle" class="sv-sub" font-size="13" fill="var(--muted)">browser/app</text>
+
+          <rect x="550" y="60" width="170" height="80" rx="10" fill="none" stroke="var(--ink)" stroke-width="2"/>
+          <text x="635" y="95" text-anchor="middle" class="sv-ttl" font-size="20" fill="var(--ink)">Server</text>
+          <text x="635" y="118" text-anchor="middle" class="sv-sub" font-size="13" fill="var(--muted)">il tuo back-end</text>
+
+          <line x1="212" y1="82" x2="548" y2="82" stroke="var(--red)" stroke-width="2" marker-end="url(#ah)"/>
+          <text x="380" y="74" text-anchor="middle" class="sv-mono" font-size="12" fill="var(--red-deep)">Richiesta HTTP →</text>
+          <line x1="548" y1="120" x2="212" y2="120" stroke="var(--ink)" stroke-width="2" marker-end="url(#ahd)"/>
+          <text x="380" y="142" text-anchor="middle" class="sv-mono" font-size="12" fill="var(--ink-soft)">← Risposta HTTP</text>
+          <defs>
+            <marker id="ah" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 Z" fill="var(--red)"/></marker>
+            <marker id="ahd" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 Z" fill="var(--ink)"/></marker>
+          </defs>
+        </svg>
+      </div>
+      <figcaption>Le due estremità di ogni interazione. Questo manuale ingrandisce il <b>casella di destra</b>.</figcaption>
+    </figure>
+  </section>
+
+  <section id="s2">
+    <div class="part-head"><span>Parte I / Il viaggio della richiesta</span><span>02 / 15</span></div>
+    <h2><span class="badge">02</span>Il ciclo di vita della richiesta all'interno del server</h2>
+    <p>Dal momento in cui una richiesta raggiunge il server fino al momento in cui viene restituita una risposta, accadono molte cose. Lo chiamiamo il <strong>richiedere il ciclo di vita</strong>. Per comprendere l'architettura, è utile tracciare la richiesta da <em>dall'alto verso il basso</em>, seguendolo nell'ordine esatto in cui viene elaborato: arrivo, instradamento, gestore, servizio, repository e infine la risposta in uscita.</p>
+    <p>Questo ordinamento dall'alto verso il basso è intenzionale. Ogni argomento si basa sull'ultimo, rispecchiando il percorso che i dati seguono fisicamente attraverso il codice.</p>
+
+    <figure>
+      <div class="diagram">
+        <svg viewBox="0 0 760 300" role="img" aria-label="Richiedi il ciclo di vita all'interno del server">
+          <text x="380" y="26" text-anchor="middle" class="sv-lbl">Il viaggio di una richiesta</text>
+          <!-- vertical stack -->
+          <g font-family="Playfair Display" font-weight="700" font-size="15">
+            <rect x="250" y="44" width="260" height="36" rx="7" fill="var(--ink)"/><text x="380" y="68" text-anchor="middle" fill="#fff">Punto di ingresso</text>
+            <rect x="250" y="92" width="260" height="36" rx="7" fill="none" stroke="var(--line-strong)" stroke-width="1.5"/><text x="380" y="116" text-anchor="middle" fill="var(--ink)">Instradamento</text>
+            <rect x="250" y="140" width="260" height="36" rx="7" fill="rgba(184,64,46,.1)" stroke="var(--red)" stroke-width="1.5"/><text x="380" y="164" text-anchor="middle" fill="var(--red-deep)">Gestore/Controllore</text>
+            <rect x="250" y="188" width="260" height="36" rx="7" fill="none" stroke="var(--line-strong)" stroke-width="1.5"/><text x="380" y="212" text-anchor="middle" fill="var(--ink)">Servizio</text>
+            <rect x="250" y="236" width="260" height="36" rx="7" fill="none" stroke="var(--line-strong)" stroke-width="1.5"/><text x="380" y="260" text-anchor="middle" fill="var(--ink)">Archivio → Banca dati</text>
+          </g>
+          <g stroke="var(--muted)" stroke-width="1.5" marker-end="url(#dn)">
+            <line x1="380" y1="80" x2="380" y2="90"/>
+            <line x1="380" y1="128" x2="380" y2="138"/>
+            <line x1="380" y1="176" x2="380" y2="186"/>
+            <line x1="380" y1="224" x2="380" y2="234"/>
+          </g>
+          <text x="540" y="64" class="sv-mono" font-size="11" fill="var(--muted)">Sistema operativo in avanti: 3000</text>
+          <text x="540" y="112" class="sv-mono" font-size="11" fill="var(--muted)">/users/:id &amp;#8594; fn</text>
+          <defs><marker id="dn" markerWidth="10" markerHeight="10" refX="3" refY="8" orient="auto"><path d="M0,0 L6,0 L3,8 Z" fill="var(--muted)"/></marker></defs>
+        </svg>
+      </div>
+      <figcaption>Le cinque fermate interne. La risposta poi risale lo stesso percorso.</figcaption>
+    </figure>
+  </section>
+
+  <section id="s3">
+    <div class="part-head"><span>Parte I / Il viaggio della richiesta</span><span>03 / 15</span></div>
+    <h2><span class="badge">03</span>Punto di ingresso e percorso</h2>
+    <p>Quando arriva una richiesta, il sistema operativo inoltra la richiesta HTTP a qualunque <strong>porto</strong> il tuo server è in ascolto, <code class="inl">:3000</code>, <code class="inl">:4000</code>o qualsiasi porta configurata. Il punto in cui il tuo server riceve per la prima volta quella richiesta è il suo <strong>punto di ingresso</strong>. Il tuo server è sempre <em>ascolto</em> su quella porta e l'ascolto è il modo in cui raccoglie le richieste in arrivo.</p>
+
+    <h3>Instradamento</h3>
+    <p>Subito dopo arriva il punto di ingresso <strong>instradamento</strong>. Un server espone molti percorsi, <code class="inl">/users</code>, <code class="inl">/users/123</code>, percorsi dinamici come <code class="inl">/users/:id</code>, e così via. Il <strong>algoritmo di instradamento</strong> controlla il metodo e il percorso della richiesta in entrata e <strong>lo associa a un particolare gestore</strong>: una funzione predefinita responsabile di quel percorso.</p>
+    <div class="note">
+      <div class="h">Definizione/Gestore</div>
+      <p>A <strong>gestore</strong> (chiamato anche a <strong>controllore</strong>) è qualsiasi funzione predefinita per gestire le richieste per un determinato percorso. L'intero compito del routing è decidere <em>quale</em> il conduttore corre per <em>quale</em> richiesta in arrivo.</p>
+    </div>
+  </section>
+
+  <section id="s4">
+    <div class="part-head"><span>Parte I / Il viaggio della richiesta</span><span>04 / 15</span></div>
+    <h2><span class="badge">04</span>Perché tre strati?</h2>
+    <p>Una volta che il routing sceglie un gestore, incontriamo la struttura in tre parti al centro di un backend ben organizzato: <strong>gestori (controllori)</strong>, <strong>servizi</strong>, e <strong>repository</strong>. Una domanda naturale: perché dividere le cose in tre componenti invece di concentrare tutta la logica in un unico gestore?</p>
+    <p>La risposta onesta: esiste <strong>nessun requisito difficile</strong> per separarli. Tu <em>può</em> fare tutto in un unico gestore. La separazione è a <strong>modello di progettazione</strong>: una scelta che ti regala vantaggi reali:</p>
+    <ul class="clean">
+      <li>La tua base di codice diventa <strong>scalabile</strong> man mano che cresce.</li>
+      <li>È di più <strong>mantenibile</strong> nel tempo.</li>
+      <li>Lo è <strong>più facile aggiungere funzionalità</strong> senza rompere parti non correlate.</li>
+      <li>Lo è <strong>più facile da eseguire il debug</strong> perché ogni livello ha una chiara responsabilità.</li>
+    </ul>
+    <p>Questo è il principio di <strong>separazione delle preoccupazioni</strong>. Il resto della Parte II percorre ogni livello nell'ordine in cui la richiesta li soddisfa.</p>
+
+    <figure>
+      <div class="diagram">
+        <svg viewBox="0 0 760 240" role="img" aria-label="I tre livelli e le loro responsabilità">
+          <g>
+            <rect x="40" y="50" width="210" height="150" rx="10" fill="rgba(184,64,46,.08)" stroke="var(--red)" stroke-width="1.6"/>
+            <text x="145" y="78" text-anchor="middle" class="sv-ttl" font-size="17" fill="var(--red-deep)">Gestore</text>
+            <text x="145" y="96" text-anchor="middle" class="sv-sub" font-size="12" fill="var(--muted)">controllore</text>
+            <text x="145" y="128" text-anchor="middle" class="sv-mono" font-size="11" fill="var(--ink-soft)">dati in entrata/uscita</text>
+            <text x="145" y="148" text-anchor="middle" class="sv-mono" font-size="11" fill="var(--ink-soft)">convalidare</text>
+            <text x="145" y="168" text-anchor="middle" class="sv-mono" font-size="11" fill="var(--ink-soft)">codici di stato</text>
+          </g>
+          <g>
+            <rect x="275" y="50" width="210" height="150" rx="10" fill="none" stroke="var(--ink)" stroke-width="1.6"/>
+            <text x="380" y="78" text-anchor="middle" class="sv-ttl" font-size="17" fill="var(--ink)">Servizio</text>
+            <text x="380" y="96" text-anchor="middle" class="sv-sub" font-size="12" fill="var(--muted)">logica applicativa</text>
+            <text x="380" y="128" text-anchor="middle" class="sv-mono" font-size="11" fill="var(--ink-soft)">elaborazione</text>
+            <text x="380" y="148" text-anchor="middle" class="sv-mono" font-size="11" fill="var(--ink-soft)">orchestrare</text>
+            <text x="380" y="168" text-anchor="middle" class="sv-mono" font-size="11" fill="var(--ink-soft)">niente HTTP</text>
+          </g>
+          <g>
+            <rect x="510" y="50" width="210" height="150" rx="10" fill="none" stroke="var(--ink)" stroke-width="1.6"/>
+            <text x="615" y="78" text-anchor="middle" class="sv-ttl" font-size="17" fill="var(--ink)">Deposito</text>
+            <text x="615" y="96" text-anchor="middle" class="sv-sub" font-size="12" fill="var(--muted)">banca dati</text>
+            <text x="615" y="128" text-anchor="middle" class="sv-mono" font-size="11" fill="var(--ink-soft)">creare una query</text>
+            <text x="615" y="148" text-anchor="middle" class="sv-mono" font-size="11" fill="var(--ink-soft)">leggere/scrivere</text>
+            <text x="615" y="168" text-anchor="middle" class="sv-mono" font-size="11" fill="var(--ink-soft)">un lavoro ciascuno</text>
+          </g>
+          <line x1="252" y1="125" x2="273" y2="125" stroke="var(--red)" stroke-width="2" marker-end="url(#a3)"/>
+          <line x1="487" y1="125" x2="508" y2="125" stroke="var(--ink)" stroke-width="2" marker-end="url(#a3b)"/>
+          <defs>
+            <marker id="a3" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="var(--red)"/></marker>
+            <marker id="a3b" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="var(--ink)"/></marker>
+          </defs>
+        </svg>
+      </div>
+      <figcaption>Una responsabilità per livello. La richiesta scorre da sinistra a destra, il risultato ritorna da destra a sinistra.</figcaption>
+    </figure>
+  </section>
+
+<!-- PART II -->
+
+  <section id="s5">
+    <div class="part-head"><span>Parte II / I tre strati</span><span>05 / 15</span></div>
+    <h2><span class="badge">05</span>Il livello controller/gestore</h2>
+    <p>Il gestore è il punto di ingresso di un percorso una volta che il routing lo ha abbinato. Il suo compito principale è quello di <strong>controllare il flusso di dati</strong>: dal client al server e dal server nuovamente al client. Fondamentalmente, in quasi ogni framework e linguaggio, il tuo gestore lo è <em>dato</em> due cose dal runtime stesso.</p>
+
+    <div class="def"><div class="label"><span class="tag">Fornito dal runtime</span>L'oggetto della richiesta</div><div class="body"><p>Trasporta tutto ciò che il client ha inviato: metodo, percorso, intestazioni, parametri di query, corpo. Lo fai <strong>no</strong> crealo, Go, Express, Flask, ecc. te lo consegnamo ad ogni richiesta.</p></div></div>
+    <div class="def"><div class="label"><span class="tag">Fornito dal runtime</span>L'oggetto risposta</div><div class="body"><p>L'handle attraverso il quale imposti i codici di stato, modifichi le intestazioni di risposta e invii il corpo. Anche fornito automaticamente, lo ricevi, non lo costruisci.</p></div></div>
+
+    <p>Con questi due oggetti in mano, il gestore esegue un flusso di lavoro preciso e ordinato.</p>
+
+    <ol class="steps">
+      <li><div class="st-h">Estrazione dati</div><div class="st-b">Estrarre i dati rilevanti dall'oggetto della richiesta. <em>Cosa</em> tiri dipende dal metodo: <strong>GET</strong> → parametri di interrogazione; <strong>POST / PUT / PATCH</strong> → l'ente richiedente; <strong>DELETE</strong> → di solito niente, a volte un corpo.</div></li>
+      <li><div class="st-h">Associazione (Deserializzazione)</div><div class="st-b">Il corpo è arrivato come a <strong>JSON</strong> string perché JSON è un formato serializzabile che viaggia bene oltre il confine front-end/back-end. Il conduttore <strong>deserializza</strong> nel tipo nativo del linguaggio, una struttura Go, un dict/classe Python, una struttura Rust. I framework lo chiamano così <strong>vincolante</strong>. Se fallisce, fermati immediatamente e ritorna <span class="chip bad">400 Richiesta errata</span>.</div></li>
+      <li><div class="st-h">Validazione</div><div class="st-b">Conferma che i dati corrispondano alla forma prevista: campi obbligatori presenti, tipi corretti, nessun payload dannoso. Convalidare <em>tutto</em> da un client esterno, parametri di percorso, parametri di query e corpo ed essere il più specifico possibile.</div></li>
+      <li><div class="st-h">Trasformazione</div><div class="st-b">Facoltativamente, rimodellare i dati convalidati per comodità dei livelli downstream, ad esempio inserendo valori predefiniti.</div></li>
+      <li><div class="st-h">Delegazione</div><div class="st-b">Passare i dati puliti, convalidati e trasformati (più il contesto come l'ID utente autenticato) <strong>fino al livello di servizio</strong>.</div></li>
+      <li><div class="st-h">Invio della risposta</div><div class="st-b">Quando il servizio ritorna, scegli il codice di stato corretto e invia la risposta finale al cliente.</div></li>
+    </ol>
+
+    <h3>Una nota su Node.js vs Go e Python</h3>
+    <p>In un'app Node.js/Express avviene spesso la fase di deserializzazione <em>a monte</em> in un middleware (il <code class="inl">json()</code> body parser), quindi JSON è già un oggetto JavaScript nel momento in cui viene eseguito il gestore. Dentro <strong>Vai</strong> e <strong>Pitone</strong> in genere deserializzi <em>esplicitamente</em> all'interno del gestore, in una struttura, un dizionario o una classe.</p>
+
+    <h4>Passaggio 1: 2 / Estrarre e legare il corpo; 400 in caso di fallimento</h4>
+    <div class="code">
+      <div class="code-bar">
+        <span class="dots"><i style="background:#e06c5b"></i><i style="background:#e0b15b"></i><i style="background:#8bbf6e"></i></span>
+        <span class="fname">crea_libro / gestore</span>
+        <div class="tabs" data-group="g1">
+          <button class="active" data-lang="go">Vai</button>
+          <button data-lang="py">Pitone</button>
+        </div>
+      </div>
+<pre data-group="g1" data-lang="go"><span class="c">// CreateBookRequest is our native format, the bind target.</span>
+<span class="k">type</span> CreateBookRequest <span class="k">struct</span> {
+    Title  <span class="k">string</span> <span class="s">`json:"title"`</span>
+    Author <span class="k">string</span> <span class="s">`json:"author"`</span>
+}
+
+<span class="k">func</span> <span class="f">CreateBookHandler</span>(w http.ResponseWriter, r *http.Request) {
+    <span class="k">var</span> req CreateBookRequest
+
+    <span class="c">// Step 1 + 2: extract the body and deserialize (bind) into the struct.</span>
+    <span class="k">if</span> err := json.<span class="f">NewDecoder</span>(r.Body).<span class="f">Decode</span>(&amp;req); err != <span class="k">nil</span> {
+        <span class="c">// Deserialization failed -> the payload is malformed.</span>
+        http.<span class="f">Error</span>(w, <span class="s">"invalid request body"</span>, http.<span class="n">StatusBadRequest</span>) <span class="c">// 400</span>
+        <span class="k">return</span> <span class="c">// terminate the request here; do not proceed.</span>
+    }
+    <span class="c">// ... validation, transformation, delegation follow ...</span>
+}</pre>
+<pre data-group="g1" data-lang="py" hidden><span class="k">from</span> dataclasses <span class="k">import</span> dataclass
+<span class="k">from</span> flask <span class="k">import</span> request, jsonify
+
+<span class="n">@dataclass</span>
+<span class="k">class</span> <span class="f">CreateBookRequest</span>:
+    title: <span class="k">str</span>
+    author: <span class="k">str</span>
+
+<span class="k">def</span> <span class="f">create_book_handler</span>():
+    <span class="c"># Step 1 + 2: extract body and deserialize into a native dict/class.</span>
+    payload = request.<span class="f">get_json</span>(silent=<span class="k">True</span>)
+    <span class="k">if</span> payload <span class="k">is</span> <span class="k">None</span>:
+        <span class="c"># Deserialization failed -> malformed payload.</span>
+        <span class="k">return</span> <span class="f">jsonify</span>({<span class="s">"error"</span>: <span class="s">"invalid request body"</span>}), <span class="n">400</span>
+    req = <span class="f">CreateBookRequest</span>(**payload)
+    <span class="c"># ... validation, transformation, delegation follow ...</span></pre>
+    </div>
+
+    <h4>Passaggio 3: 4 / Convalida, quindi trasforma (inserisci un valore predefinito per un parametro di query facoltativo)</h4>
+    <p>Una buona regola di progettazione API: creare parametri di query <strong>facoltativo</strong> ove possibile. Considera <code class="inl">GET /books?sort=name|date</code>. Se il client non invia nulla, la convalida deve comunque passare, quindi il passaggio di trasformazione inserisce un valore predefinito sensato.</p>
+    <div class="code">
+      <div class="code-bar">
+        <span class="dots"><i style="background:#e06c5b"></i><i style="background:#e0b15b"></i><i style="background:#8bbf6e"></i></span>
+        <span class="fname">list_books / convalida + trasformazione</span>
+        <div class="tabs" data-group="g2">
+          <button class="active" data-lang="go">Vai</button>
+          <button data-lang="py">Pitone</button>
+        </div>
+      </div>
+<pre data-group="g2" data-lang="go"><span class="k">func</span> <span class="f">ListBooksHandler</span>(w http.ResponseWriter, r *http.Request) {
+    sort := r.<span class="f">URL</span>.Query().<span class="f">Get</span>(<span class="s">"sort"</span>) <span class="c">// "" if absent</span>
+
+    <span class="c">// VALIDATION: if present, it must be one of the allowed values.</span>
+    <span class="k">if</span> sort != <span class="s">""</span> &amp;&amp; sort != <span class="s">"name"</span> &amp;&amp; sort != <span class="s">"date"</span> {
+        http.<span class="f">Error</span>(w, <span class="s">"sort must be 'name' or 'date'"</span>, http.<span class="n">StatusBadRequest</span>)
+        <span class="k">return</span>
+    }
+
+    <span class="c">// TRANSFORMATION: query params are optional -> inject a default.</span>
+    <span class="k">if</span> sort == <span class="s">""</span> {
+        sort = <span class="s">"date"</span> <span class="c">// downstream layers never see an empty value</span>
+    }
+
+    books, err := bookService.<span class="f">ListBooks</span>(r.<span class="f">Context</span>(), sort) <span class="c">// delegate</span>
+    <span class="k">if</span> err != <span class="k">nil</span> {
+        http.<span class="f">Error</span>(w, <span class="s">"could not fetch books"</span>, http.<span class="n">StatusInternalServerError</span>) <span class="c">// 500</span>
+        <span class="k">return</span>
+    }
+    w.<span class="f">Header</span>().<span class="f">Set</span>(<span class="s">"Content-Type"</span>, <span class="s">"application/json"</span>)
+    json.<span class="f">NewEncoder</span>(w).<span class="f">Encode</span>(books) <span class="c">// 200 with the array of books</span>
+}</pre>
+<pre data-group="g2" data-lang="py" hidden><span class="k">def</span> <span class="f">list_books_handler</span>():
+    sort = request.args.<span class="f">get</span>(<span class="s">"sort"</span>)  <span class="c"># None if absent</span>
+
+    <span class="c"># VALIDATION: if present, must be an allowed value.</span>
+    <span class="k">if</span> sort <span class="k">is</span> <span class="k">not</span> <span class="k">None</span> <span class="k">and</span> sort <span class="k">not</span> <span class="k">in</span> (<span class="s">"name"</span>, <span class="s">"date"</span>):
+        <span class="k">return</span> <span class="f">jsonify</span>({<span class="s">"error"</span>: <span class="s">"sort must be 'name' or 'date'"</span>}), <span class="n">400</span>
+
+    <span class="c"># TRANSFORMATION: optional param -> inject a default.</span>
+    <span class="k">if</span> sort <span class="k">is</span> <span class="k">None</span>:
+        sort = <span class="s">"date"</span>
+
+    <span class="k">try</span>:
+        books = book_service.<span class="f">list_books</span>(sort)  <span class="c"># delegate</span>
+    <span class="k">except</span> <span class="n">Exception</span>:
+        <span class="k">return</span> <span class="f">jsonify</span>({<span class="s">"error"</span>: <span class="s">"could not fetch books"</span>}), <span class="n">500</span>
+
+    <span class="k">return</span> <span class="f">jsonify</span>(books), <span class="n">200</span>  <span class="c"># array of books</span></pre>
+    </div>
+  </section>
+
+  <section id="s6">
+    <div class="part-head"><span>Parte II / I tre strati</span><span>06 / 15</span></div>
+    <h2><span class="badge">06</span>Il livello di servizio</h2>
+    <p>Il livello di servizio è dove <strong>elaborazione vera e propria</strong>: la logica applicativa, accade. La regola più importante lo governa:</p>
+    <div class="note">
+      <div class="h">La regola d'oro dei servizi</div>
+      <p>Il livello di servizio dovrebbe saperlo <strong>assolutamente nulla su HTTP</strong>. Nessun oggetto di richiesta/risposta, nessun codice di stato, nessun problema di convalida. Se dai un'occhiata a un metodo di servizio, dovresti <em>no</em> essere in grado di dire che è utilizzato in un'API. È solo una funzione: ingresso dati, elaborazione, uscita dati.</p>
+    </div>
+    <p>Questo isolamento è ciò che mantiene il sistema disaccoppiato. Decide il servizio <em>cosa fare</em>; decide il conduttore <em>come segnalarlo tramite HTTP</em>. È qui che tracciamo la linea di responsabilità.</p>
+
+    <h4>Orchestrazione</h4>
+    <p>Un unico metodo di servizio può fare molto. Può chiamare <strong>uno o più metodi di repository</strong> e unire i risultati, effettuare chiamate API esterne, inviare e-mail, attivare notifiche e tutto ciò che l'operazione aziendale richiede. Questo ruolo di coordinamento si chiama <strong>orchestrazione</strong>: il servizio unisce dati provenienti da più fonti e restituisce un unico risultato pulito al gestore. Un servizio che invia solo un'e-mail potrebbe non toccare mai il repository.</p>
+
+    <div class="code">
+      <div class="code-bar">
+        <span class="dots"><i style="background:#e06c5b"></i><i style="background:#e0b15b"></i><i style="background:#8bbf6e"></i></span>
+        <span class="fname">book_service / pura logica applicativa</span>
+        <div class="tabs" data-group="g3">
+          <button class="active" data-lang="go">Vai</button>
+          <button data-lang="py">Pitone</button>
+        </div>
+      </div>
+<pre data-group="g3" data-lang="go"><span class="c">// Notice: no http.Request, no ResponseWriter, no status codes.</span>
+<span class="c">// You cannot tell from this signature that it serves an API.</span>
+<span class="k">func</span> (s *BookService) <span class="f">ListBooks</span>(ctx context.Context, sort <span class="k">string</span>) ([]Book, <span class="k">error</span>) {
+    <span class="c">// Orchestration: call the repository for the data it needs.</span>
+    books, err := s.repo.<span class="f">FindAllBooks</span>(ctx, sort)
+    <span class="k">if</span> err != <span class="k">nil</span> {
+        <span class="k">return</span> <span class="k">nil</span>, err <span class="c">// bubble the error up; the handler decides the code</span>
+    }
+    <span class="c">// Could also: enrich, merge other repo calls, send notifications...</span>
+    <span class="k">return</span> books, <span class="k">nil</span>
+}
+
+<span class="c">// A service that needs no database at all is perfectly valid:</span>
+<span class="k">func</span> (s *BookService) <span class="f">NotifyOwner</span>(email <span class="k">string</span>) <span class="k">error</span> {
+    <span class="k">return</span> s.mailer.<span class="f">Send</span>(email, <span class="s">"Your book was added"</span>)
+}</pre>
+<pre data-group="g3" data-lang="py" hidden><span class="k">class</span> <span class="f">BookService</span>:
+    <span class="k">def</span> <span class="f">__init__</span>(self, repo, mailer):
+        self.repo = repo
+        self.mailer = mailer
+
+    <span class="c"># No request, no response, no status codes, just logic.</span>
+    <span class="k">def</span> <span class="f">list_books</span>(self, sort: <span class="k">str</span>) -> <span class="k">list</span>:
+        <span class="c"># Orchestration: ask the repository for what it needs.</span>
+        books = self.repo.<span class="f">find_all_books</span>(sort)
+        <span class="c"># Could merge other repo calls, enrich, notify, etc.</span>
+        <span class="k">return</span> books
+
+    <span class="c"># A purely-logic service that never touches the DB:</span>
+    <span class="k">def</span> <span class="f">notify_owner</span>(self, email: <span class="k">str</span>) -> <span class="k">None</span>:
+        self.mailer.<span class="f">send</span>(email, <span class="s">"Your book was added"</span>)</pre>
+    </div>
+  </section>
+
+  <section id="s7">
+    <div class="part-head"><span>Parte II / I tre strati</span><span>07 / 15</span></div>
+    <h2><span class="badge">07</span>Il livello del deposito</h2>
+    <p>Il deposito (o <em>banca dati</em>) layer ha un unico problema: <strong>parlando con il database</strong>. Riceve i dati dal servizio, <strong>costruisce la query del database</strong>: per l'inserimento, il filtraggio o l'ordinamento, lo esegue e restituisce il risultato non elaborato al servizio.</p>
+
+    <div class="note">
+      <div class="h">Responsabilità unica</div>
+      <p>Un metodo di repository dovrebbe andare bene <strong>una cosa</strong> e ritorno <strong>un tipo di dati</strong>. Fallo <em>no</em> scrivere un singolo metodo che, a seconda di un parametro opzionale, restituisca un libro o tutti i libri. Scrivi invece due metodi distinti: <code class="inl">FindAllBooks()</code> e <code class="inl">FindBookByID(id)</code>.</p>
+    </div>
+
+    <div class="code">
+      <div class="code-bar">
+        <span class="dots"><i style="background:#e06c5b"></i><i style="background:#e0b15b"></i><i style="background:#8bbf6e"></i></span>
+        <span class="fname">book_repository / un lavoro per metodo</span>
+        <div class="tabs" data-group="g4">
+          <button class="active" data-lang="go">Vai</button>
+          <button data-lang="py">Pitone</button>
+        </div>
+      </div>
+<pre data-group="g4" data-lang="go"><span class="c">// ONE method, ONE shape of result: all books, sorted.</span>
+<span class="k">func</span> (r *BookRepo) <span class="f">FindAllBooks</span>(ctx context.Context, sort <span class="k">string</span>) ([]Book, <span class="k">error</span>) {
+    <span class="c">// Build the query from the data the service handed down.</span>
+    query := fmt.<span class="f">Sprintf</span>(<span class="s">"SELECT id, title, author FROM books ORDER BY %s"</span>, sort)
+    rows, err := r.db.<span class="f">QueryContext</span>(ctx, query)
+    <span class="k">if</span> err != <span class="k">nil</span> { <span class="k">return</span> <span class="k">nil</span>, err }
+    <span class="k">defer</span> rows.<span class="f">Close</span>()
+
+    <span class="k">var</span> books []Book
+    <span class="k">for</span> rows.<span class="f">Next</span>() {
+        <span class="k">var</span> b Book
+        rows.<span class="f">Scan</span>(&amp;b.ID, &amp;b.Title, &amp;b.Author)
+        books = <span class="f">append</span>(books, b)
+    }
+    <span class="k">return</span> books, <span class="k">nil</span>
+}
+
+<span class="c">// A SEPARATE method for the single-book case. No optional toggles.</span>
+<span class="k">func</span> (r *BookRepo) <span class="f">FindBookByID</span>(ctx context.Context, id <span class="k">int</span>) (Book, <span class="k">error</span>) {
+    <span class="k">var</span> b Book
+    err := r.db.<span class="f">QueryRowContext</span>(ctx,
+        <span class="s">"SELECT id, title, author FROM books WHERE id = $1"</span>, id).
+        <span class="f">Scan</span>(&amp;b.ID, &amp;b.Title, &amp;b.Author)
+    <span class="k">return</span> b, err
+}</pre>
+<pre data-group="g4" data-lang="py" hidden><span class="k">class</span> <span class="f">BookRepo</span>:
+    <span class="k">def</span> <span class="f">__init__</span>(self, db):
+        self.db = db
+
+    <span class="c"># ONE method, ONE result shape: all books, sorted.</span>
+    <span class="k">def</span> <span class="f">find_all_books</span>(self, sort: <span class="k">str</span>) -> <span class="k">list</span>:
+        <span class="c"># Build the query from data passed down by the service.</span>
+        query = <span class="s">f"SELECT id, title, author FROM books ORDER BY {sort}"</span>
+        cur = self.db.<span class="f">execute</span>(query)
+        <span class="k">return</span> [<span class="k">dict</span>(row) <span class="k">for</span> row <span class="k">in</span> cur.<span class="f">fetchall</span>()]
+
+    <span class="c"># SEPARATE method for one book. No optional toggle parameter.</span>
+    <span class="k">def</span> <span class="f">find_book_by_id</span>(self, book_id: <span class="k">int</span>) -> <span class="k">dict</span>:
+        cur = self.db.<span class="f">execute</span>(
+            <span class="s">"SELECT id, title, author FROM books WHERE id = ?"</span>, (book_id,))
+        <span class="k">return</span> <span class="k">dict</span>(cur.<span class="f">fetchone</span>())</pre>
+    </div>
+  </section>
+
+  <section id="s8">
+    <div class="part-head"><span>Parte II / I tre strati</span><span>08 / 15</span></div>
+    <h2><span class="badge">08</span>L'intero ciclo di vita, dall'inizio alla fine</h2>
+    <p>Mettendo insieme i livelli, ecco il percorso completo di andata e ritorno per una singola chiamata API, ad esempio <code class="inl">GET /books</code>:</p>
+    <ol class="steps">
+      <li><div class="st-h">Vincolante</div><div class="st-b">Il gestore estrae i dati dall'oggetto della richiesta e li deserializza nel formato nativo.</div></li>
+      <li><div class="st-h">Validazione e trasformazione</div><div class="st-b">Il gestore convalida i dati e inserisce valori predefiniti/rimodella secondo necessità.</div></li>
+      <li><div class="st-h">Chiamata di servizio</div><div class="st-b">L'handler delega al servizio, che esegue l'elaborazione vera e propria, chiamando il repository per qualsiasi lavoro sul database.</div></li>
+      <li><div class="st-h">Ritorna il risultato</div><div class="st-b">Il repository restituisce le righe al servizio; il servizio restituisce un risultato pulito al gestore.</div></li>
+      <li><div class="st-h">Risposta</div><div class="st-b">Il gestore sceglie il codice di stato e invia la risposta. <span class="chip ok">200 / 201 / 204</span> sul successo; <span class="chip bad">400</span> per errore del cliente; <span class="chip bad">500</span> per errore del server.</div></li>
+    </ol>
+
+    <div class="chips">
+      <span class="chip ok">200 OK</span>
+      <span class="chip ok">201 Creato</span>
+      <span class="chip ok">204 Nessun contenuto</span>
+      <span class="chip bad">400 Richiesta errata</span>
+      <span class="chip bad">500 Errore interno del server</span>
+    </div>
+
+    <figure>
+      <div class="diagram">
+        <svg viewBox="0 0 760 250" role="img" aria-label="Flusso di dati completo attraverso i tre livelli e ritorno">
+          <g font-family="Playfair Display" font-weight="700" font-size="14">
+            <rect x="30" y="100" width="120" height="50" rx="9" fill="var(--ink)"/><text x="90" y="130" text-anchor="middle" fill="#fff">Cliente</text>
+            <rect x="190" y="100" width="130" height="50" rx="9" fill="rgba(184,64,46,.1)" stroke="var(--red)" stroke-width="1.5"/><text x="255" y="123" text-anchor="middle" fill="var(--red-deep)" font-size="13">Gestore</text><text x="255" y="140" text-anchor="middle" class="sv-mono" font-size="9" fill="var(--muted)">convalidare</text>
+            <rect x="360" y="100" width="130" height="50" rx="9" fill="none" stroke="var(--ink)" stroke-width="1.5"/><text x="425" y="123" text-anchor="middle" fill="var(--ink)" font-size="13">Servizio</text><text x="425" y="140" text-anchor="middle" class="sv-mono" font-size="9" fill="var(--muted)">logica</text>
+            <rect x="530" y="100" width="130" height="50" rx="9" fill="none" stroke="var(--ink)" stroke-width="1.5"/><text x="595" y="123" text-anchor="middle" fill="var(--ink)" font-size="13">Deposito</text><text x="595" y="140" text-anchor="middle" class="sv-mono" font-size="9" fill="var(--muted)">domanda</text>
+            <rect x="690" y="100" width="50" height="50" rx="9" fill="none" stroke="var(--muted)" stroke-width="1.5" stroke-dasharray="3 3"/><text x="715" y="130" text-anchor="middle" fill="var(--muted)" font-size="11">DB</text>
+          </g>
+          <!-- forward -->
+          <g stroke="var(--red)" stroke-width="2" marker-end="url(#fwd)">
+            <line x1="152" y1="115" x2="188" y2="115"/>
+            <line x1="322" y1="115" x2="358" y2="115"/>
+            <line x1="492" y1="115" x2="528" y2="115"/>
+            <line x1="662" y1="115" x2="688" y2="115"/>
+          </g>
+          <!-- back -->
+          <g stroke="var(--ink)" stroke-width="2" marker-end="url(#bwd)">
+            <line x1="688" y1="138" x2="662" y2="138"/>
+            <line x1="528" y1="138" x2="492" y2="138"/>
+            <line x1="358" y1="138" x2="322" y2="138"/>
+            <line x1="188" y1="138" x2="152" y2="138"/>
+          </g>
+          <text x="380" y="55" text-anchor="middle" class="sv-mono" font-size="11" fill="var(--red-deep)">la richiesta scorre → lungo i livelli</text>
+          <text x="380" y="200" text-anchor="middle" class="sv-mono" font-size="11" fill="var(--ink-soft)">← risultato ritorna indietro → risposta</text>
+          <defs>
+            <marker id="fwd" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="var(--red)"/></marker>
+            <marker id="bwd" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="var(--ink)"/></marker>
+          </defs>
+        </svg>
+      </div>
+      <figcaption>I gestori si muovono <b>formati di dati</b> dentro e fuori / il servizio fa il resto <b>elaborazione</b> / the repository does the <b>lavoro sulla banca dati</b>.</figcaption>
+    </figure>
+  </section>
+
+<!-- PART III -->
+
+  <section id="s9">
+    <div class="part-head"><span>Parte III/Middleware</span><span>09 / 15</span></div>
+    <h2><span class="badge">09</span>Cos'è il middleware</h2>
+    <p>Ora riproduci il ciclo di vita, ma osserva il <em>lacune</em>. Tra il punto di ingresso e l'instradamento, tra l'instradamento e l'handler e tra l'handler e la risposta, ci sono <strong>confini</strong>: punti in cui possono essere eseguite funzioni extra. Le funzioni che vengono eseguite in queste lacune sono <strong>middleware</strong>. Il nome è letterale: eseguono <em>nel mezzo</em> degli altri contesti esecutivi.</p>
+    <p>I middleware lo sono <strong>facoltativo</strong>. Potrebbero essercene molti, o nessuno; una richiesta può fluire direttamente dal routing al gestore. Li aggiungi solo quando un requisito ne richiede uno.</p>
+    <p>Un middleware è essenzialmente un tipo speciale di gestore. Come un normale gestore riceve il file <strong>oggetto richiesta</strong> e il <strong>oggetto di risposta</strong> dal runtime, quindi anch'esso può leggere valori dalla richiesta, modificare le intestazioni di risposta e persino inviare una risposta direttamente al client. Ma riceve anche una terza cosa, come spiega la Parte 10.</p>
+
+    <figure>
+      <div class="diagram">
+        <svg viewBox="0 0 760 150" role="img" aria-label="Catena del middleware tra punto di ingresso e risposta">
+          <g font-family="JetBrains Mono" font-size="11">
+            <rect x="20" y="55" width="60" height="42" rx="7" fill="var(--ink)"/><text x="50" y="80" text-anchor="middle" fill="#fff" font-size="10">ingresso</text>
+            <rect x="100" y="55" width="74" height="42" rx="7" fill="none" stroke="var(--red)" stroke-width="1.4"/><text x="137" y="80" text-anchor="middle" fill="var(--red-deep)" font-size="10">MW1</text>
+            <rect x="194" y="55" width="74" height="42" rx="7" fill="none" stroke="var(--line-strong)" stroke-width="1.4"/><text x="231" y="80" text-anchor="middle" fill="var(--ink)" font-size="10">instradamento</text>
+            <rect x="288" y="55" width="74" height="42" rx="7" fill="none" stroke="var(--red)" stroke-width="1.4"/><text x="325" y="80" text-anchor="middle" fill="var(--red-deep)" font-size="10">MW2</text>
+            <rect x="382" y="55" width="84" height="42" rx="7" fill="rgba(184,64,46,.1)" stroke="var(--red)" stroke-width="1.4"/><text x="424" y="80" text-anchor="middle" fill="var(--red-deep)" font-size="10">gestore</text>
+            <rect x="486" y="55" width="74" height="42" rx="7" fill="none" stroke="var(--red)" stroke-width="1.4"/><text x="523" y="80" text-anchor="middle" fill="var(--red-deep)" font-size="10">MW3</text>
+            <rect x="600" y="55" width="74" height="42" rx="7" fill="var(--ink)"/><text x="637" y="80" text-anchor="middle" fill="#fff" font-size="10">risposta</text>
+          </g>
+          <g stroke="var(--muted)" stroke-width="1.6" marker-end="url(#mw)">
+            <line x1="82" y1="76" x2="98" y2="76"/><line x1="176" y1="76" x2="192" y2="76"/>
+            <line x1="270" y1="76" x2="286" y2="76"/><line x1="364" y1="76" x2="380" y2="76"/>
+            <line x1="468" y1="76" x2="484" y2="76"/><line x1="562" y1="76" x2="598" y2="76"/>
+          </g>
+          <text x="347" y="120" text-anchor="middle" class="sv-mono" font-size="10" fill="var(--muted)">ogni riquadro rosso è un middleware opzionale situato in un confine</text>
+          <defs><marker id="mw" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="var(--muted)"/></marker></defs>
+        </svg>
+      </div>
+      <figcaption>I middleware occupano il <b>confini</b> tra contesti di esecuzione.</figcaption>
+    </figure>
+  </section>
+
+  <section id="s10">
+    <div class="part-head"><span>Parte III/Middleware</span><span>10 / 15</span></div>
+    <h2><span class="badge">10</span>La funzione next()</h2>
+    <p>La terza cosa che riceve un middleware è <strong><code class="inl">next</code></strong>, una funzione. Chiamando <code class="inl">next()</code> <strong>passa l'esecuzione al contesto successivo</strong>: se si tratta del middleware successivo, della fase di routing o del gestore finale. È il modo in cui la richiesta passa da un confine a quello successivo.</p>
+    <div class="note">
+      <div class="h">Due modi in cui finisce un middleware</div>
+      <p><strong>(1)</strong> Fa il suo lavoro, poi chiama <code class="inl">next()</code> per continuare la catena. <strong>(2)</strong> <em>No</em> chiamare <code class="inl">next()</code> e invece <strong>inviare una risposta immediatamente</strong>: cortocircuitare la richiesta prima che raggiunga il gestore. Questa uscita anticipata è esattamente il motivo per cui un controllo di autenticazione fallito o un limite di velocità superato possono interrompere una richiesta in modo economico.</p>
+    </div>
+    <p>Poiché un middleware ha sia gli oggetti richiesta che risposta, può leggere e modificare la richiesta e può terminarla esattamente dove si trova restituendo una risposta. Questa è l'intera portata del potere di un middleware.</p>
+
+    <div class="code">
+      <div class="code-bar">
+        <span class="dots"><i style="background:#e06c5b"></i><i style="background:#e0b15b"></i><i style="background:#8bbf6e"></i></span>
+        <span class="fname">forma del middleware / req, res, next</span>
+        <div class="tabs" data-group="g5">
+          <button class="active" data-lang="go">Vai</button>
+          <button data-lang="py">Pitone</button>
+        </div>
+      </div>
+<pre data-group="g5" data-lang="go"><span class="c">// In Go, middleware wraps the "next" handler. Calling next.ServeHTTP</span>
+<span class="c">// is the equivalent of next(): pass execution along the chain.</span>
+<span class="k">func</span> <span class="f">LoggingMiddleware</span>(next http.Handler) http.Handler {
+    <span class="k">return</span> http.<span class="f">HandlerFunc</span>(<span class="k">func</span>(w http.ResponseWriter, r *http.Request) {
+        log.<span class="f">Printf</span>(<span class="s">"%s %s"</span>, r.Method, r.URL.Path) <span class="c">// do work</span>
+
+        <span class="c">// EARLY EXIT example (short-circuit, never calls next):</span>
+        <span class="k">if</span> r.Header.<span class="f">Get</span>(<span class="s">"X-Blocked"</span>) == <span class="s">"yes"</span> {
+            http.<span class="f">Error</span>(w, <span class="s">"forbidden"</span>, http.<span class="n">StatusForbidden</span>)
+            <span class="k">return</span> <span class="c">// request stops here</span>
+        }
+
+        next.<span class="f">ServeHTTP</span>(w, r) <span class="c">// === next(): continue the chain ===</span>
+    })
+}</pre>
+<pre data-group="g5" data-lang="py" hidden><span class="c"># A WSGI/Flask-style middleware receives the request and a `next`</span>
+<span class="c"># callable that invokes the rest of the chain.</span>
+<span class="k">def</span> <span class="f">logging_middleware</span>(next):
+    <span class="k">def</span> <span class="f">wrapper</span>(request):
+        <span class="k">print</span>(<span class="s">f"{request.method} {request.path}"</span>)  <span class="c"># do work</span>
+
+        <span class="c"># EARLY EXIT example (short-circuit, never calls next):</span>
+        <span class="k">if</span> request.headers.<span class="f">get</span>(<span class="s">"X-Blocked"</span>) == <span class="s">"yes"</span>:
+            <span class="k">return</span> <span class="f">Response</span>(<span class="s">"forbidden"</span>, status=<span class="n">403</span>)  <span class="c"># stops here</span>
+
+        <span class="k">return</span> <span class="f">next</span>(request)  <span class="c"># === next(): continue the chain ===</span>
+    <span class="k">return</span> wrapper</pre>
+    </div>
+
+    <h4>Perché il middleware?</h4>
+    <p>Lo stesso motivo per cui usiamo le funzioni: per evitare di ripetere le stesse righe ovunque. Un backend può servire migliaia o milioni di richieste ed esporre centinaia di endpoint. È necessario eseguire operazioni comuni, sicurezza, registrazione, autenticazione, analisi, compressione <em>ogni</em> richiesta. Senza middleware duplicheresti quel codice in ogni gestore. Anche l'estrazione di una funzione di supporto ti costringe comunque a farlo <em>chiamare</em> in ogni gestore. Middleware <strong>centralizza</strong> la logica comune e la applica automaticamente lungo tutta la catena.</p>
+  </section>
+
+  <section id="s11">
+    <div class="part-head"><span>Parte III/Middleware</span><span>11 / 15</span></div>
+    <h2><span class="badge">11</span>Perché l'ordine è importante</h2>
+    <p>Ogni middleware utilizza <code class="inl">next()</code> per passare l'esecuzione a quello successivo, in modo che la richiesta li attraversi <strong>in sequenza, nell'ordine in cui li registri</strong>. Quell'ordine non è cosmetico, cambia il comportamento.</p>
+    <p>L'esempio più vivido è <strong>gestione globale degli errori</strong>, che in genere viene posizionato <strong>ultimo</strong>. Perché la richiesta arriva <em>una direzione</em>, un middleware può rilevare solo gli errori che hanno origine <em>a monte</em> di esso. Se si posiziona il gestore degli errori al centro, verrà generato un errore successivamente nel gestore <em>passato</em> e non essere mai catturato. Posizionalo per ultimo e potrà acquisire errori da qualsiasi punto precedente della catena.</p>
+    <div class="note">
+      <div class="h">Un ordinamento predefinito sensato</div>
+      <p><strong>CORSO</strong> prima (rifiutare le origini straniere il prima possibile) → <strong>registrazione</strong> &amp;#8594; <strong>autenticazione</strong> → controlli specifici dell'applicazione → <strong>gestore</strong> &amp;#8594; <strong>gestione degli errori globali per ultima</strong>. Dedica tempo reale alla decisione di questo ordine per la tua app.</p>
+    </div>
+  </section>
+
+  <section id="s12">
+    <div class="part-head"><span>Parte III/Middleware</span><span>12 / 15</span></div>
+    <h2><span class="badge">12</span>Middleware comuni</h2>
+    <p>Ciascuno dei seguenti si qualifica come middleware per gli stessi due motivi: deve essere eseguito <em>ogni</em> richiesta e deve leggere la richiesta e/o modificare la risposta.</p>
+
+    <div class="def"><div class="label"><span class="tag">Sicurezza</span>CORSO</div><div class="body"><p>I browser applicano una politica della stessa origine: un'app Web su <code class="inl">example.com</code> può accedere solo alle risorse da <code class="inl">example.com</code> a meno che il server remoto non invii le intestazioni corrette. Il middleware CORS legge la richiesta <strong>origine</strong> (fornito automaticamente dal runtime); se corrisponde a un'origine front-end consentita, aggiunge le intestazioni di risposta appropriate in modo che il browser non blocchi la risposta, quindi chiama <code class="inl">next()</code>. In caso contrario, omette le intestazioni e il browser lo blocca per impostazione predefinita. Posizionato <strong>presto</strong>.</p></div></div>
+    <div class="def"><div class="label"><span class="tag">Sicurezza</span>Intestazioni di sicurezza</div><div class="body"><p>Imposta le intestazioni come <code class="inl">Content-Security-Policy</code> su ogni risposta, quindi inoltra al middleware successivo.</p></div></div>
+    <div class="def"><div class="label"><span class="tag">Sicurezza</span>Autenticazione</div><div class="body"><p>Estrae un token (JWT, ID sessione, ecc.) dalle intestazioni o dal payload e lo verifica. Su <strong>fallimento</strong>, ritorna <span class="chip bad">401 Non autorizzato</span> immediatamente e termina la richiesta, senza gestore, senza ulteriore middleware. Su <strong>successo</strong>, estrae i dettagli dell'utente (ID utente, ruolo, permessi) e li memorizza nel file <strong>contesto della richiesta</strong> prima di chiamare <code class="inl">next()</code>.</p></div></div>
+    <div class="def"><div class="label"><span class="tag">Sicurezza</span>Limitazione della velocità</div><div class="body"><p>Tiene traccia del numero di richieste effettuate da un IP all'interno di una finestra da te definita (ad esempio 30 chiamate in 2 secondi). Oltrepassata la soglia, ritorna <span class="chip bad">429 Troppe richieste</span> proteggere le risorse del server; sotto di esso, chiama <code class="inl">next()</code>.</p></div></div>
+    <div class="def"><div class="label"><span class="tag">Osservabilità</span>Registrazione e monitoraggio</div><div class="body"><p>Registra i dettagli della richiesta, il percorso, il metodo, i parametri della query, il corpo, nel terminale o in un file di registro per il debug, il reporting e il controllo.</p></div></div>
+    <div class="def"><div class="label"><span class="tag">Affidabilità</span>Gestione globale degli errori</div><div class="body"><p>Rileva qualsiasi errore non strutturato da qualsiasi punto a monte, decide se si tratta di un client (<span class="chip bad">4xx</span>) o server (<span class="chip bad">5xx</span>) errore e restituisce un messaggio pulito e strutturato (spesso con a <code class="inl">message</code> e un errore <code class="inl">code</code> il front-end può mappare un messaggio amichevole). Posizionato <strong>ultimo</strong>.</p></div></div>
+    <div class="def"><div class="label"><span class="tag">Prestazioni</span>Compressione</div><div class="body"><p>Comprime risposte di grandi dimensioni (ad esempio gzip) in modo che viaggino in modo efficiente; i browser moderni li decomprimono in modo trasparente nuovamente in un formato utilizzabile.</p></div></div>
+    <div class="def"><div class="label"><span class="tag">Convenienza</span>Analisi dei dati</div><div class="body"><p>La serializzazione/deserializzazione e persino la convalida/trasformazione possono essere delegate a un middleware (ad esempio un parser del corpo) in modo che i gestori non lo ripetano. Questo è esattamente il motivo per cui Node's <code class="inl">json()</code> parser del corpo significa che JSON è già un oggetto JS nel momento in cui viene eseguito un gestore.</p></div></div>
+
+    <h4>I middleware CORS e di autenticazione nel codice</h4>
+    <div class="code">
+      <div class="code-bar">
+        <span class="dots"><i style="background:#e06c5b"></i><i style="background:#e0b15b"></i><i style="background:#8bbf6e"></i></span>
+        <span class="fname">cors + middleware di autenticazione</span>
+        <div class="tabs" data-group="g6">
+          <button class="active" data-lang="go">Vai</button>
+          <button data-lang="py">Pitone</button>
+        </div>
+      </div>
+<pre data-group="g6" data-lang="go"><span class="k">var</span> allowedOrigin = <span class="s">"https://app.example.com"</span>
+
+<span class="k">func</span> <span class="f">CORSMiddleware</span>(next http.Handler) http.Handler {
+    <span class="k">return</span> http.<span class="f">HandlerFunc</span>(<span class="k">func</span>(w http.ResponseWriter, r *http.Request) {
+        origin := r.Header.<span class="f">Get</span>(<span class="s">"Origin"</span>) <span class="c">// runtime gives us this</span>
+        <span class="k">if</span> origin == allowedOrigin {
+            w.<span class="f">Header</span>().<span class="f">Set</span>(<span class="s">"Access-Control-Allow-Origin"</span>, origin)
+        }
+        next.<span class="f">ServeHTTP</span>(w, r) <span class="c">// pass along; browser blocks if header absent</span>
+    })
+}
+
+<span class="k">func</span> <span class="f">AuthMiddleware</span>(next http.Handler) http.Handler {
+    <span class="k">return</span> http.<span class="f">HandlerFunc</span>(<span class="k">func</span>(w http.ResponseWriter, r *http.Request) {
+        token := r.Header.<span class="f">Get</span>(<span class="s">"Authorization"</span>)
+        userID, role, err := <span class="f">verifyToken</span>(token)
+        <span class="k">if</span> err != <span class="k">nil</span> {
+            http.<span class="f">Error</span>(w, <span class="s">"unauthorized"</span>, http.<span class="n">StatusUnauthorized</span>) <span class="c">// 401, stop</span>
+            <span class="k">return</span>
+        }
+        <span class="c">// SUCCESS: stash identity in the request context, then continue.</span>
+        ctx := context.<span class="f">WithValue</span>(r.<span class="f">Context</span>(), <span class="s">"userID"</span>, userID)
+        ctx = context.<span class="f">WithValue</span>(ctx, <span class="s">"role"</span>, role)
+        next.<span class="f">ServeHTTP</span>(w, r.<span class="f">WithContext</span>(ctx))
+    })
+}</pre>
+<pre data-group="g6" data-lang="py" hidden>ALLOWED_ORIGIN = <span class="s">"https://app.example.com"</span>
+
+<span class="k">def</span> <span class="f">cors_middleware</span>(next):
+    <span class="k">def</span> <span class="f">wrapper</span>(request):
+        resp = <span class="f">next</span>(request)
+        origin = request.headers.<span class="f">get</span>(<span class="s">"Origin"</span>)  <span class="c"># runtime gives us this</span>
+        <span class="k">if</span> origin == ALLOWED_ORIGIN:
+            resp.headers[<span class="s">"Access-Control-Allow-Origin"</span>] = origin
+        <span class="k">return</span> resp
+    <span class="k">return</span> wrapper
+
+<span class="k">def</span> <span class="f">auth_middleware</span>(next):
+    <span class="k">def</span> <span class="f">wrapper</span>(request):
+        token = request.headers.<span class="f">get</span>(<span class="s">"Authorization"</span>)
+        <span class="k">try</span>:
+            user_id, role = <span class="f">verify_token</span>(token)
+        <span class="k">except</span> <span class="n">Exception</span>:
+            <span class="k">return</span> <span class="f">Response</span>(<span class="s">"unauthorized"</span>, status=<span class="n">401</span>)  <span class="c"># stop</span>
+        <span class="c"># SUCCESS: stash identity in the request context, then continue.</span>
+        request.context[<span class="s">"user_id"</span>] = user_id
+        request.context[<span class="s">"role"</span>] = role
+        <span class="k">return</span> <span class="f">next</span>(request)
+    <span class="k">return</span> wrapper</pre>
+    </div>
+  </section>
+
+<!-- PART IV -->
+
+  <section id="s13">
+    <div class="part-head"><span>Parte IV/Contesto della richiesta</span><span>13 / 15</span></div>
+    <h2><span class="badge">13</span>Qual è il contesto della richiesta</h2>
+    <p>Il middleware di autenticazione ha semplicemente fatto qualcosa di sottile: ha memorizzato l'ID utente e il ruolo da qualche parte in modo che un gestore successivo potesse leggerli. Quel &quot;da qualche parte&quot; è il <strong>contesto della richiesta</strong>.</p>
+    <div class="note">
+      <div class="h">Definizione/Contesto della richiesta</div>
+      <p>Un pezzo di <strong>conservazione o stato</strong>: di solito, si intende un semplice archivio di valori-chiave <strong>limitato a una singola richiesta HTTP</strong>. Ogni richiesta ha il proprio contesto; non si perde in altre richieste. Ogni framework in ogni linguaggio (Node, Go, Python) fornisce un'implementazione di questo concetto; la meccanica è diversa, l'idea è la stessa.</p>
+    </div>
+    <p>Perché esiste? Perché una richiesta passa da tanti <strong>confini di funzioni isolate</strong>: CORS, registrazione, routing, autenticazione, controlli dei permessi, gestore, gestore degli errori. Il contesto offre a tutti loro un luogo condiviso in cui leggere e scrivere lo stato <strong>senza accoppiamento stretto</strong> senza che un middleware debba passare manualmente i valori al successivo.</p>
+
+    <figure>
+      <div class="diagram">
+        <svg viewBox="0 0 760 180" role="img" aria-label="Richiedi contesto condiviso lungo la catena">
+          <g font-family="JetBrains Mono" font-size="10">
+            <rect x="40" y="30" width="90" height="40" rx="7" fill="none" stroke="var(--red)" stroke-width="1.4"/><text x="85" y="55" text-anchor="middle" fill="var(--red-deep)">autenticazione MW</text>
+            <rect x="170" y="30" width="90" height="40" rx="7" fill="none" stroke="var(--line-strong)" stroke-width="1.4"/><text x="215" y="55" text-anchor="middle" fill="var(--ink)">registrazione</text>
+            <rect x="300" y="30" width="90" height="40" rx="7" fill="none" stroke="var(--line-strong)" stroke-width="1.4"/><text x="345" y="55" text-anchor="middle" fill="var(--ink)">controllo permessi</text>
+            <rect x="430" y="30" width="90" height="40" rx="7" fill="rgba(184,64,46,.1)" stroke="var(--red)" stroke-width="1.4"/><text x="475" y="55" text-anchor="middle" fill="var(--red-deep)">gestore</text>
+            <rect x="560" y="30" width="90" height="40" rx="7" fill="none" stroke="var(--line-strong)" stroke-width="1.4"/><text x="605" y="55" text-anchor="middle" fill="var(--ink)">errore MW</text>
+          </g>
+          <rect x="40" y="105" width="610" height="48" rx="9" fill="rgba(184,64,46,.06)" stroke="var(--red)" stroke-width="1.4" stroke-dasharray="5 4"/>
+          <text x="345" y="125" text-anchor="middle" class="sv-mono" font-size="11" fill="var(--red-deep)">CONTESTO DELLA RICHIESTA · stato chiave-valore condiviso, limitato a questa richiesta</text>
+          <text x="345" y="142" text-anchor="middle" class="sv-mono" font-size="10" fill="var(--muted)">{ user_id, ruolo, request_id, scadenza }</text>
+          <g stroke="var(--muted)" stroke-width="1.2" stroke-dasharray="2 3">
+            <line x1="85" y1="70" x2="85" y2="104"/><line x1="215" y1="70" x2="215" y2="104"/>
+            <line x1="345" y1="70" x2="345" y2="104"/><line x1="475" y1="70" x2="475" y2="104"/>
+            <line x1="605" y1="70" x2="605" y2="104"/>
+          </g>
+        </svg>
+      </div>
+      <figcaption>Ogni confine può leggere e scrivere il <b>stesso negozio per richiesta</b>: non è necessario alcun passaggio manuale.</figcaption>
+    </figure>
+  </section>
+
+  <section id="s14">
+    <div class="part-head"><span>Parte IV/Contesto della richiesta</span><span>14 / 15</span></div>
+    <h2><span class="badge">14</span>Caso d'uso/Trasmissione dei dati di autenticazione</h2>
+    <p>L'uso canonico. Il middleware di autenticazione verifica le credenziali, estrae il file <code class="inl">user_id</code> e <code class="inl">role</code>e li scrive nel contesto. Molto più a valle, a <code class="inl">POST /books</code> il conduttore deve timbrare il nuovo libro con il suo proprietario. Invece di fidarsi di a <code class="inl">user_id</code> inviato nel payload JSON del client, legge l'ID <strong>dal contesto</strong>.</p>
+    <div class="note">
+      <div class="h">Sicurezza, perché è importante</div>
+      <p>Se hai preso il <code class="inl">user_id</code> dal payload del client, un client dannoso potrebbe inviare <em>quello di qualcun altro</em> Identificati e agisci come loro. Leggere l'identità dal contesto, popolato solo dal middleware di autenticazione verificata, chiude quel buco. Lo stesso ruolo memorizzato nel contesto guida i controlli delle autorizzazioni (questo utente è un amministratore? Ha accesso in scrittura?).</p>
+    </div>
+
+    <div class="code">
+      <div class="code-bar">
+        <span class="dots"><i style="background:#e06c5b"></i><i style="background:#e0b15b"></i><i style="background:#8bbf6e"></i></span>
+        <span class="fname">il gestore legge l'identità dal contesto</span>
+        <div class="tabs" data-group="g7">
+          <button class="active" data-lang="go">Vai</button>
+          <button data-lang="py">Pitone</button>
+        </div>
+      </div>
+<pre data-group="g7" data-lang="go"><span class="k">func</span> <span class="f">CreateBookHandler</span>(w http.ResponseWriter, r *http.Request) {
+    <span class="k">var</span> req CreateBookRequest
+    json.<span class="f">NewDecoder</span>(r.Body).<span class="f">Decode</span>(&amp;req)
+
+    <span class="c">// Read the trusted user ID FROM THE CONTEXT, not from req.</span>
+    <span class="c">// The auth middleware put it there after verifying the token.</span>
+    userID := r.<span class="f">Context</span>().<span class="f">Value</span>(<span class="s">"userID"</span>).(<span class="k">int</span>)
+    role := r.<span class="f">Context</span>().<span class="f">Value</span>(<span class="s">"role"</span>).(<span class="k">string</span>)
+
+    <span class="k">if</span> role != <span class="s">"admin"</span> &amp;&amp; role != <span class="s">"user"</span> {
+        http.<span class="f">Error</span>(w, <span class="s">"forbidden"</span>, http.<span class="n">StatusForbidden</span>)
+        <span class="k">return</span>
+    }
+
+    <span class="c">// Persist with the SERVER-VERIFIED owner id, never the client's.</span>
+    book, _ := bookService.<span class="f">Create</span>(r.<span class="f">Context</span>(), req, userID)
+    w.<span class="f">WriteHeader</span>(http.<span class="n">StatusCreated</span>) <span class="c">// 201</span>
+    json.<span class="f">NewEncoder</span>(w).<span class="f">Encode</span>(book)
+}</pre>
+<pre data-group="g7" data-lang="py" hidden><span class="k">def</span> <span class="f">create_book_handler</span>(request):
+    req = <span class="f">CreateBookRequest</span>(**request.<span class="f">get_json</span>())
+
+    <span class="c"># Read the trusted user id FROM THE CONTEXT, not from the body.</span>
+    <span class="c"># The auth middleware put it there after verifying the token.</span>
+    user_id = request.context[<span class="s">"user_id"</span>]
+    role = request.context[<span class="s">"role"</span>]
+
+    <span class="k">if</span> role <span class="k">not</span> <span class="k">in</span> (<span class="s">"admin"</span>, <span class="s">"user"</span>):
+        <span class="k">return</span> <span class="f">Response</span>(<span class="s">"forbidden"</span>, status=<span class="n">403</span>)
+
+    <span class="c"># Persist with the SERVER-VERIFIED owner id, never the client's.</span>
+    book = book_service.<span class="f">create</span>(req, user_id)
+    <span class="k">return</span> <span class="f">jsonify</span>(book), <span class="n">201</span></pre>
+    </div>
+  </section>
+
+  <section id="s15">
+    <div class="part-head"><span>Parte IV/Contesto della richiesta</span><span>15 / 15</span></div>
+    <h2><span class="badge">15</span>Casi d'uso/Tracciamento e cancellazione</h2>
+
+    <h3>Richiedi il tracciamento</h3>
+    <p>Un primo middleware può generare un ID univoco (un UUID) e salvarlo nel contesto. Per l'intero ciclo di vita di tale richiesta, ogni riga di registro può includere questo ID e qualsiasi chiamata in uscita ad altri microservizi può inoltrarlo in un'intestazione come <code class="inl">X-Request-ID</code>. Quando successivamente controlli i tuoi log per eseguire il debug di un problema, quel singolo ID te lo consente <strong>tracciare una richiesta per ogni servizio toccato</strong>: dove è iniziato e ovunque è andato.</p>
+
+    <div class="code">
+      <div class="code-bar">
+        <span class="dots"><i style="background:#e06c5b"></i><i style="background:#e0b15b"></i><i style="background:#8bbf6e"></i></span>
+        <span class="fname">middleware ID richiesta</span>
+        <div class="tabs" data-group="g8">
+          <button class="active" data-lang="go">Vai</button>
+          <button data-lang="py">Pitone</button>
+        </div>
+      </div>
+<pre data-group="g8" data-lang="go"><span class="k">func</span> <span class="f">RequestIDMiddleware</span>(next http.Handler) http.Handler {
+    <span class="k">return</span> http.<span class="f">HandlerFunc</span>(<span class="k">func</span>(w http.ResponseWriter, r *http.Request) {
+        id := uuid.<span class="f">NewString</span>() <span class="c">// one unique id for this request</span>
+        ctx := context.<span class="f">WithValue</span>(r.<span class="f">Context</span>(), <span class="s">"requestID"</span>, id)
+        w.<span class="f">Header</span>().<span class="f">Set</span>(<span class="s">"X-Request-ID"</span>, id) <span class="c">// echo it back / forward it</span>
+        log.<span class="f">Printf</span>(<span class="s">"[%s] %s %s"</span>, id, r.Method, r.URL.Path)
+        next.<span class="f">ServeHTTP</span>(w, r.<span class="f">WithContext</span>(ctx))
+    })
+}</pre>
+<pre data-group="g8" data-lang="py" hidden><span class="k">import</span> uuid
+
+<span class="k">def</span> <span class="f">request_id_middleware</span>(next):
+    <span class="k">def</span> <span class="f">wrapper</span>(request):
+        rid = <span class="k">str</span>(uuid.<span class="f">uuid4</span>())  <span class="c"># one unique id for this request</span>
+        request.context[<span class="s">"request_id"</span>] = rid
+        <span class="k">print</span>(<span class="s">f"[{rid}] {request.method} {request.path}"</span>)
+        resp = <span class="f">next</span>(request)
+        resp.headers[<span class="s">"X-Request-ID"</span>] = rid  <span class="c"># echo it back / forward it</span>
+        <span class="k">return</span> resp
+    <span class="k">return</span> wrapper</pre>
+    </div>
+
+    <h3>Cancellazione, segnali di interruzione e scadenze</h3>
+    <p>Il contesto della richiesta è anche il luogo standard da trasportare <strong>segnali di cancellazione</strong> e <strong>scadenze</strong>. Se un client si disconnette o scade una scadenza, tali segnali si propagano alle chiamate esterne downstream, quindi un servizio mai <strong>pende perennemente</strong> aspettando un lavoro che non conta più. In Go questo è il built-in <code class="inl">context.Context</code> con <code class="inl">WithTimeout</code>; in Python emerge come timeout/token di cancellazione passati lungo la catena di chiamate.</p>
+
+    <div class="note">
+      <div class="h">L'intero quadro</div>
+      <p>Una richiesta entra nel punto di ingresso, scorre attraverso una catena ordinata di middleware e routing, arriva a un gestore che convalida e trasforma i dati, delega a un servizio che orchestra la logica applicativa, che chiama repository per il lavoro sul database, il tutto mentre una richiesta <strong>contesto</strong> porta con sé identità, un ID di traccia e scadenze. Il risultato risale e il gestore sceglie un codice di stato e invia la risposta. Questo è l'intero ciclo di vita della richiesta.</p>
+    </div>
+  </section>
+
+  
+
+      <footer class="bfp-footer">Backend da Primi Principi / Capitolo 06 / Livelli. Il codice è destinato a Go 1.22+ e Python 3.11+.</footer>
+</main>
+</div>
+<script>
+  // Code tab switching, scoped per group.
+  document.querySelectorAll('.tabs').forEach(function(tabs){
+    var group = tabs.getAttribute('data-group');
+    tabs.querySelectorAll('button').forEach(function(btn){
+      btn.addEventListener('click', function(){
+        var lang = btn.getAttribute('data-lang');
+        tabs.querySelectorAll('button').forEach(function(b){ b.classList.toggle('active', b === btn); });
+        document.querySelectorAll('pre[data-group="'+group+'"]').forEach(function(pre){
+          pre.hidden = (pre.getAttribute('data-lang') !== lang);
+        });
+      });
+    });
+  });
+</script>
+<!-- CHAPTER NAVIGATION -->
+<nav class="chapter-nav" id="chapterNav">
+  <a href="../../5. Validations and transformations for backend engineers/html_notes/notes.html" class="nav-chapter-link"><span class="nav-arrow"><svg class="ico-arrow" width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="13.5" y1="8" x2="3.5" y2="8"/><polyline points="7.5,4 3.5,8 7.5,12"/></svg></span><span class="nav-label"><span class="nav-small">Capitolo 5</span>Convalide e trasformazioni</span></a>
+  <a href="../../index.html" class="nav-indicator"><span class="nav-dot"></span> Capitolo 6 <span class="nav-sep">/</span> 24</a>
+  <a href="../../7.API-DESIGN-RestAPI/html_notes/notes.html" class="nav-chapter-link nav-next"><span class="nav-label"><span class="nav-small">Capitolo 7</span>Progettazione API (REST)</span><span class="nav-arrow"><svg class="ico-arrow" width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="2.5" y1="8" x2="12.5" y2="8"/><polyline points="8.5,4 12.5,8 8.5,12"/></svg></span></a>
+</nav>
+  <script src="../../assets/copy-button.js"></script>
+  <script src="../../assets/enhancements.js"></script>
+<script src="../../assets/shell.js"></script>
+</body>
+
+</html>

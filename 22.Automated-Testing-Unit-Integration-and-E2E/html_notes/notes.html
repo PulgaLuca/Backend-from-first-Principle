@@ -1,0 +1,2125 @@
+<!DOCTYPE html>
+<html lang="it">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="referrer" content="no-referrer">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Test automatizzati / Capitolo 22 / Backend dai principi primi</title>
+  <meta name="description" content="Capitolo 22 di Backend from First Principles: Test automatizzati. Note sui principi primi, diagrammi ed esempi eseguibili in Go e Python.">
+  <meta name="theme-color" content="#f3ede2">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2032%2032'%3E%3Crect%20width='32'%20height='32'%20rx='7'%20fill='%23b8402e'/%3E%3Ctext%20x='16'%20y='23'%20font-family='Georgia,serif'%20font-size='19'%20font-weight='700'%20fill='%23f3ede2'%20text-anchor='middle'%3EB%3C/text%3E%3C/svg%3E">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/go.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/python.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/bash.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/yaml.min.js"></script>
+
+  <style>
+    :root{
+  --paper: #f3ede2;
+  --paper-2: #ece3d4;
+  --ink: #211e1a;
+  --ink-soft: #5b5347;
+  --rust: #b8402e;
+  --rust-deep: #8f2f20;
+  --gold: #b07d2b;
+  --teal: #3f6f4e;
+  --line: #d8cfbe;
+  --code-bg: #232019;
+  --code-bar: #1a1813;
+  --shadow: 0 1px 0 rgba(0,0,0,.04),0 18px 40px -28px rgba(40,30,20,.5);
+}
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0
+    }
+
+    html {
+      scroll-behavior: smooth;
+      scroll-padding-top: 24px
+    }
+
+    body {
+      background: var(--paper);
+      color: var(--ink);
+      font-family:"Spline Sans", system-ui, sans-serif;
+      font-size: 17px;
+      line-height: 1.7;
+      -webkit-font-smoothing: antialiased;
+      background-image: radial-gradient(circle at 12% 8%, rgba(184,64,46, .05), transparent 38%), radial-gradient(circle at 88% 92%, rgba(63,111,78, .05), transparent 42%);
+    }
+
+    .hero {
+      margin-bottom: 64px;
+    }
+
+    .kicker {
+      font-family:"JetBrains Mono", ui-monospace, monospace;
+      font-size: 12.5px;
+      letter-spacing: .3em;
+      text-transform: uppercase;
+      color: var(--rust);
+      font-weight: 700;
+      margin-bottom: 20px;
+    }
+
+    .hero h1 {
+      font-family:"Fraunces", Georgia, serif;
+      font-weight: 900;
+      font-size: clamp(40px, 6.5vw, 78px);
+      line-height: .95;
+      letter-spacing: -.025em;
+      margin-bottom: 24px;
+    }
+
+    .hero h1 em {
+      font-style: italic;
+      color: var(--rust);
+      font-weight: 500;
+    }
+
+    .hero .lede{
+      font-size: 19px;
+      max-width:64ch;
+      color: var(--ink-soft);
+      line-height: 1.6;
+    }
+
+    .hero .meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 32px;
+    }
+
+    .hero .meta span {
+      font-family:"JetBrains Mono", ui-monospace, monospace;
+      font-size: 12px;
+      border: 1px solid var(--line);
+      background: var(--paper-2);
+      padding: 6px 13px;
+      border-radius: 30px;
+      color: var(--ink-soft);
+    }
+
+    .hero .rule {
+      height: 3px;
+      width:120px;
+      background: var(--rust);
+      margin-top: 38px;
+    }
+
+    .part-label {
+      font-family:"JetBrains Mono", ui-monospace, monospace;
+      font-size: 12px;
+      letter-spacing: .22em;
+      text-transform: uppercase;
+      color: var(--rust);
+      font-weight: 700;
+      margin: 64px 0 8px;
+      padding-bottom: 6px;
+      border-bottom: 1px dashed var(--line);
+    }
+
+    .part-label:first-of-type {
+      margin-top: 0;
+    }
+
+    section {
+      margin-bottom: 72px;
+      scroll-margin-top: 20px;
+    }
+
+    .sec-head {
+      display: flex;
+      align-items: flex-start;
+      gap: 18px;
+      margin-bottom: 24px;
+      border-bottom: 1px solid var(--line);
+      padding-bottom: 16px;
+    }
+
+    .sec-num {
+      font-family:"JetBrains Mono", ui-monospace, monospace;
+      font-weight: 700;
+      font-size: 14px;
+      color: #fff;
+      background: var(--rust);
+      border-radius: 8px;
+      padding: 7px 11px;
+      line-height: 1;
+      margin-top: 8px;
+      white-space: nowrap;
+      box-shadow: 0 3px 10px rgba(184,64,46, .3);
+    }
+
+    h2 {
+      font-family:"Fraunces", Georgia, serif;
+      font-weight: 600;
+      font-size: clamp(27px, 3.6vw, 38px);
+      line-height: 1.06;
+      letter-spacing: -.015em;
+    }
+
+    h3 {
+      font-family:"Fraunces", Georgia, serif;
+      font-weight: 600;
+      font-size: 22px;
+      margin: 34px 0 12px;
+      letter-spacing: -.01em;
+    }
+
+    h4 {
+      font-size: 14px;
+      font-weight: 700;
+      letter-spacing: .04em;
+      text-transform: uppercase;
+      color: var(--rust-deep);
+      margin: 24px 0 9px;
+    }
+
+    p {
+      margin-bottom: 15px;
+      max-width:76ch;
+    }
+
+    strong {
+      font-weight: 700;
+      color: var(--ink);
+    }
+
+    ul,
+    ol {
+      margin: 0 0 17px 0;
+      padding-left:0;
+      max-width:76ch;
+    }
+
+    li {
+      margin: 0 0 9px 28px;
+    }
+
+    li::marker {
+      color: var(--rust);
+      font-weight: 700;
+    }
+
+    code:not(pre code) {
+      font-family:"JetBrains Mono", ui-monospace, monospace;
+      font-size: .85em;
+      background: var(--paper-2);
+      border: 1px solid var(--line);
+      padding: .12em .42em;
+      border-radius: 5px;
+      color: var(--rust-deep);
+      white-space: nowrap;
+    }
+
+    .box {
+      border-radius: 12px;
+      padding: 18px 22px;
+      margin: 22px 0;
+      border: 1px solid var(--line);
+      background: var(--paper-2);
+    }
+
+    .box .tag {
+      font-family:"JetBrains Mono", ui-monospace, monospace;
+      font-size: 11px;
+      letter-spacing: .16em;
+      text-transform: uppercase;
+      font-weight: 700;
+      margin-bottom: 7px;
+      display: block;
+    }
+
+    .box p:last-child {
+      margin-bottom: 0;
+    }
+
+    .box.key {
+      background: linear-gradient(180deg, rgba(176,125,43, .1), rgba(176,125,43, .04));
+      border-color: rgba(176,125,43, .4);
+    }
+
+    .box.key .tag {
+      color: var(--gold);
+    }
+
+    .box.gotcha {
+      background: linear-gradient(180deg, rgba(184,64,46, .1), rgba(184,64,46, .03));
+      border-color: rgba(184,64,46, .4);
+    }
+
+    .box.gotcha .tag {
+      color: var(--rust);
+    }
+
+    .box.note {
+      background: linear-gradient(180deg, rgba(63,111,78, .09), rgba(63,111,78, .03));
+      border-color: rgba(63,111,78, .4);
+    }
+
+    .box.note .tag {
+      color: var(--teal);
+    }
+
+    .analogy {
+      font-style: italic;
+      color: var(--ink-soft);
+      font-family:"Fraunces", Georgia, serif;
+      font-size: 18px;
+      line-height: 1.55;
+      border-left: 3px solid var(--gold);
+      padding: 6px 0 6px 22px;
+      margin: 20px 0;
+    }
+
+    .tbl-wrap {
+      overflow-x: auto;
+      margin: 22px 0;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+    }
+
+    table {
+      border-collapse: collapse;
+      width:100%;
+      font-size: 14px;
+    }
+
+    th,
+    td {
+      text-align: left;
+      padding: 11px 15px;
+      border-bottom: 1px solid var(--line);
+      vertical-align: top;
+    }
+
+    th {
+      background: var(--paper-2);
+      font-weight: 700;
+      font-size: 11.5px;
+      letter-spacing: .05em;
+      text-transform: uppercase;
+      color: var(--rust-deep);
+    }
+
+    tr:last-child td {
+      border-bottom: none;
+    }
+
+    td code {
+      white-space: nowrap;
+    }
+
+    .mono-cell {
+      font-family:"JetBrains Mono", ui-monospace, monospace;
+      font-weight: 700;
+      color: var(--rust-deep);
+      font-size: 13px;
+    }
+
+    .yes {
+      color: #3f6f4e;
+      font-weight: 700;
+    }
+
+    .no {
+      color: #b8402e;
+      font-weight: 700;
+    }
+
+    .cond {
+      color: #b07d2b;
+      font-weight: 700;
+    }
+
+    .sc {
+      font-family:"JetBrains Mono", ui-monospace, monospace;
+      font-weight: 700;
+      padding: 2px 8px;
+      border-radius: 6px;
+      font-size: 13px;
+      white-space: nowrap;
+    }
+
+    .sc.s1 {
+      background: #dee5ee;
+      color: #3f6f4e;
+    }
+
+    .sc.s2 {
+      background: #e0e9dd;
+      color: #3f6f4e;
+    }
+
+    .sc.s3 {
+      background: #f0e5c9;
+      color: #b07d2b;
+    }
+
+    .sc.s4 {
+      background: #f4ded6;
+      color: #b8402e;
+    }
+
+    .sc.s5 {
+      background: #eccdc2;
+      color: #8f2f20;
+    }
+
+    .codeblock {
+      background: var(--code-bg);
+      margin: 20px 0;
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 14px 30px -16px var(--shadow);
+      border: 1px solid #35302a;
+    }
+
+    .code-bar {
+      display: flex;
+      align-items: center;
+      background: var(--code-bar);
+      padding: 0 14px;
+      border-bottom: 1px solid #35302a;
+    }
+
+    .code-bar .dots {
+      display: flex;
+      gap: 7px;
+      margin-right: 14px;
+    }
+
+    .code-bar .dots i {
+      width:11px;
+      height: 11px;
+      border-radius: 50%;
+      display: block;
+    }
+
+    .dots i:nth-child(1) {
+      background: #d05a47;
+    }
+
+    .dots i:nth-child(2) {
+      background: #cf9f4b;
+    }
+
+    .dots i:nth-child(3) {
+      background: #5a9a5f;
+    }
+
+    .code-tabs {
+      display: flex;
+    }
+
+    .code-tabs button {
+      font-family:"JetBrains Mono", ui-monospace, monospace;
+      font-size: 12.5px;
+      font-weight: 600;
+      background: none;
+      border: none;
+      color: #9c948a;
+      padding: 13px 18px;
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      transition: .15s;
+    }
+
+    .code-tabs button:hover {
+      color: #e9e2d3;
+    }
+
+    .code-tabs button.on {
+      color: #fff;
+      border-bottom-color: var(--rust);
+    }
+
+    .lang-go {
+      color: #7fb0c9;
+    }
+
+    .lang-py {
+      color: #d8b66a;
+    }
+
+    .code-panel {
+      display: none;
+    }
+
+    .code-panel.on {
+      display: block;
+    }
+
+    .codeblock pre {
+      margin: 0;
+    }
+
+    .codeblock pre code {
+      font-family:"JetBrains Mono", ui-monospace, monospace !important;
+      font-size: 13px;
+      line-height: 1.6;
+      padding: 18px 20px !important;
+      display: block;
+      overflow-x: auto;
+      background: var(--code-bg) !important;
+    }
+
+    .code-cap {
+      font-size: 13px;
+      color: var(--ink-soft);
+      font-style: italic;
+      margin: -8px 2px 22px;
+      font-family:"Fraunces", Georgia, serif;
+    }
+
+    .codeblock.single .code-bar .filename {
+      font-family:"JetBrains Mono", ui-monospace, monospace;
+      font-size: 12.5px;
+      color: #9c948a;
+      padding: 13px 4px;
+    }
+
+    .flow {
+      margin: 22px 0;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: var(--paper-2);
+      padding: 24px 22px;
+    }
+
+    .flow .step {
+      display: flex;
+      gap: 15px;
+      align-items: flex-start;
+      padding: 9px 0;
+    }
+
+    .flow .step .b {
+      font-family:"JetBrains Mono", ui-monospace, monospace;
+      font-weight: 700;
+      font-size: 12px;
+      background: var(--ink);
+      color: var(--paper);
+      min-width:30px;
+      height: 30px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 8px;
+      flex-shrink: 0;
+    }
+
+    .flow .step.srv .b {
+      background: var(--teal);
+    }
+
+    .flow .step.cli .b {
+      background: var(--rust);
+    }
+
+    .flow .step .t {
+      padding-top: 3px;
+      font-size: 14.5px;
+    }
+
+    .flow .arrow {
+      color: var(--line);
+      text-align: center;
+      font-size: 18px;
+      line-height: .4;
+      margin: 0 0 0 14px;
+    }
+
+    /* method card */
+    .method {
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      margin: 26px 0;
+      overflow: hidden;
+      background: var(--paper-2);
+    }
+
+    .method-top {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 14px;
+      padding: 18px 22px;
+      background: linear-gradient(180deg, rgba(33,30,26, .04), transparent);
+      border-bottom: 1px solid var(--line);
+    }
+
+    .method-top .verb {
+      font-family:"JetBrains Mono", ui-monospace, monospace;
+      font-weight: 700;
+      font-size: 18px;
+      color: #fff;
+      background: var(--ink);
+      padding: 6px 14px;
+      border-radius: 8px;
+    }
+
+    .method-top .verb.get {
+      background: #3f6f4e;
+    }
+
+    .method-top .verb.post {
+      background: var(--rust);
+    }
+
+    .method-top .verb.put {
+      background: #8a6420;
+    }
+
+    .method-top .verb.patch {
+      background: #b07d2b;
+    }
+
+    .method-top .verb.delete {
+      background: #8f2f20;
+    }
+
+    .method-top .verb.head {
+      background: #37607f;
+    }
+
+    .method-top .verb.options {
+      background: var(--teal);
+    }
+
+    .method-top .verb.connect {
+      background: #5b5347;
+    }
+
+    .method-top .verb.trace {
+      background: #8d8475;
+    }
+
+    .method-top .props {
+      display: flex;
+      gap: 7px;
+      flex-wrap: wrap;
+      margin-left:auto;
+    }
+
+    .method-top .props span {
+      font-family:"JetBrains Mono", ui-monospace, monospace;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 4px 9px;
+      border-radius: 20px;
+      border: 1px solid var(--line);
+      background: var(--paper);
+    }
+
+    .method-top .props .y {
+      color: #3f6f4e;
+      border-color: #bcd3b6;
+    }
+
+    .method-top .props .c {
+      color: #b07d2b;
+      border-color: #ddc79a;
+    }
+
+    .method-body {
+      padding: 6px 22px 20px;
+    }
+
+    .method-body .gloss {
+      font-family:"Fraunces", Georgia, serif;
+      font-style: italic;
+      font-size: 17px;
+      color: var(--ink-soft);
+      margin: 14px 0;
+    }
+
+    .foot {
+      border-top: 3px solid var(--rust);
+      margin-top: 56px;
+      padding-top: 28px;
+      color: var(--ink-soft);
+      font-size: 14px;
+    }
+
+    .foot strong {
+      color: var(--ink);
+    }
+
+    .toc-toggle {
+      display: none;
+    }
+
+    /* ============ VISUALIZATION STYLES (added) ============ */
+    .viz {
+      margin: 30px 0;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: linear-gradient(180deg, #f6f0e6, var(--paper-2));
+      padding: 24px 22px 18px;
+      box-shadow: 0 10px 26px -18px var(--shadow);
+    }
+
+    .viz-cap {
+      font-family:"JetBrains Mono", ui-monospace, monospace;
+      font-size: 11px;
+      letter-spacing: .18em;
+      text-transform: uppercase;
+      color: var(--rust);
+      font-weight: 700;
+      margin-bottom: 4px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .viz-cap::before {
+      content: "";
+      width:18px;
+      height: 2px;
+      background: var(--rust);
+      display: inline-block;
+    }
+
+    .viz-title {
+      font-family:"Fraunces", Georgia, serif;
+      font-weight: 600;
+      font-size: 18px;
+      letter-spacing: -.01em;
+      margin-bottom: 16px;
+      color: var(--ink);
+    }
+
+    .viz svg {
+      display: block;
+      width:100%;
+      height: auto;
+      overflow: visible;
+    }
+
+    .viz svg text {
+      font-family:"Spline Sans", system-ui, sans-serif;
+    }
+
+    .viz svg .mono {
+      font-family:"JetBrains Mono", ui-monospace, monospace;
+    }
+
+    .viz svg .serif {
+      font-family:"Fraunces", Georgia, serif;
+    }
+
+    .viz-note {
+      font-size: 12.5px;
+      color: var(--ink-soft);
+      font-style: italic;
+      font-family:"Fraunces", Georgia, serif;
+      margin-top: 14px;
+      padding-top: 12px;
+      border-top: 1px dashed var(--line);
+    }
+
+    @media(max-width:980px) {
+
+      .toc-toggle {
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        position: fixed;
+        top: 16px;
+        left:16px;
+        z-index: 60;
+        background: var(--ink);
+        color: var(--paper);
+        border: none;
+        font-family:"JetBrains Mono", ui-monospace, monospace;
+        font-size: 13px;
+        font-weight: 600;
+        padding: 11px 16px;
+        border-radius: 10px;
+        cursor: pointer;
+        box-shadow: 0 6px 18px var(--shadow);
+      }
+
+      .method-top .props {
+        margin-left:0;
+        width:100%;
+      }}
+
+    @media(max-width:560px) {
+      body {
+        font-size: 16px;
+      }}
+
+    ::selection {
+      background: var(--rust);
+      color: #fff;
+    }</style>
+<style>
+.chapter-nav{position:fixed;bottom:0;left:0;right:0;z-index:9998;display:flex;align-items:center;justify-content:space-between;padding:14px clamp(16px,4vw,48px);background:rgba(243,237,226,.88);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border-top:1.5px solid #c7bca6;box-shadow:0 -8px 32px -16px rgba(40,30,20,.18);font-family:"JetBrains Mono", ui-monospace, monospace;}
+.nav-chapter-link{display:flex;align-items:center;gap:12px;text-decoration:none;color:#5b5347;padding:10px 18px;border-radius:10px;transition:all .2s ease;max-width:38%;}
+.nav-chapter-link:hover{background:rgba(184,64,46,.08);color:#b8402e;transform:translateY(-1px);}
+.nav-chapter-link.nav-next{text-align:right;flex-direction:row;}
+.nav-arrow{font-size:22px;color:#b8402e;font-weight:700;flex:none;}
+.nav-label{display:flex;flex-direction:column;gap:2px;font-size:13.5px;line-height:1.3;}
+.nav-small{font-size:10px;letter-spacing:.22em;text-transform:uppercase;color:#8d8475;font-weight:600;}
+.nav-indicator{font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:#b8402e;font-weight:700;text-decoration:none;padding:8px 16px;border:1.5px solid #c7bca6;border-radius:40px;background:rgba(255,255,255,.5);transition:all .2s;white-space:nowrap;}
+.nav-indicator:hover{background:#b8402e;color:#fff;border-color:#b8402e;}
+.nav-dot{display:inline-block;width:7px;height:7px;background:#b8402e;border-radius:50%;margin-right:4px;vertical-align:middle;}
+.nav-sep{color:#c7bca6;margin:0 2px;}
+.nav-disabled{visibility:hidden;pointer-events:none;}
+@media(max-width:700px){.nav-label{font-size:11.5px;}.nav-chapter-link{padding:8px 10px;max-width:38%;}.chapter-nav{padding:10px 12px;}.nav-small{font-size:9px;letter-spacing:.16em;}}
+@media(max-width:520px){.nav-label{display:none;}.nav-chapter-link{max-width:none;padding:8px 12px;}.nav-arrow{font-size:20px;}.nav-indicator{font-size:11px;padding:7px 13px;letter-spacing:.12em;}}
+body{padding-bottom:80px;}
+</style>
+  <link rel="stylesheet" href="../../assets/copy-button.css">
+  <link rel="stylesheet" href="../../assets/enhancements.css">
+  <link rel="stylesheet" href="../../assets/shell.css">
+  <link rel="stylesheet" href="../../assets/theme.css">
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;0,9..144,900;1,9..144,400;1,9..144,600&family=Spline+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script src="../../assets/theme.js"></script>
+</head>
+
+<body>
+<button class="bfp-toc-toggle" id="bfpTocToggle" aria-controls="bfpToc" aria-expanded="false"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><line x1="2" y1="4" x2="14" y2="4"/><line x1="2" y1="8" x2="14" y2="8"/><line x1="2" y1="12" x2="14" y2="12"/></svg>Contenuto</button>
+<div class="bfp-toc-scrim" id="bfpTocScrim"></div>
+<div class="bfp-shell">
+    <aside class="bfp-toc" id="bfpToc">
+      <div class="bfp-brand"><span class="bfp-brand-name">Test</span><span class="bfp-brand-slash">/</span><span class="bfp-brand-lens">l'obiettivo del back-end</span></div>
+      <div class="bfp-brand-sub">Capitolo 22/Manuale da campo</div>
+      <div class="bfp-toc-rule"></div>
+      <nav class="bfp-toc-nav">
+        <a class="bfp-toc-link" href="#s1"><span class="bfp-toc-num">01</span><span class="bfp-toc-text">Perché esistono i test</span></a>
+        <a class="bfp-toc-link" href="#s2"><span class="bfp-toc-num">02</span><span class="bfp-toc-text">La Piramide dei Test</span></a>
+        <a class="bfp-toc-link" href="#s3"><span class="bfp-toc-num">03</span><span class="bfp-toc-text">Anatomia di un test</span></a>
+        <a class="bfp-toc-link" href="#s4"><span class="bfp-toc-num">04</span><span class="bfp-toc-text">Test unitari</span></a>
+        <a class="bfp-toc-link" href="#s5"><span class="bfp-toc-num">05</span><span class="bfp-toc-text">Prova del doppio</span></a>
+        <a class="bfp-toc-link" href="#s6"><span class="bfp-toc-num">06</span><span class="bfp-toc-text">Iniezione di dipendenze per i test</span></a>
+        <a class="bfp-toc-link" href="#s7"><span class="bfp-toc-num">07</span><span class="bfp-toc-text">Guidato da tabelle e parametrizzato</span></a>
+        <a class="bfp-toc-link" href="#s8"><span class="bfp-toc-num">08</span><span class="bfp-toc-text">Test di integrazione</span></a>
+        <a class="bfp-toc-link" href="#s9"><span class="bfp-toc-num">09</span><span class="bfp-toc-text">Test con un database reale</span></a>
+        <a class="bfp-toc-link" href="#s10"><span class="bfp-toc-num">10</span><span class="bfp-toc-text">Test di gestori e API HTTP</span></a>
+        <a class="bfp-toc-link" href="#s11"><span class="bfp-toc-num">11</span><span class="bfp-toc-text">Test del contratto</span></a>
+        <a class="bfp-toc-link" href="#s12"><span class="bfp-toc-num">12</span><span class="bfp-toc-text">Test end-to-end</span></a>
+        <a class="bfp-toc-link" href="#s13"><span class="bfp-toc-num">13</span><span class="bfp-toc-text">Copertura di prova</span></a>
+        <a class="bfp-toc-link" href="#s14"><span class="bfp-toc-num">14</span><span class="bfp-toc-text">Test traballanti</span></a>
+        <a class="bfp-toc-link" href="#s15"><span class="bfp-toc-num">15</span><span class="bfp-toc-text">Infissi e fabbriche</span></a>
+        <a class="bfp-toc-link" href="#s16"><span class="bfp-toc-num">16</span><span class="bfp-toc-text">TDD, Rosso/Verde/Refactoring</span></a>
+        <a class="bfp-toc-link" href="#s17"><span class="bfp-toc-num">17</span><span class="bfp-toc-text">Tempo di beffa, casualità e API</span></a>
+        <a class="bfp-toc-link" href="#s18"><span class="bfp-toc-num">18</span><span class="bfp-toc-text">Test di prestazioni e carico</span></a>
+        <a class="bfp-toc-link" href="#s19"><span class="bfp-toc-num">19</span><span class="bfp-toc-text">Test in CI/CD</span></a>
+        <a class="bfp-toc-link" href="#s20"><span class="bfp-toc-num">20</span><span class="bfp-toc-text">Una strategia di test</span></a>
+        <a class="bfp-toc-link" href="#s21"><span class="bfp-toc-num">21</span><span class="bfp-toc-text">Cheat-Sheet</span></a>
+      </nav>
+    </aside>
+    <main class="bfp-content">
+
+      <header class="hero">
+        <div class="kicker">Un riferimento dettagliato al backend</div>
+        <h1>Test automatizzati, il <em>prova</em><br>il tuo codice fa quello che pensi.</h1>
+        <p class="lede">Una panoramica dettagliata sui principi primi su come gli ingegneri di backend verificano i loro sistemi, da un singolo
+          <em>unità</em> test e il vocabolario test-double, attraverso test di integrazione contro database reali e HTTP
+          gestori, test contrattuali tra servizi, controlli end-to-end, copertura e inadeguatezza e in TDD, carico
+          test e test nella pipeline di distribuzione. Scritto per spiegare non solo <em>cosa</em> ogni tipo di prova
+          fa ma <em>perché</em> esiste e <em>come</em> per scriverlo bene. Esempi in entrambi Go (<code>testing</code>)
+          e Pitone (<code>pytest</code>).</p>
+        <div class="meta">
+          <span>Unità / Integrazione / E2E</span>
+          <span>Vai a testare / pytest</span>
+          <span>Vai 1.22+ / Python 3.11+</span>
+          <span>21 sezioni</span>
+        </div>
+        <div class="rule"></div>
+      </header>
+
+      <div class="part-label">Parte I / Perché e cosa</div>
+
+      <!-- 1 -->
+      <section id="s1">
+        <div class="sec-head"><div class="sec-num">01</div><h2>Perché esistono i test</h2></div>
+        <p>La ragione onesta per scrivere test automatizzati non è la &quot;correttezza&quot; in astratto, lo è
+          <strong>fiducia necessaria per modificare il codice senza paura.</strong> Un sistema senza test calcifica: ogni modifica rischia
+          rompendo qualcosa di invisibile, così le persone smettono di refactoring, smettono di aggiornare le dipendenze e aggirano il file
+          parti spaventose. Un sistema ben collaudato rimane morbido, puoi ristrutturarlo in modo aggressivo perché un test verde
+          suite ti dice, in pochi secondi, che quel comportamento è ancora valido. I test sono ciò che consente a una base di codice di continuare ad evolversi invece di
+          marcire.</p>
+
+        <p>Anche un test lo è <strong>specifica eseguibile</strong>. I documenti in prosa si allontanano dalla realtà (lo stesso problema di
+          capitolo gRPC menzionato sui contratti REST); un test che afferma <code>Divide(10, 2) == 5</code> non può mentire, o va contro il codice attuale oppure no. Leggi una buona suite di test e impari esattamente cosa
+          il codice promette, con esempi. E i test sono a <strong>rete di regressione</strong>: una volta che hai scritto un test
+          per un bug, quel bug non potrà mai tornare silenziosamente, la rete lo rileva ad ogni esecuzione futura.</p>
+
+        <div class="analogy">Il test manuale consiste nel controllare il tuo lavoro rileggendolo una volta. I test automatizzati stanno assumendo a
+          instancabile correttore di bozze che ricontrolla il <em>intero</em> documento, istantaneamente, ogni volta che ne modifichi uno
+          parola e non si annoia mai né perde una riga.</div>
+
+        <div class="viz">
+          <div class="viz-cap">L'economia</div>
+          <div class="viz-title">Un bug costa di più quanto più tardi lo prendi</div>
+          <svg viewBox="0 0 720 230" xmlns="http://www.w3.org/2000/svg" role="img"
+            aria-label="Una curva di costo crescente che mostra un bug è economica da risolvere se rilevata da un test unitario e notevolmente più costosa se rilevata in produzione">
+            <line x1="60" y1="180" x2="680" y2="180" stroke="#d8cfbe" stroke-width="1.5"/>
+            <line x1="60" y1="180" x2="60" y2="30" stroke="#d8cfbe" stroke-width="1.5"/>
+            <text x="40" y="40" class="mono" font-size="10" fill="#8f2f20" transform="rotate(-90 40 100)" text-anchor="middle">costo da sistemare -&gt;</text>
+            <path d="M80 172 C220 168 320 150 440 110 C540 78 600 50 660 40" fill="none" stroke="#b8402e" stroke-width="2.5"/>
+            <g font-size="10" fill="#5b5347" text-anchor="middle">
+              <circle cx="100" cy="170" r="5" fill="#3f6f4e"/><text x="100" y="200">durante la codifica</text><text x="100" y="158" class="mono" font-size="9" fill="#3f6f4e">$</text>
+              <circle cx="260" cy="160" r="5" fill="#3f6f4e"/><text x="260" y="200">test unitario (CI)</text><text x="260" y="148" class="mono" font-size="9" fill="#3f6f4e">$</text>
+              <circle cx="430" cy="115" r="5" fill="#b07d2b"/><text x="430" y="200">revisione/staging del codice</text><text x="430" y="103" class="mono" font-size="9" fill="#b07d2b">$$$</text>
+              <circle cx="650" cy="42" r="5" fill="#8f2f20"/><text x="640" y="200">nella produzione</text><text x="650" y="30" class="mono" font-size="9" fill="#8f2f20">$$$$$$</text>
+            </g>
+            <text x="370" y="222" class="serif" font-size="12.5" font-style="italic" fill="#5b5347" text-anchor="middle">I test automatizzati spostano il rilevamento a sinistra, nel momento più economico possibile, ad ogni modifica.</text>
+          </svg>
+          <div class="viz-note">L'intera proposta di valore: individua il difetto pochi secondi dopo averlo scritto, non giorni dopo
+            dopo che è stato spedito agli utenti e ha danneggiato i dati.</div>
+        </div>
+
+        <div class="box key"><span class="tag">Quali test ti comprano davvero</span>
+          <p><strong>Fiducia nel cambiamento</strong> (refactoring senza paura), <strong>specifica eseguibile</strong> (doc
+            che non può andare alla deriva), <strong>protezione dalla regressione</strong> (i bug risolti rimangono risolti) e <strong>più veloce
+            feedback</strong> (secondi, non un clic manuale). La correttezza è un effetto collaterale; la mutevolezza è il
+            premio.</p>
+        </div>
+      </section>
+
+      <!-- 2 -->
+      <section id="s2">
+        <div class="sec-head"><div class="sec-num">02</div><h2>La Piramide dei Test</h2></div>
+        <p>Non tutti i test sono uguali e la decisione strategica più importante è la <em>mescolare</em>. Il <strong>test
+          piramide</strong> è l'euristica guida: avere <strong>molti test unitari veloci ed economici</strong> alla base,
+          <strong>meno test di integrazione</strong> nel mezzo, e <strong>pochissimi end-to-end lenti e costosi
+          test</strong> in alto. La forma deriva da un compromesso che attraversa l'intero manuale: mentre sali,
+          i test ottengono di più <em>realistico</em> (esercitano maggiormente il sistema reale) ma anche più lenti, più fragili e
+          più difficile eseguire il debug.</p>
+
+        <div class="viz">
+          <div class="viz-cap">La piramide</div>
+          <div class="viz-title">Molti test unitari veloci, meno integrazione, un sottile strato di E2E</div>
+          <svg viewBox="0 0 720 280" xmlns="http://www.w3.org/2000/svg" role="img"
+            aria-label="Una piramide con un'ampia base di test unitari, una parte centrale di integrazione più stretta e una parte superiore end-to-end piccola, con assi di velocità e realismo">
+            <polygon points="360,30 470,120 250,120" fill="#f7d9d0" stroke="#b8402e"/>
+            <text x="360" y="95" font-size="13" font-weight="700" fill="#8f2f20" text-anchor="middle">E2E</text>
+            <text x="360" y="112" class="mono" font-size="8.5" fill="#8f2f20" text-anchor="middle">pochi/lenti</text>
+            <polygon points="250,122 470,122 540,210 180,210" fill="#f0e5c9" stroke="#b07d2b"/>
+            <text x="360" y="160" font-size="13" font-weight="700" fill="#b07d2b" text-anchor="middle">Integrazione</text>
+            <text x="360" y="178" class="mono" font-size="8.5" fill="#b07d2b" text-anchor="middle">alcuni/medi</text>
+            <polygon points="180,212 540,212 610,295 110,295" fill="#e0e9dd" stroke="#3f6f4e"/>
+            <text x="360" y="250" font-size="13" font-weight="700" fill="#3f6f4e" text-anchor="middle">Unità</text>
+            <text x="360" y="268" class="mono" font-size="8.5" fill="#3f6f4e" text-anchor="middle">molti/veloci/isolati</text>
+            <!-- axes -->
+            <defs><marker id="pyu" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0 0 L6 3 L0 6 Z" fill="#5b5347"/></marker></defs>
+            <line x1="650" y1="290" x2="650" y2="40" stroke="#5b5347" stroke-width="1.2" marker-end="url(#pyu)"/>
+            <text x="668" y="170" class="mono" font-size="10" fill="#5b5347" transform="rotate(-90 668 170)" text-anchor="middle">più lento/più realistico -&gt;</text>
+            <line x1="70" y1="40" x2="70" y2="290" stroke="#5b5347" stroke-width="1.2" marker-end="url(#pyu)"/>
+            <text x="52" y="170" class="mono" font-size="10" fill="#5b5347" transform="rotate(-90 52 170)" text-anchor="middle">altri test -&gt;</text>
+          </svg>
+          <div class="viz-note">Appoggiarsi alla base. Ogni livello costa di più da scrivere, eseguire e mantenere, quindi prenota il
+            un tetto scarso e costoso per i pochi flussi che necessitano veramente della fiducia dell’intero sistema.</div>
+        </div>
+
+        <div class="tbl-wrap">
+          <table>
+            <thead><tr><th>Strato</th><th>Test</th><th>Velocità</th><th>Realismo</th><th>Utilizzare per</th></tr></thead>
+            <tbody>
+              <tr><td><strong>Unità</strong></td><td>Una unità, dipendenze false</td><td>Millisecondi</td><td>Basso</td><td>Logica, casi limite, rami</td></tr>
+              <tr><td><strong>Integrazione</strong></td><td>Diverse unità + dipendenze reali (DB, cache)</td><td>Secondi</td><td>Medio</td><td>Cablaggio: query, gestori, serializzazione</td></tr>
+              <tr><td><strong>E2E</strong></td><td>L'intero sistema tramite la sua interfaccia reale</td><td>Secondi-minuti</td><td>Alto</td><td>Solo percorsi utente critici</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="box gotcha"><span class="tag">L’anti-pattern del cono gelato</span>
+          <p>Invertiamo la piramide, tanti test E2E lenti, pochi unit test, e otteniamo il &quot;cono gelato&quot;: un
+            suite che impiega anni per essere eseguita, fallisce in modo intermittente (sec 14) e fornisce segnali vaghi (un errore potrebbe essere
+            <em>ovunque</em> nella pila). I team in questa trappola smettono di fidarsi della suite e smettono di eseguirla. Spingere il dettaglio
+            fino a test unitari veloci; utilizzare E2E con parsimonia per avere la certezza che i pezzi si colleghino.</p>
+        </div>
+      </section>
+
+      <!-- 3 -->
+      <section id="s3">
+        <div class="sec-head"><div class="sec-num">03</div><h2>Anatomia di un test</h2></div>
+        <p>Ogni buon test, ad ogni livello, ha la stessa struttura a tre movimenti, <strong>Disporre, agire, affermare</strong>
+          (AAA; il mondo BDD lo chiama Dato-Quando-Allora). <em>Organizzare</em> imposta il mondo e gli input;
+          <em>Agisci</em> esegue l'operazione in prova; <em>Asserire</em> verifica che il risultato sia quello previsto.
+          Mantenere queste fasi distinte e testare <em>uno</em> il comportamento per test è ciò che causa immediatamente un fallimento
+          leggibile: sai esattamente quale comportamento si è interrotto.</p>
+
+        <div class="viz">
+          <div class="viz-cap">Disporre/Agire/Affermare</div>
+          <div class="viz-title">Tre fasi, un comportamento in prova</div>
+          <svg viewBox="0 0 720 150" xmlns="http://www.w3.org/2000/svg" role="img"
+            aria-label="Tre blocchi sequenziali: disporre gli input, agire richiamando il codice, dichiarare che il risultato corrisponde alle aspettative">
+            <defs><marker id="aaa" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0 0 L7 3 L0 6 Z" fill="#8f2f20"/></marker></defs>
+            <rect x="30" y="40" width="190" height="64" rx="11" fill="#e0e9dd" stroke="#3f6f4e"/><text x="125" y="66" font-size="13" font-weight="700" fill="#3f6f4e" text-anchor="middle">1 / Disporre</text><text x="125" y="86" class="mono" font-size="9.5" fill="#5b5347" text-anchor="middle">costruire input e raddoppiare</text>
+            <rect x="265" y="40" width="190" height="64" rx="11" fill="#f7e9e2" stroke="#b8402e"/><text x="360" y="66" font-size="13" font-weight="700" fill="#8f2f20" text-anchor="middle">2 / Atto</text><text x="360" y="86" class="mono" font-size="9.5" fill="#5b5347" text-anchor="middle">chiamare l'unità UNA VOLTA</text>
+            <rect x="500" y="40" width="190" height="64" rx="11" fill="#f0e5c9" stroke="#b07d2b"/><text x="595" y="66" font-size="13" font-weight="700" fill="#b07d2b" text-anchor="middle">3/Affermare</text><text x="595" y="86" class="mono" font-size="9.5" fill="#5b5347" text-anchor="middle">verificare l'esito</text>
+            <path d="M222 72 H263" stroke="#8f2f20" stroke-width="1.8" marker-end="url(#aaa)"/>
+            <path d="M457 72 H498" stroke="#8f2f20" stroke-width="1.8" marker-end="url(#aaa)"/>
+            <text x="360" y="132" class="serif" font-size="12.5" font-style="italic" fill="#5b5347" text-anchor="middle">Un comportamento per test/un nome descrittivo/un chiaro messaggio di errore.</text>
+          </svg>
+        </div>
+
+        <div class="codeblock" data-cb>
+          <div class="code-bar"><div class="dots"><i></i><i></i><i></i></div>
+            <div class="code-tabs"><button class="on" data-lang="go"><span class="lang-go">&amp;#9679;</span> Vai</button><button data-lang="py"><span class="lang-py">&amp;#9679;</span> Pitone</button></div></div>
+          <div class="code-panel on" data-panel="go"><pre><code class="language-go">// File naming convention: foo.go is tested by foo_test.go in the same package.
+// Test functions are func TestXxx(t *testing.T), the `go test` tool finds them.
+func TestDiscount_AppliesPercentage(t *testing.T) {
+    // Arrange, set up inputs (and any doubles)
+    cart := Cart{Subtotal: 200}
+    coupon := Coupon{Percent: 10}
+
+    // Act, the ONE operation under test
+    total := ApplyDiscount(cart, coupon)
+
+    // Assert, state the expectation; a good message explains the failure
+    if total != 180 {
+        t.Errorf("ApplyDiscount(200, 10%%) = %d; want 180", total)
+    }
+}</code></pre></div>
+          <div class="code-panel" data-panel="py"><pre><code class="language-python"># pytest discovers files named test_*.py and functions named test_*.
+# A bare `assert` is enough, pytest rewrites it to show a rich failure diff.
+def test_discount_applies_percentage():
+    # Arrange, set up inputs (and any doubles)
+    cart = Cart(subtotal=200)
+    coupon = Coupon(percent=10)
+
+    # Act, the ONE operation under test
+    total = apply_discount(cart, coupon)
+
+    # Assert, pytest prints actual vs expected automatically on failure
+    assert total == 180</code></pre></div>
+        </div>
+
+        <h4>Ciò che rende buona un'affermazione</h4>
+        <ul>
+          <li><strong>Testare il comportamento, non l'implementazione.</strong> Asserire il risultato osservabile (<em>lo sconto è
+            applicato</em>), non la meccanica interna (<em>fu chiamato questo aiutante privato</em>). Test accoppiati all'implementazione
+            interrompere ogni refactoring e vanificare l'intero scopo (sec 1, sec 20).</li>
+          <li><strong>Un motivo per fallire.</strong> Un test che asseri cinque cose non correlate ti dice poco quando va a buon fine
+            rosso. Preferisci test mirati con nomi descrittivi, il nome dovrebbe leggere come una frase sul
+            comportamento.</li>
+          <li><strong>deterministico.</strong> Stessi input, stesso risultato, ogni esecuzione, in qualsiasi ordine, la proprietà
+            La sezione 14 riguarda la protezione.</li>
+        </ul>
+
+        <div class="box note"><span class="tag">Gli strumenti standard</span>
+          <p>Questo manuale utilizza lo stack principale di ogni lingua: quello integrato di Go <code>testing</code> pacchetto con
+            <code>go test</code> (non è necessario alcun framework; la libreria standard è il framework) e quello di Python
+            <strong>pytest</strong>, lo standard de facto con infissi, parametrizzazione e semplicita'<code>assert</code>
+            riscrittura. Entrambi sono ciò che troverai nei repository backend reali.</p>
+        </div>
+      </section>
+
+      <div class="part-label">Parte II / Test unitari</div>
+
+      <!-- 4 -->
+      <section id="s4">
+        <div class="sec-head"><div class="sec-num">04</div><h2>Test unitari</h2></div>
+        <p>A <strong>prova unitaria</strong> verifica un piccolo pezzo di logica, una funzione o un metodo, <em>dentro
+          isolamento</em> dal resto del sistema. Nessun database, nessuna rete, nessun filesystem, nessun orologio: solo input,
+          uscita controllata. Questo isolamento è ciò che li rende veloci (migliaia vengono eseguiti in pochi secondi) e precisi (punti di fallimento
+          esattamente ad una unità). Sono l'ampia base della piramide (sec 2) e dove si trova la maggior parte del bordo e
+          la copertura delle filiali dovrebbe essere attiva.</p>
+
+        <p>L'obiettivo naturale per i test unitari è il tuo <strong>dominio/logica applicativa</strong>: il puro
+          calcoli e decisioni che non necessitano intrinsecamente di I/O: regole di determinazione dei prezzi, convalida, transizioni di stato, analisi.
+          (Questo si mappa direttamente su <em>servizio</em> livello dal capitolo controller-servizi-repository; spingendo
+          la logica in funzioni pure, c'è esattamente ciò che qui la rende testabile unitariamente.)</p>
+
+        <div class="viz">
+          <div class="viz-cap">Isolamento</div>
+          <div class="viz-title">Un test unitario esercita un pezzo; le dipendenze reali vengono tenute fuori</div>
+          <svg viewBox="0 0 720 170" xmlns="http://www.w3.org/2000/svg" role="img"
+            aria-label="Una singola unità sotto test con ingressi e uscite, mentre il database, la rete e l'orologio sono barrati come non coinvolti">
+            <rect x="40" y="60" width="120" height="50" rx="9" fill="#b8402e"/><text x="100" y="82" font-size="11" font-weight="700" fill="#fff" text-anchor="middle">input</text>
+            <defs><marker id="ua4" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0 0 L7 3 L0 6 Z" fill="#8f2f20"/></marker></defs>
+            <path d="M162 85 H238" stroke="#8f2f20" stroke-width="1.8" marker-end="url(#ua4)"/>
+            <rect x="240" y="50" width="200" height="70" rx="12" fill="#e0e9dd" stroke="#3f6f4e" stroke-width="2"/><text x="340" y="80" font-size="13" font-weight="700" fill="#3f6f4e" text-anchor="middle">unità in prova</text><text x="340" y="100" class="mono" font-size="9" fill="#5b5347" text-anchor="middle">logica pura</text>
+            <path d="M442 85 H518" stroke="#8f2f20" stroke-width="1.8" marker-end="url(#ua4)"/>
+            <rect x="520" y="60" width="160" height="50" rx="9" fill="#f0e5c9" stroke="#b07d2b"/><text x="600" y="82" font-size="11" font-weight="700" fill="#b07d2b" text-anchor="middle">affermare l'output</text>
+            <g font-size="10" fill="#8f2f20" font-style="italic"><text x="200" y="150">✗ senza DB</text><text x="320" y="150">✗ nessuna rete</text><text x="450" y="150">✗ nessun vero orologio</text></g>
+          </svg>
+        </div>
+
+        <div class="codeblock" data-cb>
+          <div class="code-bar"><div class="dots"><i></i><i></i><i></i></div>
+            <div class="code-tabs"><button class="on" data-lang="go"><span class="lang-go">&amp;#9679;</span> Vai</button><button data-lang="py"><span class="lang-py">&amp;#9679;</span> Pitone</button></div></div>
+          <div class="code-panel on" data-panel="go"><pre><code class="language-go">// The unit: pure logic, no I/O, trivially testable.
+func IsStrongPassword(p string) bool {
+    if len(p) < 8 { return false }
+    var hasDigit, hasUpper bool
+    for _, r := range p {
+        if r >= '0' && r <= '9' { hasDigit = true }
+        if r >= 'A' && r <= 'Z' { hasUpper = true }
+    }
+    return hasDigit && hasUpper
+}
+
+func TestIsStrongPassword(t *testing.T) {
+    if IsStrongPassword("short1A") {            // 7 chars -&gt; too short
+        t.Error("expected short password to be rejected")
+    }
+    if !IsStrongPassword("longEnough9") {        // meets all rules
+        t.Error("expected valid password to be accepted")
+    }
+}
+
+// Run:  go test ./...        (-v for verbose, -run TestIsStrong to filter)</code></pre></div>
+          <div class="code-panel" data-panel="py"><pre><code class="language-python"># The unit: pure logic, no I/O, trivially testable.
+def is_strong_password(p: str) -> bool:
+    if len(p) < 8:
+        return False
+    return any(c.isdigit() for c in p) and any(c.isupper() for c in p)
+
+def test_rejects_short_password():
+    assert is_strong_password("short1A") is False    # 7 chars -&gt; too short
+
+def test_accepts_valid_password():
+    assert is_strong_password("longEnough9") is True  # meets all rules
+
+# Run:  pytest            (-v verbose, -k strong to filter by name)</code></pre></div>
+        </div>
+
+        <div class="box gotcha"><span class="tag">Se un'unità è difficile da testare, il design ne è l'odore</span>
+          <p>Quando una funzione è difficile da testare, raggiunge un globale, apre una connessione, legge il file
+            orologio, o fa dieci cose, il test te lo dice <em>codice</em> è mal preso in considerazione, non quello
+            testare è difficile. La soluzione consiste quasi sempre nel separare la logica pura dall'I/O e nell'inserire le dipendenze (sez. 6).
+            Testabilità e buona progettazione sono la stessa proprietà vista da due angolazioni.</p>
+        </div>
+      </section>
+
+      <!-- 5 -->
+      <section id="s5">
+        <div class="sec-head"><div class="sec-num">05</div><h2>Prova del doppio</h2></div>
+        <p>Le unità reali dipendono da altre cose, un repository, un gateway di pagamento, un mittente di posta elettronica. Per testare un'unità in
+          isolamento con cui sostituisci quei collaboratori <strong>prova raddoppia</strong>: controfigure che controlli. &quot;finto&quot;
+          è usato in modo approssimativo nella conversazione, ma il vocabolario preciso (da Gerard Meszaros / Martin Fowler) distingue
+          cinque tipi e conoscere la differenza migliora il modo in cui esegui i test.</p>
+
+        <div class="tbl-wrap">
+          <table>
+            <thead><tr><th>Doppio</th><th>Di cosa si tratta</th><th>Lo usi per...</th></tr></thead>
+            <tbody>
+              <tr><td><strong>Manichino</strong></td><td>Un segnaposto passato ma mai utilizzato</td><td>soddisfare un parametro richiesto</td></tr>
+              <tr><td><strong>Tronchetto</strong></td><td>Restituisce risposte predefinite alle chiamate</td><td>alimentare l'unità con input fissi (ad esempio &quot;il DB restituisce questo utente&quot;)</td></tr>
+              <tr><td><strong>Spia</strong></td><td>Uno stub che registra anche come è stato chiamato</td><td>affermare più tardi quel qualcosa <em>era</em> chiamato e come</td></tr>
+              <tr><td><strong>Finto</strong></td><td>Pre-programmato con le aspettative che verifica</td><td>affermare un <em>interazione</em> è successo (ad esempio &quot;l'e-mail è stata inviata una volta&quot;)</td></tr>
+              <tr><td><strong>Falso</strong></td><td>Un'implementazione funzionante ma leggera</td><td>sostituire una dipendenza reale a buon mercato (ad esempio un DB in memoria)</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h4>Verifica dello stato e verifica dell'interazione</h4>
+        <p>La distinzione più profonda: <strong>stub/falsi</strong> supporto <em>stato</em> verifica (si afferma il
+          <em>risultato</em>), mentre <strong>scherni/spie</strong> supporto <em>interazione</em> verifica (asserisci a
+          <em>è avvenuta la chiamata</em>). Preferisci la verifica dello stato, è robusto per il refactoring. Raggiungi l'interazione
+          verifica solo quando l'interazione <em>è</em> il comportamento (deve essere effettivamente inviata un'e-mail, è necessario un addebito
+          essere rilasciato esattamente una volta). Le interazioni eccessivamente beffarde sono una delle principali cause di test fragili (sez. 20).</p>
+
+        <div class="codeblock" data-cb>
+          <div class="code-bar"><div class="dots"><i></i><i></i><i></i></div>
+            <div class="code-tabs"><button class="on" data-lang="go"><span class="lang-go">&amp;#9679;</span> Vai</button><button data-lang="py"><span class="lang-py">&amp;#9679;</span> Pitone</button></div></div>
+          <div class="code-panel on" data-panel="go"><pre><code class="language-go">// The unit depends on an interface, the seam that lets us substitute a double (sec 6).
+type UserRepo interface{ FindByID(id string) (*User, error) }
+
+type Notifier interface{ Send(to, msg string) error }
+
+func Greet(repo UserRepo, n Notifier, id string) error {
+    u, err := repo.FindByID(id)        // collaborator 1
+    if err != nil { return err }
+    return n.Send(u.Email, "Hi "+u.Name) // collaborator 2 (interaction we care about)
+}
+
+// STUB: returns a canned user. SPY: also records what Send received.
+type stubRepo struct{ user *User }
+func (s stubRepo) FindByID(string) (*User, error) { return s.user, nil }
+
+type spyNotifier struct{ calls int; lastTo string }
+func (s *spyNotifier) Send(to, msg string) error { s.calls++; s.lastTo = to; return nil }
+
+func TestGreet_SendsEmail(t *testing.T) {
+    repo := stubRepo{user: &User{Email: "a@x.com", Name: "Ada"}} // arrange (stub)
+    spy := &spyNotifier{}
+
+    _ = Greet(repo, spy, "u1")                                   // act
+
+    if spy.calls != 1 || spy.lastTo != "a@x.com" {               // assert the interaction
+        t.Errorf("expected one email to a@x.com, got %d to %q", spy.calls, spy.lastTo)
+    }
+}</code></pre></div>
+          <div class="code-panel" data-panel="py"><pre><code class="language-python">from unittest.mock import Mock
+
+# The unit depends on injected collaborators (sec 6).
+def greet(repo, notifier, user_id):
+    user = repo.find_by_id(user_id)          # collaborator 1
+    notifier.send(user.email, f"Hi {user.name}")  # collaborator 2 (the interaction)
+
+def test_greet_sends_email():
+    # STUB: a Mock configured to return a canned user
+    repo = Mock()
+    repo.find_by_id.return_value = User(email="a@x.com", name="Ada")
+    notifier = Mock()                        # will record calls (acts as spy/mock)
+
+    greet(repo, notifier, "u1")              # act
+
+    # assert the INTERACTION happened exactly as expected
+    notifier.send.assert_called_once_with("a@x.com", "Hi Ada")</code></pre></div>
+        </div>
+        <p class="code-cap">Go tende a scrivere a mano piccoli doppi su un'interfaccia (esplicito, senza magia); Di Pitone
+          <code>unittest.mock</code> genera doppi flessibili che restituiscono sia stub che chiamate registrate. Stesso concetto,
+          ergonomia diversa.</p>
+
+        <div class="box gotcha"><span class="tag">Non deridere ciò che non possiedi</span>
+          <p>Evita di deridere direttamente librerie di terze parti o API HTTP esterne, le tue codifiche fittizie <em>tuo
+            presupposto</em> di come si comportano, che può essere sbagliato, quindi il test passa mentre la produzione si interrompe. Invece
+            avvolgi la dipendenza dietro la tua interfaccia e simula <em>quello</em>, o utilizzare un test falso/contratto (sez. 11,
+            sez 17). Deridi le tue cuciture, non le parti interne di qualcun altro.</p>
+        </div>
+      </section>
+
+      <!-- 6 -->
+      <section id="s6">
+        <div class="sec-head"><div class="sec-num">06</div><h2>Iniezione di dipendenze per testabilità</h2></div>
+        <p>L'unica tecnica che rende possibile il test unitario è <strong>inserimento delle dipendenze (DI)</strong>: invece di
+          un'unità <em>creando</em> o <em>raggiungere</em> i suoi collaboratori, esso <em>riceve</em> loro dall'esterno.
+          Il punto di passaggio è a <strong>cucitura</strong>: il luogo in cui una prova può scivolare in doppio (sez 5). No
+          cucitura, nessun isolamento. Questo è il motivo per cui l'architettura controller-servizi-repository insiste nel passare
+          dipendenze ridotte: non è una cerimonia, è ciò che mantiene il codice testabile.</p>
+
+        <div class="viz">
+          <div class="viz-cap">La cucitura</div>
+          <div class="viz-title">Dipendenza hardcoded e dipendenza inserita</div>
+          <svg viewBox="0 0 720 200" xmlns="http://www.w3.org/2000/svg" role="img"
+            aria-label="In alto: un servizio che costruisce internamente un vero e proprio database, non testabile. In basso: un servizio che riceve un'interfaccia repository, consentendo un falso nei test">
+            <text x="20" y="22" class="mono" font-size="11" font-weight="700" fill="#8f2f20">codificato, non testabile</text>
+            <rect x="20" y="32" width="200" height="56" rx="10" fill="#eccdc2" stroke="#8f2f20"/><text x="120" y="55" font-size="11" font-weight="700" fill="#8f2f20" text-anchor="middle">Servizio</text><text x="120" y="74" class="mono" font-size="8.5" fill="#5b5347" text-anchor="middle">db := openRealPostgres()</text>
+            <defs><marker id="dia" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0 0 L6 3 L0 6 Z" fill="#8f2f20"/></marker></defs>
+            <path d="M222 60 H300" stroke="#8f2f20" stroke-width="1.6" marker-end="url(#dia)"/>
+            <rect x="302" y="38" width="160" height="44" rx="9" fill="#211e1a"/><text x="382" y="64" font-size="10.5" fill="#fff" text-anchor="middle">solo Postgres reale</text>
+            <text x="480" y="64" font-size="10.5" font-style="italic" fill="#8f2f20">nessun modo per sostituirlo -&gt; necessita di un vero DB da testare</text>
+
+            <text x="20" y="120" class="mono" font-size="11" font-weight="700" fill="#3f6f4e">iniettato, testabile</text>
+            <rect x="20" y="130" width="200" height="56" rx="10" fill="#e0e9dd" stroke="#3f6f4e"/><text x="120" y="153" font-size="11" font-weight="700" fill="#3f6f4e" text-anchor="middle">Servizio(repo Repo)</text><text x="120" y="172" class="mono" font-size="8.5" fill="#5b5347" text-anchor="middle">utilizza l'interfaccia</text>
+            <defs><marker id="dia2" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0 0 L6 3 L0 6 Z" fill="#3f6f4e"/></marker></defs>
+            <path d="M222 150 C260 140 270 122 300 118" stroke="#3f6f4e" stroke-width="1.5" fill="none" marker-end="url(#dia2)"/>
+            <path d="M222 166 C260 176 270 192 300 196" stroke="#3f6f4e" stroke-width="1.5" fill="none" marker-end="url(#dia2)"/>
+            <rect x="302" y="104" width="160" height="28" rx="7" fill="#dbeede" stroke="#3f6f4e"/><text x="382" y="123" font-size="9.5" fill="#3f6f4e" text-anchor="middle">DB reale (produzione)</text>
+            <rect x="302" y="182" width="160" height="28" rx="7" fill="#f0e5c9" stroke="#b07d2b"/><text x="382" y="201" font-size="9.5" fill="#b07d2b" text-anchor="middle">falso/in memoria (test)</text>
+            <text x="500" y="160" font-size="10.5" font-style="italic" fill="#3f6f4e">stessa interfaccia -&gt; scambia un falso nei test, reale nel prod</text>
+          </svg>
+        </div>
+
+        <div class="codeblock" data-cb>
+          <div class="code-bar"><div class="dots"><i></i><i></i><i></i></div>
+            <div class="code-tabs"><button class="on" data-lang="go"><span class="lang-go">&amp;#9679;</span> Vai</button><button data-lang="py"><span class="lang-py">&amp;#9679;</span> Pitone</button></div></div>
+          <div class="code-panel on" data-panel="go"><pre><code class="language-go">// Depend on an INTERFACE, not a concrete type, that interface is the seam.
+type OrderRepo interface{ Save(o Order) error }
+
+type OrderService struct{ repo OrderRepo } // injected, not constructed inside
+
+func NewOrderService(r OrderRepo) *OrderService { return &OrderService{repo: r} }
+
+func (s *OrderService) Place(o Order) error {
+    if o.Total <= 0 { return errors.New("invalid total") } // pure logic, easily tested
+    return s.repo.Save(o)
+}
+
+// In tests: a FAKE in-memory repo (no real DB needed)
+type fakeRepo struct{ saved []Order }
+func (f *fakeRepo) Save(o Order) error { f.saved = append(f.saved, o); return nil }
+
+func TestPlace_RejectsInvalidTotal(t *testing.T) {
+    svc := NewOrderService(&fakeRepo{})
+    if err := svc.Place(Order{Total: 0}); err == nil {
+        t.Error("expected error for non-positive total")
+    }
+}
+// In production:  NewOrderService(postgresRepo), same code, real dependency.</code></pre></div>
+          <div class="code-panel" data-panel="py"><pre><code class="language-python"># Accept the collaborator as a constructor argument, that parameter is the seam.
+class OrderService:
+    def __init__(self, repo):        # injected, not created inside
+        self.repo = repo
+
+    def place(self, order):
+        if order.total <= 0:
+            raise ValueError("invalid total")   # pure logic, easily tested
+        self.repo.save(order)
+
+# In tests: a FAKE in-memory repo (no real DB needed)
+class FakeRepo:
+    def __init__(self): self.saved = []
+    def save(self, order): self.saved.append(order)
+
+def test_place_rejects_invalid_total():
+    svc = OrderService(FakeRepo())
+    with pytest.raises(ValueError):
+        svc.place(Order(total=0))
+
+# In production:  OrderService(postgres_repo), same code, real dependency.</code></pre></div>
+        </div>
+
+        <div class="box key"><span class="tag">Progettare per la testabilità = buon design</span>
+          <p>DI, piccole interfacce e separazione della logica pura dall'I/O non sono &quot;trucchi di prova&quot;, sono la stessa cosa
+            principi che rendono il codice modulare e manutenibile. Una base di codice facile da testare è, quasi per definizione,
+            ben strutturato. La suite di test è un segnale continuo di qualità del design.</p>
+        </div>
+      </section>
+
+      <!-- 7 -->
+      <section id="s7">
+        <div class="sec-head"><div class="sec-num">07</div><h2>Test guidati da tabelle e parametrizzati</h2></div>
+        <p>La maggior parte della logica deve essere confrontata <em>molti</em> coppie input/output, percorso felice, casi limite, confini,
+          casi di errore. Copiare e incollare un test per caso è rumore. Entrambe le lingue hanno un idioma per &quot;stesso corpo di prova, molti&quot;.
+          casi&quot;: Go's <strong>test guidati da tabelle</strong> e quello di Pytest <strong>parametrizzare</strong>. Qui è dove tu
+          ottenere una copertura economica e densa di rami e bordi, il vero cavallo di battaglia dello strato unitario.</p>
+
+        <div class="codeblock" data-cb>
+          <div class="code-bar"><div class="dots"><i></i><i></i><i></i></div>
+            <div class="code-tabs"><button class="on" data-lang="go"><span class="lang-go">&amp;#9679;</span> Vai</button><button data-lang="py"><span class="lang-py">&amp;#9679;</span> Pitone</button></div></div>
+          <div class="code-panel on" data-panel="go"><pre><code class="language-go">func TestApplyDiscount(t *testing.T) {
+    // The TABLE: each row is one case with a name.
+    cases := []struct {
+        name     string
+        subtotal int
+        percent  int
+        want     int
+    }{
+        {"ten percent off 200", 200, 10, 180},
+        {"zero discount",       100, 0,  100},
+        {"full discount",       100, 100, 0},
+        {"rounds down",          99, 10,  90}, // boundary/edge case
+    }
+    for _, c := range cases {
+        // t.Run makes each row a named subtest, failures report the case name.
+        t.Run(c.name, func(t *testing.T) {
+            got := ApplyDiscount(Cart{Subtotal: c.subtotal}, Coupon{Percent: c.percent})
+            if got != c.want {
+                t.Errorf("got %d, want %d", got, c.want)
+            }
+        })
+    }
+}
+// `go test -run TestApplyDiscount/rounds_down` runs just one case.</code></pre></div>
+          <div class="code-panel" data-panel="py"><pre><code class="language-python">import pytest
+
+# Each tuple is one case; ids give readable names in the output.
+@pytest.mark.parametrize(
+    "subtotal, percent, expected",
+    [
+        (200, 10, 180),
+        (100, 0,  100),
+        (100, 100, 0),
+        (99,  10, 90),     # boundary/edge case
+    ],
+    ids=["ten-off-200", "zero", "full", "rounds-down"],
+)
+def test_apply_discount(subtotal, percent, expected):
+    got = apply_discount(Cart(subtotal=subtotal), Coupon(percent=percent))
+    assert got == expected
+
+# `pytest -k rounds-down` runs just one case; each shows up as its own test.</code></pre></div>
+        </div>
+
+        <div class="box note"><span class="tag">Dai un nome a ogni caso</span>
+          <p>Il vantaggio di questi idiomi non è solo meno codice, ma è che ogni caso diventa un <em>in modo indipendente
+            denominato, eseguibile in modo indipendente</em> prova. Quando uno si interrompe, il rapporto nomina il caso esatto (&quot;arrotondamento per difetto
+            non riuscito&quot;), ed è possibile eseguirlo nuovamente. Assegnare sempre nomi descrittivi ai casi; una riga anonima che fallisce semplicemente
+            dice &quot;caso 3&quot;, il che non aiuta nessuno.</p>
+        </div>
+      </section>
+
+      <div class="part-label">Parte III/Test di integrazione</div>
+
+      <!-- 8 -->
+      <section id="s8">
+        <div class="sec-head"><div class="sec-num">08</div><h2>Test di integrazione</h2></div>
+        <p>I test unitari dimostrano che ogni pezzo funziona da solo; <strong>test di integrazione</strong> dimostrare che i pezzi funzionano
+          <em>insieme</em>e, soprattutto, che si integrino correttamente con il file <em>reale</em> sistemi esterni
+          hai deriso il livello unitario: il database, la cache, il broker di messaggi, un altro servizio. Si siedono
+          al centro della piramide (sec 2): più lenti degli unit test perché è coinvolto l'I/O reale, ma catturano un intero
+          categoria di bug che gli unit test strutturalmente non possono.</p>
+
+        <div class="box key"><span class="tag">Ciò che rilevano solo i test di integrazione</span>
+          <p>Una query SQL con una colonna errata, una mappatura ORM che non corrisponde allo schema, una mancata corrispondenza della serializzazione
+            tra servizi, una migrazione non eseguita, una stringa di connessione errata, una transazione senza commit.
+            Ognuno di questi vive nel <em>cucitura</em> tra il tuo codice e un sistema reale, esattamente la giuntura a
+            il test dell'unità viene interrotto. Deridere il DB non può rivelare che la tua query non è un SQL valido; eseguendolo solo contro a
+            il database reale può.</p>
+        </div>
+
+        <div class="viz">
+          <div class="viz-cap">Ambito più ampio</div>
+          <div class="viz-title">Un test di integrazione esercita diverse unità più una dipendenza reale</div>
+          <svg viewBox="0 0 720 170" xmlns="http://www.w3.org/2000/svg" role="img"
+            aria-label="Un test di integrazione che abbraccia un gestore, un servizio e un repository, comunicando con un database reale in un contenitore">
+            <rect x="30" y="40" width="430" height="90" rx="14" fill="none" stroke="#b07d2b" stroke-width="2" stroke-dasharray="6 4"/>
+            <text x="44" y="60" class="mono" font-size="10" font-weight="700" fill="#b07d2b">sotto test (reale, cablato insieme)</text>
+            <rect x="50" y="72" width="120" height="44" rx="9" fill="#e0e9dd" stroke="#3f6f4e"/><text x="110" y="98" font-size="10.5" font-weight="700" fill="#3f6f4e" text-anchor="middle">gestore</text>
+            <rect x="190" y="72" width="120" height="44" rx="9" fill="#e0e9dd" stroke="#3f6f4e"/><text x="250" y="98" font-size="10.5" font-weight="700" fill="#3f6f4e" text-anchor="middle">servizio</text>
+            <rect x="330" y="72" width="120" height="44" rx="9" fill="#e0e9dd" stroke="#3f6f4e"/><text x="390" y="98" font-size="10.5" font-weight="700" fill="#3f6f4e" text-anchor="middle">deposito</text>
+            <defs><marker id="ia8" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0 0 L6 3 L0 6 Z" fill="#8f2f20"/></marker></defs>
+            <path d="M170 94 H188" stroke="#8f2f20" stroke-width="1.5" marker-end="url(#ia8)"/>
+            <path d="M310 94 H328" stroke="#8f2f20" stroke-width="1.5" marker-end="url(#ia8)"/>
+            <path d="M452 94 H520" stroke="#8f2f20" stroke-width="1.8" marker-end="url(#ia8)"/>
+            <rect x="522" y="68" width="160" height="52" rx="10" fill="#211e1a"/><text x="602" y="90" font-size="11" font-weight="700" fill="#fff" text-anchor="middle">REAL Postgres</text><text x="602" y="108" class="mono" font-size="8.5" fill="#7fd1c4" text-anchor="middle">in un contenitore (sez 9)</text>
+            <text x="370" y="152" class="serif" font-size="12.5" font-style="italic" fill="#5b5347" text-anchor="middle">Invia una richiesta, afferma ciò che ritorna <tspan font-style="italic">e</tspan> cosa è arrivato nel database.</text>
+          </svg>
+        </div>
+
+        <div class="box gotcha"><span class="tag">Mantienili isolati e ripetibili</span>
+          <p>I test di integrazione toccano lo stato condiviso, quindi sono inclini a instabilità (sez. 14) se si confondono l'uno con l'altro.
+            Ogni test deve iniziare da uno stato noto e ripulire se stesso, uno schema nuovo, una transazione lanciata
+            indietro, o una tavola troncata (sez. 9). Test che dipendono da un database condiviso manualmente seminato o dall'esecuzione
+            un ordine particolare, alla fine ti tradirà.</p>
+        </div>
+      </section>
+
+      <!-- 9 -->
+      <section id="s9">
+        <div class="sec-head"><div class="sec-num">09</div><h2>Test con un database reale</h2></div>
+        <p>La domanda ricorrente: come si ottiene un database &quot;reale&quot; in un test senza dipendere da una manutenzione manuale
+          server condiviso? La risposta moderna è <strong>Contenitori di prova</strong>: una libreria che fa girare un vero e proprio
+          database in un contenitore Docker usa e getta (i contenitori del capitolo 21) al momento del test, ti fornisce la sua connessione
+          corda, e poi la strappa giù. Metti alla prova contro il <em>reale</em> motore (stessa versione Postgres del prodotto),
+          completamente isolato, senza nulla da installare. Per mantenere i test indipendenti l'uno dall'altro, le due tattiche standard
+          sono <strong>rollback della transazione</strong> (racchiudi ogni test in una transazione, esegui il rollback alla fine) o
+          <strong>troncando</strong> tabelle tra i test.</p>
+
+        <div class="codeblock" data-cb>
+          <div class="code-bar"><div class="dots"><i></i><i></i><i></i></div>
+            <div class="code-tabs"><button class="on" data-lang="go"><span class="lang-go">&amp;#9679;</span> Vai</button><button data-lang="py"><span class="lang-py">&amp;#9679;</span> Pitone</button></div></div>
+          <div class="code-panel on" data-panel="go"><pre><code class="language-go">// Build tag keeps slow integration tests out of the fast unit run:
+//   //go:build integration      -&gt; run with:  go test -tags=integration ./...
+func TestUserRepo_SaveAndFind(t *testing.T) {
+    ctx := context.Background()
+
+    // Arrange: start a REAL Postgres in a throwaway container (testcontainers-go)
+    pg, err := postgres.Run(ctx, "postgres:16",
+        postgres.WithDatabase("app"), postgres.WithUsername("u"), postgres.WithPassword("p"))
+    if err != nil { t.Fatal(err) }
+    t.Cleanup(func() { pg.Terminate(ctx) }) // torn down automatically after the test
+
+    dsn, _ := pg.ConnectionString(ctx, "sslmode=disable")
+    db, _ := sql.Open("postgres", dsn)
+    runMigrations(t, db)                    // apply the same schema as production
+
+    repo := NewUserRepo(db)
+
+    // Act: exercise the REAL query path
+    _ = repo.Save(User{ID: "u1", Email: "a@x.com"})
+    got, err := repo.FindByID("u1")
+
+    // Assert: round-trips correctly through actual SQL
+    if err != nil || got.Email != "a@x.com" {
+        t.Fatalf("round-trip failed: %v / %+v", err, got)
+    }
+}</code></pre></div>
+          <div class="code-panel" data-panel="py"><pre><code class="language-python">import pytest
+from testcontainers.postgres import PostgresContainer
+
+# A fixture spins up a REAL Postgres once per module, then tears it down.
+@pytest.fixture(scope="module")
+def db_url():
+    with PostgresContainer("postgres:16") as pg:   # throwaway container
+        url = pg.get_connection_url()
+        run_migrations(url)                         # same schema as production
+        yield url
+        # container stopped automatically on exit
+
+@pytest.fixture
+def repo(db_url):
+    # function-scoped: clean state per test (truncate / rollback)
+    r = UserRepo(db_url)
+    yield r
+    r.truncate_all()                                # keep tests independent (sec 8)
+
+@pytest.mark.integration            # marker: pytest -m integration
+def test_save_and_find(repo):
+    repo.save(User(id="u1", email="a@x.com"))       # act through REAL SQL
+    got = repo.find_by_id("u1")
+    assert got.email == "a@x.com"                   # round-trips correctly</code></pre></div>
+        </div>
+        <p class="code-cap">Entrambi isolano i test lenti dietro un flag/marcatore (tag Go build, marcatori pytest), quindi il file
+          la suite di unità in millisecondi rimane veloce e i test DB più pesanti vengono eseguiti su richiesta o in CI (sec 19).</p>
+
+        <div class="box gotcha"><span class="tag">Prova con il motore reale, non con un sostituto</span>
+          <p>Passare a SQLite &quot;perché è veloce&quot; quando la produzione esegue Postgres è una trappola classica: i dialetti differiscono
+            (tipi, vincoli, JSON, upsert, blocco), quindi un test può passare su SQLite e la stessa query fallisce su
+            Postgres. Testcontainers esiste proprio per poter utilizzare il file <em>reale</em> motore di produzione a buon mercato, prova ciò che spedisci.</p>
+        </div>
+      </section>
+
+      <!-- 10 -->
+      <section id="s10">
+        <div class="sec-head"><div class="sec-num">10</div><h2>Test di gestori e API HTTP</h2></div>
+        <p>I tuoi gestori (i capitoli HTTP e REST) sono un obiettivo primario di integrazione: a cui vuoi inviare una richiesta reale
+          il tuo routing + gestore + stack di serializzazione e asserisci sulla risposta reale, codice di stato, intestazioni, corpo, <em>senza</em> vincolare un socket o eseguire un server sulla rete. Entrambi gli ecosistemi forniscono un
+          client di test in-process che guida direttamente il gestore: Go's <code>net/http/httptest</code> e il
+          <code>TestClient</code> fornito con FastAPI/Starlette (e l'equivalente di Flask).</p>
+
+        <div class="codeblock" data-cb>
+          <div class="code-bar"><div class="dots"><i></i><i></i><i></i></div>
+            <div class="code-tabs"><button class="on" data-lang="go"><span class="lang-go">&amp;#9679;</span> Vai</button><button data-lang="py"><span class="lang-py">&amp;#9679;</span> Pitone</button></div></div>
+          <div class="code-panel on" data-panel="go"><pre><code class="language-go">import (
+    "net/http"
+    "net/http/httptest"
+    "strings"
+    "testing"
+)
+
+func TestCreateUser_Returns201(t *testing.T) {
+    handler := NewRouter(deps)  // the REAL router + handlers (deps may use a fake repo sec 6)
+
+    // Arrange: build a request and an in-memory response recorder (no network)
+    body := strings.NewReader(`{"email":"a@x.com","name":"Ada"}`)
+    req := httptest.NewRequest(http.MethodPost, "/api/v1/users", body)
+    req.Header.Set("Content-Type", "application/json")
+    rec := httptest.NewRecorder()
+
+    // Act: drive the handler directly
+    handler.ServeHTTP(rec, req)
+
+    // Assert: on the real response, status, then body
+    if rec.Code != http.StatusCreated {
+        t.Fatalf("status = %d; want 201; body=%s", rec.Code, rec.Body.String())
+    }
+    if ct := rec.Header().Get("Content-Type"); !strings.Contains(ct, "application/json") {
+        t.Errorf("content-type = %q", ct)
+    }
+}</code></pre></div>
+          <div class="code-panel" data-panel="py"><pre><code class="language-python">from fastapi.testclient import TestClient
+from app import app   # the REAL FastAPI app (dependencies may be overridden with fakes sec 6)
+
+client = TestClient(app)   # drives the app in-process, no network, no running server
+
+def test_create_user_returns_201():
+    # Act: fire a real request through routing + handler + serialization
+    resp = client.post("/api/v1/users", json={"email": "a@x.com", "name": "Ada"})
+
+    # Assert: on the real response, status, headers, body
+    assert resp.status_code == 201
+    assert resp.headers["content-type"].startswith("application/json")
+    assert resp.json()["email"] == "a@x.com"
+
+# FastAPI tip: override real dependencies with fakes via app.dependency_overrides
+# so the handler runs but the repo is in-memory, an integration test of the web layer.</code></pre></div>
+        </div>
+
+        <div class="box note"><span class="tag">Scegli il raggio dell'esplosione</span>
+          <p>Questi test sono flessibili: filo in a <em>falso</em> repository e stai testando l'integrazione solo del web
+            livello (routing, decodifica, codici di stato, inviluppi di errore) veloce e deterministico; filo in a <em>reale</em>
+            DB tramite testcontainers (sec 9) e hai un test di integrazione più ampio dell'intero percorso della richiesta. Scegli il
+            ambito deliberatamente per test, più stretto è più veloce e più preciso; più ampio è più realistico.</p>
+        </div>
+      </section>
+
+      <!-- 11 -->
+      <section id="s11">
+        <div class="sec-head"><div class="sec-num">11</div><h2>Test del contratto</h2></div>
+        <p>In un mondo di microservizi (i capitoli gRPC e API-design), un servizio raramente vive da solo
+          <em>consuma</em> altri ed è <em>consumato</em> da altri. Il pericolo: un fornitore cambia la sua forma di risposta,
+          tutti i suoi test vengono superati, ma rompe silenziosamente ogni consumatore. Testare end-to-end ogni combinazione è
+          proibitivamente lento. <strong>Test del contratto</strong> risolve questo verificando che entrambe le parti siano d'accordo su
+          <em>interfaccia</em>, senza eseguirli insieme.</p>
+
+        <div class="viz">
+          <div class="viz-cap">Contratti orientati al consumatore</div>
+          <div class="viz-title">Le aspettative del consumatore diventano un contratto che il fornitore deve soddisfare</div>
+          <svg viewBox="0 0 720 200" xmlns="http://www.w3.org/2000/svg" role="img"
+            aria-label="Un consumatore definisce le richieste e le risposte attese come un contratto, che viene poi verificato in modo indipendente rispetto al fornitore">
+            <rect x="20" y="60" width="160" height="70" rx="11" fill="#f7e9e2" stroke="#b8402e"/><text x="100" y="88" font-size="12" font-weight="700" fill="#8f2f20" text-anchor="middle">Consumatore</text><text x="100" y="108" class="mono" font-size="8.5" fill="#5b5347" text-anchor="middle">&quot;Invio X, aspetto Y&quot;</text>
+            <defs><marker id="cta" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0 0 L7 3 L0 6 Z" fill="#8f2f20"/></marker></defs>
+            <path d="M182 95 H268" stroke="#8f2f20" stroke-width="1.8" marker-end="url(#cta)"/><text x="225" y="87" class="mono" font-size="8.5" fill="#8f2f20" text-anchor="middle">genera</text>
+            <rect x="270" y="58" width="180" height="74" rx="11" fill="#211e1a"/><text x="360" y="86" font-size="12" font-weight="700" fill="#fff" text-anchor="middle">il Contratto</text><text x="360" y="106" class="mono" font-size="8.5" fill="#e9e2d3" text-anchor="middle">coppie richiesta/risposta attese</text>
+            <path d="M452 95 H538" stroke="#8f2f20" stroke-width="1.8" marker-end="url(#cta)"/><text x="495" y="87" class="mono" font-size="8.5" fill="#8f2f20" text-anchor="middle">verificato rispetto a</text>
+            <rect x="540" y="60" width="160" height="70" rx="11" fill="#e0e9dd" stroke="#3f6f4e"/><text x="620" y="88" font-size="12" font-weight="700" fill="#3f6f4e" text-anchor="middle">Fornitore</text><text x="620" y="108" class="mono" font-size="8.5" fill="#5b5347" text-anchor="middle">&quot;restituisco comunque Y?&quot;</text>
+            <text x="360" y="168" class="serif" font-size="12.5" font-style="italic" fill="#5b5347" text-anchor="middle">Ciascuna parte viene testata in modo indipendente rispetto al contratto condiviso, non è necessario eseguirli entrambi insieme.</text>
+            <text x="360" y="188" class="serif" font-size="12" font-style="italic" fill="#8f2f20" text-anchor="middle">Se il fornitore rompe il contratto, la sua costruzione fallisce, prima di poter rompere il consumatore nella produzione.</text>
+          </svg>
+        </div>
+
+        <p>Strumenti come <strong>Patto</strong> attuarlo: i test del consumatore registrano le richieste che fa e le
+          risposte che si aspetta in un file di contratto; l'elemento della configurazione del fornitore riproduce quel contratto contro il fornitore reale
+          e fallisce se non regge più. Per i servizi gRPC/Protobuf, il file <code>.proto</code> oltre alla rottura dello schema
+          il rilevamento (lo strumento buf del capitolo gRPC) svolge un ruolo simile, lo schema <em>è</em> una macchina-
+          contratto controllato e CI rifiuta le modifiche incompatibili.</p>
+
+        <div class="box note"><span class="tag">Dove si adattano i test contrattuali</span>
+          <p>Sono la pragmatica via di mezzo tra &quot;deridere l'altro servizio e sperare che la tua derisione sia accurata&quot; (veloce ma
+            può allontanarsi dalla realtà, l'avvertimento del sec 5) e &quot;far girare tutto e testare end-to-end&quot; (realistico ma
+            lento e fragile). I test a contratto danno sicurezza tra servizi alla velocità dei test unitari, motivo per cui si adattano
+            flotte di servizio di grandi dimensioni in cui la piena E2E per tutti i servizi non è praticabile.</p>
+        </div>
+      </section>
+
+      <div class="part-label">Parte IV/E2E, Copertura e affidabilità</div>
+
+      <!-- 12 -->
+      <section id="s12">
+        <div class="sec-head"><div class="sec-num">12</div><h2>Test end-to-end</h2></div>
+        <p>An <strong>test end-to-end (E2E).</strong> esercita il sistema completamente assemblato attraverso il suo esterno reale
+          interfaccia, esattamente come farebbe un utente o un cliente, nessun interno bloccato, tutto in esecuzione: l'API, il
+          database, cache, servizi dipendenti. Risponde all'unica domanda che nessun livello inferiore può: <em>fai tutti i pezzi,
+          collegati insieme per davvero, forniscono effettivamente il risultato rivolto all'utente?</em> E' la punta della piramide (sec 2):
+          massimo realismo, massimo costo.</p>
+
+        <div class="viz">
+          <div class="viz-cap">Pila completa</div>
+          <div class="viz-title">Un vero client guida l'intero sistema in esecuzione</div>
+          <svg viewBox="0 0 720 150" xmlns="http://www.w3.org/2000/svg" role="img"
+            aria-label="Un client di prova che effettua richieste reali tramite un ingresso a un'API, che utilizza un database reale, una cache e un servizio downstream">
+            <rect x="20" y="55" width="110" height="44" rx="9" fill="#b8402e"/><text x="75" y="82" font-size="11" font-weight="700" fill="#fff" text-anchor="middle">cliente di prova</text>
+            <defs><marker id="ea" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0 0 L6 3 L0 6 Z" fill="#8f2f20"/></marker></defs>
+            <path d="M132 77 H188" stroke="#8f2f20" stroke-width="1.8" marker-end="url(#ea)"/>
+            <rect x="190" y="40" width="430" height="74" rx="14" fill="none" stroke="#3f6f4e" stroke-width="2"/>
+            <text x="205" y="58" class="mono" font-size="9.5" font-weight="700" fill="#3f6f4e">il REALE sistema distribuito</text>
+            <rect x="206" y="68" width="90" height="36" rx="8" fill="#e0e9dd" stroke="#3f6f4e"/><text x="251" y="90" font-size="10" fill="#3f6f4e" text-anchor="middle">API</text>
+            <rect x="306" y="68" width="90" height="36" rx="8" fill="#dbeede" stroke="#3f6f4e"/><text x="351" y="90" font-size="10" fill="#3f6f4e" text-anchor="middle">DB</text>
+            <rect x="406" y="68" width="90" height="36" rx="8" fill="#dbeede" stroke="#3f6f4e"/><text x="451" y="90" font-size="10" fill="#3f6f4e" text-anchor="middle">cache</text>
+            <rect x="506" y="68" width="100" height="36" rx="8" fill="#dbeede" stroke="#3f6f4e"/><text x="556" y="90" font-size="10" fill="#3f6f4e" text-anchor="middle">svc B</text>
+            <path d="M622 77 H660" stroke="#8f2f20" stroke-width="1.8" marker-end="url(#ea)"/>
+            <rect x="662" y="55" width="50" height="44" rx="9" fill="#f0e5c9" stroke="#b07d2b"/><text x="687" y="82" font-size="10" font-weight="700" fill="#b07d2b" text-anchor="middle">Sì</text>
+            <text x="370" y="138" class="serif" font-size="12" font-style="italic" fill="#5b5347" text-anchor="middle">Niente di falso, afferma il risultato visibile all'utente di un viaggio completo.</text>
+          </svg>
+        </div>
+
+        <div class="box gotcha"><span class="tag">Usateli con parsimonia, di proposito</span>
+          <p>I test E2E sono lenti, costosi da mantenere e i più soggetti a problemi (sez 14): un singhiozzo ovunque, la rete, i tempi, una dipendenza, li falliscono e un fallimento non te lo dice <em>dove</em> il problema
+            è. Quindi prenota E2E per una manciata di <strong>viaggi critici</strong> (&quot;l'utente si registra -&gt; accede -&gt;
+            effettua un ordine -&gt; il pagamento avviene con successo&quot;). Non testare i casi limite o ogni ramo qui, quelli appartengono
+            test unitari rapidi (sec 4). E2E conferma il sistema <em>si collega</em>; gli strati inferiori lo confermano <em>corretto</em>.</p>
+        </div>
+
+        <div class="box note"><span class="tag">Prove di fumo e test in produzione</span>
+          <p>Un cugino stretto è il <strong>prova del fumo</strong>: un piccolo insieme di controlli E2E viene eseguito subito dopo la distribuzione
+            confermare che il sistema è attivo (&quot;is <code>/health</code> verde? posso accedere?&quot;), accoppiandosi naturalmente con
+            le indagini sulla salute e le implementazioni del capitolo 21. I team maturi lo estendono con <em>test in produzione</em>:
+            monitoraggio sintetico, analisi canary (sec 20 lì) e flag di funzionalità, perché solo alcune proprietà
+            si rivelano nel traffico reale.</p>
+        </div>
+      </section>
+
+      <!-- 13 -->
+      <section id="s13">
+        <div class="sec-head"><div class="sec-num">13</div><h2>Copertura di prova</h2></div>
+        <p><strong>Copertura</strong> misura la quantità di codice eseguita dai test, in genere come percentuale
+          linee o diramazioni corrono durante la suite. È utile come a <em>torcia elettrica</em> per trovare il codice in cui non viene eseguito alcun test
+          tutto, ma è pericolosamente facile da interpretare erroneamente come misura di prova <em>qualità</em>. Non lo è. Te lo dice la copertura
+          cosa era <em>eseguito</em>, mai ciò che era significativo <em>affermato</em>.</p>
+
+        <div class="codeblock" data-cb>
+          <div class="code-bar"><div class="dots"><i></i><i></i><i></i></div>
+            <div class="code-tabs"><button class="on" data-lang="go"><span class="lang-go">&amp;#9679;</span> Vai</button><button data-lang="py"><span class="lang-py">&amp;#9679;</span> Pitone</button></div></div>
+          <div class="code-panel on" data-panel="go"><pre><code class="language-bash"># Built into the toolchain, no extra dependency.
+go test -cover ./...                       # prints % per package
+
+go test -coverprofile=cover.out ./...      # write a detailed profile
+go tool cover -func=cover.out              # per-function breakdown
+go tool cover -html=cover.out              # open an annotated, line-by-line HTML view</code></pre></div>
+          <div class="code-panel" data-panel="py"><pre><code class="language-bash"># Via the coverage.py / pytest-cov plugin.
+pip install pytest-cov
+
+pytest --cov=app                           # coverage for the `app` package
+pytest --cov=app --cov-report=term-missing # show exactly which lines are UNcovered
+pytest --cov=app --cov-report=html         # browsable htmlcov/ report
+pytest --cov=app --cov-branch              # branch coverage, not just line</code></pre></div>
+        </div>
+
+        <h4>Copertura linea vs filiale</h4>
+        <p><strong>Copertura della linea</strong> chiede &quot;è stata eseguita questa linea?&quot; <strong>Copertura delle filiali</strong> chiede più forte
+          domanda &quot;era ciascuno <em>direzione</em> di ogni decisione presa?&quot; Un singolo test può colpire il 100% delle linee in un file
+          <code>if</code> prendendo sempre e solo il ramo vero, il <code>else</code> il percorso non è eseguito e
+          non testato anche se la copertura della linea sembra completa. La copertura delle filiali è il numero più onesto; lo preferisco.</p>
+
+        <div class="box gotcha"><span class="tag">La copertura è un limite, non un obiettivo, e Goodhart morde</span>
+          <p>Puoi raggiungere una copertura del 100% con test che lo affermano <em>niente</em>, basta chiamare ogni funzione e controllare
+            nessuna eccezione. Completamente coperto, totalmente inutile. Il momento una copertura <em>percentuale</em> diventa un bersaglio,
+            la gente gioca con test privi di asserzioni (legge di Goodhart: una misura che diventa un obiettivo smette di essere un bene
+            misura). Usa la copertura per trovare aree non testate che meritano attenzione; giudicare la qualità in base a quanto affermato dai test
+            comportamento significativo (sez 3, sec 20). Una copertura elevata con asserzioni deboli è una falsa fiducia.</p>
+        </div>
+      </section>
+
+      <!-- 14 -->
+      <section id="s14">
+        <div class="sec-head"><div class="sec-num">14</div><h2>Test traballanti</h2></div>
+        <p>A <strong>prova traballante</strong> passa a volte e fallisce altre volte <em>senza alcuna modifica del codice</em>. Sfaldamento
+          è corrosivo: addestra la squadra a ignorare le build rosse (&quot;basta rieseguirlo&quot;), e una volta che le persone smettono di fidarsi del
+          suite, la suite è morta, una pista verde non significa più nulla. I test inaffidabili sono probabilmente peggiori di no
+          test, perché costano tempo ed erodono la fiducia che dà ai test il loro valore (sez. 1).</p>
+
+        <div class="tbl-wrap">
+          <table>
+            <thead><tr><th>Causa di desquamazione</th><th>Correggi</th></tr></thead>
+            <tbody>
+              <tr><td><strong>Ora/orologio</strong>: &quot;adesso&quot;, timeout, posti letto, limiti di data</td><td>Iniettare l'orologio; affermare intervalli non istanti esatti (sez. 17). Mai <code>sleep</code> &quot;aspettare&quot;; interrogare una condizione.</td></tr>
+              <tr><td><strong>Dipendenza dall'ordine di test</strong>: un test si basa sugli avanzi di un altro</td><td>Imposta e smonta ogni test nel proprio stato (sez. 9, sez. 15). Esegui in ordine casuale per stanarli.</td></tr>
+              <tr><td><strong>Stato mutevole condiviso</strong>: una riga DB globale, condivisa, un singleton</td><td>Isolare per test; evitare lo stato globale; utilizzare infissi nuovi.</td></tr>
+              <tr><td><strong>Concorrenza/gare</strong>: goroutine, thread, tempi asincroni</td><td>Sincronizza su segnali non sincronizzati; correre con il rilevatore di gare (<code>go test -race</code>).</td></tr>
+              <tr><td><strong>Rete reale/API esterna</strong>: latenza, limiti di velocità, tempi di inattività</td><td>Deridere il confine (sec 17); mantieni le chiamate reali a un set E2E piccolo e tollerante.</td></tr>
+              <tr><td><strong>Dati non ordinati</strong>: iterazione della mappa, righe DB senza <code>ORDER BY</code></td><td>Ordina prima del confronto o asserisci l'appartenenza a un insieme e non una sequenza.</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="box key"><span class="tag">La cura è il determinismo</span>
+          <p>Ogni test instabile è un non determinismo nascosto, tempo, ordinamento, concorrenza o stato condiviso che trapelano.
+            La soluzione è sempre quella di rimuovere la fonte della casualità: controllare l'orologio, isolare lo stato, sincronizzarsi sugli eventi
+            invece di dormire e interrompere la rete. <strong>Quarantena</strong> un test instabile (segna e salta dal
+            gating run) solo come misura temporanea mentre si trova la vera causa, non nasconderla mai con a
+            coperta &quot;riprova fino al verde&quot;, che nasconde semplicemente il bug.</p>
+        </div>
+      </section>
+
+      <!-- 15 -->
+      <section id="s15">
+        <div class="sec-head"><div class="sec-num">15</div><h2>Infissi e fabbriche</h2></div>
+        <p>I test necessitano di dati e di uno stato iniziale noto, e il modo in cui li costruisci decide se la tua suite rimane leggibile
+          o marcisce in una zuppa preparata. Due strumenti correlati: <strong>infissi</strong> gestire <em>installazione e smontaggio</em> (il
+          mondo in cui viene eseguito un test, una connessione DB, una directory temporanea, un client registrato) e <strong>fabbriche</strong>
+          costruire <em>oggetti di prova</em> con impostazioni predefinite sensate in modo che ogni test indichi solo i campi che gli interessano effettivamente.</p>
+
+        <div class="codeblock" data-cb>
+          <div class="code-bar"><div class="dots"><i></i><i></i><i></i></div>
+            <div class="code-tabs"><button class="on" data-lang="go"><span class="lang-go">&amp;#9679;</span> Vai</button><button data-lang="py"><span class="lang-py">&amp;#9679;</span> Pitone</button></div></div>
+          <div class="code-panel on" data-panel="go"><pre><code class="language-go">// Go favors explicit helpers over magic. t.Helper() keeps failure line numbers useful.
+// A "factory" with functional options: specify only the fields that matter to the test.
+func newUser(t *testing.T, opts ...func(*User)) User {
+    t.Helper()
+    u := User{ID: "u1", Email: "default@x.com", Active: true} // sensible defaults
+    for _, o := range opts { o(&u) }
+    return u
+}
+func withEmail(e string) func(*User) { return func(u *User) { u.Email = e } }
+
+// A "fixture" via t.Cleanup: setup returns the thing + auto-teardown.
+func newTempStore(t *testing.T) *Store {
+    t.Helper()
+    dir := t.TempDir()                 // auto-removed after the test
+    s := OpenStore(dir)
+    t.Cleanup(func() { s.Close() })    // teardown runs even if the test fails
+    return s
+}
+
+func TestSignup(t *testing.T) {
+    store := newTempStore(t)
+    u := newUser(t, withEmail("ada@x.com")) // only the relevant field is stated
+    _ = store.Save(u)
+    // ...assert...
+}</code></pre></div>
+          <div class="code-panel" data-panel="py"><pre><code class="language-python">import pytest
+
+# pytest FIXTURES: setup before `yield`, teardown after. Injected by parameter name.
+@pytest.fixture
+def temp_store(tmp_path):           # tmp_path is a built-in fixture (auto-cleaned dir)
+    store = Store(tmp_path)
+    yield store                     # the test runs here
+    store.close()                   # teardown, runs even if the test fails
+
+# A FACTORY: defaults + overrides, so tests state only what they care about.
+def make_user(**overrides):
+    return User(**{"id": "u1", "email": "default@x.com", "active": True, **overrides})
+
+def test_signup(temp_store):
+    user = make_user(email="ada@x.com")   # only the relevant field is stated
+    temp_store.save(user)
+    # ...assert...
+
+# Libraries like factory_boy / model_bakery scale this up for complex object graphs.</code></pre></div>
+        </div>
+
+        <div class="box gotcha"><span class="tag">Mantieni visibili i dati rilevanti</span>
+          <p>Lo scopo delle fabbriche è nascondersi <em>irrilevante</em> setup, per non nascondere i dati da cui dipende un test. Se a
+            test asserisce qualcosa su un utente premium, dovrebbe apparire la parola &quot;premium&quot;. <em>in quella prova</em>
+            (<code>make_user(tier="premium")</code>), non essere sepolto in un dispositivo condiviso a tre file di distanza. Un lettore dovrebbe
+            comprendere la premessa di un test senza fare speleologia. Gli apparecchi troppo condivisi e opachi (l '&quot;ospite misterioso&quot;) creano
+            guasti difficili da diagnosticare e test difficili da fidare.</p>
+        </div>
+      </section>
+
+      <div class="part-label">Parte V / Pratica e pipeline</div>
+
+      <!-- 16 -->
+      <section id="s16">
+        <div class="sec-head"><div class="sec-num">16</div><h2>TDD: Rosso/Verde/Refactoring</h2></div>
+        <p><strong>Sviluppo guidato dai test</strong> inverte l'ordine consueto: scrivi a <em>fallendo</em> prima prova, poi
+          il codice minimo per passarlo, quindi ripulirlo, ripetendolo in piccoli cicli. La disciplina è la famosa
+          ciclo di tre battute: <strong>Rosso</strong> (scrivi un test, guardalo fallire), <strong>Verde</strong> (fatelo passare come
+          nel modo più semplice possibile), <strong>Refactoring</strong> (migliorare il design mentre il test rimane verde). Scrivere il
+          test prima ti obbliga a definire il comportamento desiderato e un'interfaccia pulita <em>prima</em> sei invischiato
+          implementazione.</p>
+
+        <div class="viz">
+          <div class="viz-cap">Il ciclo TDD</div>
+          <div class="viz-title">Rosso -&gt; Verde -&gt; Refactoring, in piccoli cicli</div>
+          <svg viewBox="0 0 720 200" xmlns="http://www.w3.org/2000/svg" role="img"
+            aria-label="Un ciclo di tre passaggi: scrivere un test fallito (rosso), farlo passare (verde), rifattorizzare, quindi ripetere">
+            <circle cx="150" cy="100" r="56" fill="#eccdc2" stroke="#8f2f20" stroke-width="2"/><text x="150" y="96" font-size="13" font-weight="700" fill="#8f2f20" text-anchor="middle">ROSSO</text><text x="150" y="114" class="mono" font-size="8.5" fill="#8f2f20" text-anchor="middle">prima il test fallito</text>
+            <circle cx="360" cy="100" r="56" fill="#e0e9dd" stroke="#3f6f4e" stroke-width="2"/><text x="360" y="96" font-size="13" font-weight="700" fill="#3f6f4e" text-anchor="middle">VERDE</text><text x="360" y="114" class="mono" font-size="8.5" fill="#3f6f4e" text-anchor="middle">passaggio più semplice</text>
+            <circle cx="570" cy="100" r="56" fill="#f0e5c9" stroke="#b07d2b" stroke-width="2"/><text x="570" y="96" font-size="12.5" font-weight="700" fill="#b07d2b" text-anchor="middle">RAFFATTORE</text><text x="570" y="114" class="mono" font-size="8.5" fill="#b07d2b" text-anchor="middle">pulito, rimani verde</text>
+            <defs><marker id="tda" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0 0 L7 3 L0 6 Z" fill="#8f2f20"/></marker></defs>
+            <path d="M208 90 H300" stroke="#8f2f20" stroke-width="1.8" marker-end="url(#tda)"/>
+            <path d="M418 90 H510" stroke="#8f2f20" stroke-width="1.8" marker-end="url(#tda)"/>
+            <path d="M566 158 C420 196 300 196 154 158" stroke="#8f2f20" stroke-width="1.6" fill="none" marker-end="url(#tda)"/>
+            <text x="360" y="186" class="serif" font-size="12" font-style="italic" fill="#5b5347" text-anchor="middle">ripeti, ogni ciclo aggiunge un piccolo comportamento completamente testato</text>
+          </svg>
+        </div>
+
+        <p>I reali vantaggi di TDD sono di secondo ordine: produce codice <em>testabile per costruzione</em> (non puoi
+          scrivere un'unità non testabile se il test è arrivato prima), ti mantiene concentrato su un piccolo comportamento alla volta, e il
+          Il passaggio &quot;refactoring&quot; è sicuro proprio perché il test che hai appena scritto lo protegge. È un <em>progettazione</em> tecnica
+          tanto quanto un test.</p>
+
+        <div class="box note"><span class="tag">Uno strumento, non una religione</span>
+          <p>Il TDD brilla quando i requisiti sono chiari e la logica non è banale (parser, regole aziendali, algoritmi). Esso
+            si adatta in modo strano quando sei <em>esplorando</em>, perfezionando un prototipo, abbozzando un'interfaccia utente, sondando qualcosa di sconosciuto
+            API, di cui il design non è ancora noto. Molti eccellenti ingegneri scrivono immediatamente i test
+            <em>dopo</em> il codice piuttosto che rigorosamente prima. Ciò che conta è che il comportamento risulti ben testato;
+            test-first è un percorso efficace per raggiungere questo obiettivo, non l'unico valido.</p>
+        </div>
+      </section>
+
+      <!-- 17 -->
+      <section id="s17">
+        <div class="sec-head"><div class="sec-num">17</div><h2>Tempo di simulazione, casualità e API esterne</h2></div>
+        <p>Tre fonti di test di relitto non determinismo se lasciate reali, l'orologio, il generatore casuale e il
+          rete, e sono i soliti sospettati dietro l'instabilità (sez. 14). La cura per tutti e tre è la stessa:
+          trasforma la dipendenza nascosta in un file <em>iniettato</em> uno (sec 6) quindi il test lo controlla.</p>
+
+        <h4>Tempo e casualità: iniettateli</h4>
+        <p>Codice che chiama <code>time.Now()</code> o <code>random()</code> direttamente non è verificabile e traballante, suo
+          l'output cambia ad ogni esecuzione. Crea l'orologio e le dipendenze RNG che l'unità riceve, quindi passa un orologio fisso
+          (restituisce sempre lo stesso istante) o un RNG seminato nei test. Ora &quot;il token scade tra 1 ora&quot; oppure &quot;scegli un valore casuale
+          shard&quot; è completamente deterministico e asseribile.</p>
+
+        <h4>HTTP esterno: stub il confine</h4>
+        <p>Non utilizzare mai una vera API di terze parti in un test di unità/integrazione, è lenta, instabile, con velocità limitata e potrebbe
+          avere effetti collaterali. Entrambi gli ecosistemi ti consentono di intercettare HTTP localmente: Go's <code>httptest.Server</code> si alza
+          un server falso a cui indirizzi il tuo cliente; Di Pitone <code>responses</code>/<code>respx</code> patchare il livello HTTP
+          per restituire risposte predefinite. (E ricorda la sezione 5: preferisci racchiudere l'API dietro la tua interfaccia, quindi la maggior parte dei test
+          finto <em>quello</em>, riservando stub a livello HTTP per testare l'adattatore client stesso.)</p>
+
+        <div class="codeblock" data-cb>
+          <div class="code-bar"><div class="dots"><i></i><i></i><i></i></div>
+            <div class="code-tabs"><button class="on" data-lang="go"><span class="lang-go">&amp;#9679;</span> Vai</button><button data-lang="py"><span class="lang-py">&amp;#9679;</span> Pitone</button></div></div>
+          <div class="code-panel on" data-panel="go"><pre><code class="language-go">// 1) Injected clock, deterministic time.
+type Clock interface{ Now() time.Time }
+type fixedClock struct{ t time.Time }
+func (f fixedClock) Now() time.Time { return f.t }
+
+func TestTokenExpiry(t *testing.T) {
+    clk := fixedClock{t: time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)} // frozen
+    tok := NewToken(clk, time.Hour)
+    if tok.ExpiresAt != clk.Now().Add(time.Hour) {
+        t.Error("expiry not computed from the injected clock")
+    }
+}
+
+// 2) Stub an external HTTP API with httptest.Server, no real network.
+func TestFetchRate(t *testing.T) {
+    srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+        w.Write([]byte(`{"usd_inr": 83.2}`)) // canned response
+    }))
+    defer srv.Close()
+
+    client := NewRatesClient(srv.URL) // point the client at the fake server's URL
+    rate, _ := client.USDINR()
+    if rate != 83.2 { t.Errorf("got %v", rate) }
+}</code></pre></div>
+          <div class="code-panel" data-panel="py"><pre><code class="language-python">import responses
+from datetime import datetime, timezone
+
+# 1) Injected clock, deterministic time (freezegun is a popular alternative).
+def test_token_expiry():
+    frozen = datetime(2026, 1, 1, 12, 0, tzinfo=timezone.utc)
+    tok = make_token(now=lambda: frozen, ttl=3600)  # clock injected as a callable
+    assert tok.expires_at == frozen.timestamp() + 3600
+
+# 2) Stub external HTTP with `responses`, patches the HTTP layer, no real network.
+@responses.activate
+def test_fetch_rate():
+    responses.add(
+        responses.GET, "https://api.rates.com/usd-inr",
+        json={"usd_inr": 83.2}, status=200,           # canned response
+    )
+    client = RatesClient("https://api.rates.com")
+    assert client.usd_inr() == 83.2</code></pre></div>
+        </div>
+
+        <div class="box key"><span class="tag">Il determinismo non è negoziabile</span>
+          <p>Un test deve produrre lo stesso risultato su ogni esecuzione, su ogni macchina, in qualsiasi ordine. L'istante in tempo reale,
+            vera casualità, o una vera rete si insinua, hai piantato un futuro traballante fallimento. Iniettare e controllare tutto
+            tre, è la stessa cucitura DI della sez. 6 applicata alle tre cose che cambiano da sole.</p>
+        </div>
+      </section>
+
+      <!-- 18 -->
+      <section id="s18">
+        <div class="sec-head"><div class="sec-num">18</div><h2>Test di prestazioni e carico</h2></div>
+        <p>I test funzionali dimostrano che il codice lo è <em>corretto</em>; i test sulle prestazioni lo dimostrano <em>abbastanza veloce</em>, un asse completamente diverso e di grande importanza per le preoccupazioni di ridimensionamento dei capitoli 18-19. Due
+          sapori distinti: <strong>parametri di riferimento</strong> (micro: quanto è veloce questa funzione/endpoint?) e <strong>caricare
+          test</strong> (macro: come si comporta l'intero sistema con N utenti contemporanei?).</p>
+
+        <div class="tbl-wrap">
+          <table>
+            <thead><tr><th>Gentile</th><th>Domanda</th><th>Strumento</th></tr></thead>
+            <tbody>
+              <tr><td><strong>Punto di riferimento</strong></td><td>Quanto velocemente/quante allocazioni per questo percorso di codice?</td><td>Vai <code>testing.B</code>; Pitone <code>pytest-benchmark</code></td></tr>
+              <tr><td><strong>Prova di carico</strong></td><td>Throughput e latenza in caso di traffico simultaneo sostenuto?</td><td>k6, Locusta, Gatling, vegeta</td></tr>
+              <tr><td><strong>Prova di sforzo</strong></td><td>Dove si rompe e come fallisce?</td><td>stessi strumenti, hanno superato la capacità</td></tr>
+              <tr><td><strong>Prova di immersione</strong></td><td>Si degrada nel corso delle ore (perdite, frammentazione)?</td><td>stessi strumenti, lunga durata</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="codeblock" data-cb>
+          <div class="code-bar"><div class="dots"><i></i><i></i><i></i></div>
+            <div class="code-tabs"><button class="on" data-lang="go"><span class="lang-go">&amp;#9679;</span> Vai</button><button data-lang="py"><span class="lang-py">&amp;#9679;</span> Pitone</button></div></div>
+          <div class="code-panel on" data-panel="go"><pre><code class="language-go">// Benchmarks live beside tests; the tool tunes b.N until timing is stable.
+func BenchmarkParseEvent(b *testing.B) {
+    payload := []byte(`{"type":"click","ts":1717000000}`)
+    b.ReportAllocs()                 // also report allocations/op
+    for i := 0; i < b.N; i++ {       // the loop the framework times
+        _, _ = ParseEvent(payload)
+    }
+}
+
+// Run:  go test -bench=. -benchmem
+//   BenchmarkParseEvent-8   3142051   382 ns/op   96 B/op   2 allocs/op
+// Compare runs with `benchstat` to catch performance REGRESSIONS over time.</code></pre></div>
+          <div class="code-panel" data-panel="py"><pre><code class="language-python"># pip install pytest-benchmark, the `benchmark` fixture times the callable.
+def test_parse_event_perf(benchmark):
+    payload = b'{"type":"click","ts":1717000000}'
+    result = benchmark(parse_event, payload)   # runs it many times, reports stats
+    assert result.type == "click"              # still assert correctness
+
+# Output reports min/mean/median/stddev; --benchmark-compare flags regressions.</code></pre></div>
+        </div>
+
+        <div class="codeblock single">
+          <div class="code-bar"><div class="dots"><i></i><i></i><i></i></div><span class="filename">load_test.js / un test di carico k6 (indipendente dalla lingua, raggiunge il servizio in esecuzione)</span></div>
+          <pre><code class="language-bash">import http from 'k6/http';
+import { check } from 'k6';
+
+export const options = {
+  stages: [
+    { duration: '30s', target: 100 },  // ramp up to 100 virtual users
+    { duration: '1m',  target: 100 },  // hold
+    { duration: '30s', target: 0 },    // ramp down
+  ],
+  thresholds: {
+    http_req_duration: ['p(95)<300'],  // 95th-percentile latency must stay < 300ms
+    http_req_failed:   ['rate<0.01'],  // error rate must stay under 1%
+  },
+};
+export default function () {
+  const res = http.get('https://staging.example.com/api/v1/health');
+  check(res, { 'status 200': (r) => r.status === 200 });
+}
+# Run:  k6 run load_test.js, fails the build if a threshold is breached.</code></pre>
+        </div>
+
+        <div class="box gotcha"><span class="tag">Misura i percentili rispetto a un obiettivo, non al tuo laptop</span>
+          <p>Le medie mentono: una media di 50 ms può nascondere un p99 di 2 secondi che sta distruggendo gli utenti reali. Tieni sempre traccia della coda
+            latenza (p95/p99). Ed esegui test di carico su un ambiente di tipo produttivo, mai sulla tua macchina di sviluppo, e
+            giudicare i risultati rispetto a uno SLO esplicito (la soglia), non a un'atmosfera. Un benchmark o un test di carico senza obiettivo
+            il numero è solo una curiosità.</p>
+        </div>
+      </section>
+
+      <!-- 19 -->
+      <section id="s19">
+        <div class="sec-head"><div class="sec-num">19</div><h2>Test in CI/CD</h2></div>
+        <p>Una suite di test ha valore solo se viene eseguita <em>automaticamente</em>, ad ogni cambiamento, come un cancello. Questo è dove
+          testing incontra la pipeline del capitolo 21 (sez 19 lì): ad ogni push, CI esegue i test e un fallimento
+          <strong>blocca l'unione o la distribuzione</strong>. Il punto centrale del gradiente di velocità della piramide (sec 2) è quello
+          fornisci un feedback rapido qui, esegui i test unitari in millisecondi su ogni commit, l'integrazione più pesante/E2E
+          test al momento giusto.</p>
+
+        <div class="viz">
+          <div class="viz-cap">Test come porte</div>
+          <div class="viz-title">Ogni livello viene eseguito nella fase in cui il suo costo è giustificato</div>
+          <svg viewBox="0 0 720 150" xmlns="http://www.w3.org/2000/svg" role="img"
+            aria-label="Fasi della pipeline: test lint e unitari su ogni push, test di integrazione su merge, E2E e test del fumo prima o dopo la distribuzione">
+            <defs><marker id="cia" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0 0 L7 3 L0 6 Z" fill="#8f2f20"/></marker></defs>
+            <rect x="14" y="50" width="150" height="54" rx="10" fill="#e0e9dd" stroke="#3f6f4e"/><text x="89" y="72" font-size="11" font-weight="700" fill="#3f6f4e" text-anchor="middle">ogni spinta</text><text x="89" y="90" class="mono" font-size="8.5" fill="#5b5347" text-anchor="middle">lanugine + unità (veloce)</text>
+            <path d="M166 77 H204" stroke="#8f2f20" stroke-width="1.6" marker-end="url(#cia)"/>
+            <rect x="206" y="50" width="150" height="54" rx="10" fill="#f0e5c9" stroke="#b07d2b"/><text x="281" y="72" font-size="11" font-weight="700" fill="#b07d2b" text-anchor="middle">sulla fusione/PR</text><text x="281" y="90" class="mono" font-size="8.5" fill="#5b5347" text-anchor="middle">integrazione + DB</text>
+            <path d="M358 77 H396" stroke="#8f2f20" stroke-width="1.6" marker-end="url(#cia)"/>
+            <rect x="398" y="50" width="150" height="54" rx="10" fill="#f7e9e2" stroke="#b8402e"/><text x="473" y="72" font-size="11" font-weight="700" fill="#8f2f20" text-anchor="middle">pre-distribuzione</text><text x="473" y="90" class="mono" font-size="8.5" fill="#5b5347" text-anchor="middle">E2E (percorsi critici)</text>
+            <path d="M550 77 H588" stroke="#8f2f20" stroke-width="1.6" marker-end="url(#cia)"/>
+            <rect x="590" y="50" width="116" height="54" rx="10" fill="#3f6f4e"/><text x="648" y="72" font-size="11" font-weight="700" fill="#fff" text-anchor="middle">post-distribuzione</text><text x="648" y="90" class="mono" font-size="8.5" fill="#dceeea" text-anchor="middle">fumo (sez 12)</text>
+            <text x="360" y="134" class="serif" font-size="12" font-style="italic" fill="#5b5347" text-anchor="middle">Qualsiasi cancello rosso ferma la linea, il guasto viene colto prima che raggiunga gli utenti.</text>
+          </svg>
+        </div>
+
+        <div class="codeblock single">
+          <div class="code-bar"><div class="dots"><i></i><i></i><i></i></div><span class="filename">.github/workflows/test.yaml / il cancello di test</span></div>
+          <pre><code class="language-yaml">name: tests
+on: [push, pull_request]
+jobs:
+  unit:                          # fast, runs on every push
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: go test -race -cover ./...          # Go: race detector + coverage
+      # - run: pytest -m "not integration" --cov  # Python: skip slow tests here
+
+  integration:                   # heavier, real DB via services / testcontainers
+    runs-on: ubuntu-latest
+    needs: unit                  # only if unit tests passed
+    services:
+      postgres:
+        image: postgres:16
+        env: { POSTGRES_PASSWORD: p }
+        ports: ["5432:5432"]
+    steps:
+      - uses: actions/checkout@v4
+      - run: go test -tags=integration ./...     # or: pytest -m integration
+# A failed job fails the check -&gt; branch protection blocks the merge.</code></pre>
+        </div>
+
+        <div class="box note"><span class="tag">Rendi la suite veloce e parallela</span>
+          <p>Se i test sono lenti, le persone li saltano, quindi la velocità è una caratteristica. Esegui test in parallelo (Go lo fa in modo trasversale
+            pacchetti per impostazione predefinita e all'interno di un test tramite <code>t.Parallel()</code>; pytest via <code>pytest-xdist</code>),
+            dividere il fast unit gate dalle fasi di integrazione lenta/E2E e dalle dipendenze della cache. Una suite che ritorna
+            in meno di pochi minuti viene eseguito; uno che ne richiede trenta viene ignorato e un test non eseguito non protegge nulla.</p>
+        </div>
+      </section>
+
+      <!-- 20 -->
+      <section id="s20">
+        <div class="sec-head"><div class="sec-num">20</div><h2>Una strategia di test</h2></div>
+        <p>I test hanno un costo da scrivere, da eseguire e da mantenere man mano che il codice cambia, quindi l'obiettivo non è mai lo stesso
+          &quot;prova tutto&quot; ma <strong>massima confidenza per unità di sforzo</strong>. Una strategia coerente è principalmente a
+          insieme di giudizi richiede <em>cosa</em> testare, a <em>quale</em> strato e cosa lasciare da solo.</p>
+
+        <h4>Cosa testare pesantemente</h4>
+        <ul>
+          <li><strong>Logica e regole aziendali</strong>: prezzi, convalida, macchine a stati, qualsiasi cosa con
+            rami e casi limite. Unit test economici e veloci; il profitto più alto (sez. 4, sez. 7).</li>
+          <li><strong>Bug che hai risolto</strong>: ogni correzione riceve un test di regressione quindi non può restituire (sec 1).</li>
+          <li><strong>Percorsi critici e denaro</strong>: autenticazione, pagamenti e integrità dei dati ottengono copertura su più livelli
+            strati, incluso un sottile E2E (sez. 12).</li>
+          <li><strong>Cuciture di integrazione</strong>: le tue domande, la serializzazione e i contratti tra i servizi
+            (sez 8-11), dove si nascondono le cimici subdole.</li>
+        </ul>
+
+        <h4>Cosa testare leggermente o per niente</h4>
+        <ul>
+          <li><strong>Codice banale</strong>: getter semplici, colla per framework, codice generato. Metterli alla prova è fatica
+            senza intuizione.</li>
+          <li><strong>Librerie di terze parti</strong>: supponiamo che funzionino; prova <em>tuo</em> uso di loro, non loro
+            interni (sez 5).</li>
+          <li><strong>Dettagli di implementazione</strong>: aiutanti privati e sequenze esatte delle chiamate. Prova osservabile
+            comportamento in modo che i refactoring non causino errori spuri.</li>
+        </ul>
+
+        <div class="box key"><span class="tag">La regola d'oro: testare il comportamento, non l'implementazione</span>
+          <p>L'unico principio che separa una suite che <em>aiuta</em> da uno quello <em>fa male</em>: affermare
+            <em>cosa fa il codice</em> (i suoi input osservabili-&gt;output ed effetti collaterali), mai <em>come lo fa</em>
+            internamente. I test focalizzati sul comportamento sopravvivono al refactoring, diventano verdi finché il contratto regge,
+            che è esattamente la fiducia nel cambiamento che ha giustificato i test in primo luogo (sez. 1). Implementazione-
+            i test accoppiati si interrompono a ogni ristrutturazione, penalizzano i miglioramenti e vengono lentamente eliminati. Scrivi mette alla prova il tuo futuro
+            te stesso ti ringrazierà, non ti maledirà.</p>
+        </div>
+      </section>
+
+      <!-- 21 -->
+      <section id="s21">
+        <div class="sec-head"><div class="sec-num">21</div><h2>Cheat-Sheet</h2></div>
+        <p>L'intero manuale compresso in ciò che raggiungi sotto pressione.</p>
+        <div class="tbl-wrap">
+          <table>
+            <thead><tr><th>Concetto</th><th>Una riga</th></tr></thead>
+            <tbody>
+              <tr><td>Perché testare</td><td>Fiducia nel cambiamento, specifiche eseguibili, rete di regressione, feedback rapido.</td></tr>
+              <tr><td>Piramide</td><td>Molte unità (veloci) / qualche integrazione / pochi E2E (lenti). Non invertirlo.</td></tr>
+              <tr><td>AAA</td><td>Organizza, Agisci, Asserisci, un comportamento per test, nome descrittivo.</td></tr>
+              <tr><td>Prova unitaria</td><td>Un'unità isolata, nessun I/O, millisecondi, precisa.</td></tr>
+              <tr><td>La prova raddoppia</td><td>Falso / Stub / Spia / Finto / Falso. Preferisci la verifica dello stato rispetto alla verifica dell'interazione.</td></tr>
+              <tr><td>Non prendere in giro</td><td>Ciò che non possiedi, avvolgilo dietro la tua interfaccia e deridilo.</td></tr>
+              <tr><td>DI</td><td>Iniettare collaboratori -&gt; la cucitura in cui si inserisce un doppio. Non testabile = odore di design.</td></tr>
+              <tr><td>Tabella/parametrizzare</td><td>Un corpo di prova, molti casi nominati, una fitta copertura di casi limite.</td></tr>
+              <tr><td>Integrazione</td><td>DB/dip reali collegati insieme, rileva bug SQL, mappatura e serializzazione.</td></tr>
+              <tr><td>DB reale</td><td>Testcontainer: motore vero, usa e getta, isolato. Non SQLite per Postgres.</td></tr>
+              <tr><td>Test HTTP</td><td><code>httptest</code> / <code>TestClient</code>, gestori di unità in corso, nessun socket.</td></tr>
+              <tr><td>Prova contrattuale</td><td>Verificare l'accordo fornitore/consumatore sull'interfaccia, senza eseguire entrambi (Pact, buf).</td></tr>
+              <tr><td>E2E</td><td>Intero sistema tramite interfaccia reale, solo viaggi critici; prova del fumo dopo la distribuzione.</td></tr>
+              <tr><td>Copertura</td><td>Trova codice non testato; non una misura di qualità. Preferisci il ramo; mai un bersaglio (Goodhart).</td></tr>
+              <tr><td>Traballante</td><td>Non determinismo: tempo, ordine, stato condiviso, concorrenza, rete. Cura = determinismo.</td></tr>
+              <tr><td>Impianti/fabbriche</td><td>Gestisci configurazione/smontaggio e crea dati con le impostazioni predefinite; mantenere visibili i dati rilevanti.</td></tr>
+              <tr><td>TDD</td><td>Rosso -&gt; Verde -&gt; Refactoring. Uno strumento di progettazione; utilizzare dove si adatta, non dogmaticamente.</td></tr>
+              <tr><td>determinismo</td><td>Iniettare l'orologio, seminare l'RNG, interrompere la rete, controllarli tutti e tre.</td></tr>
+              <tr><td>Perf</td><td>Benchmark (micro) + test di carico (macro). Traccia p95/p99 rispetto a uno SLO, non le medie.</td></tr>
+              <tr><td>Porta CI</td><td>I test vengono eseguiti su ogni push e blocco di unione/distribuzione. Mantienili veloci e paralleli.</td></tr>
+              <tr><td>Strategia</td><td>Fiducia per sforzo. Prova logica, bug, denaro, cuciture; salta curiosità e dettagli interni.</td></tr>
+              <tr><td>Regola d'oro</td><td><strong>Testare il comportamento, non l'implementazione</strong>: sopravvive al refactoring.</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="foot">
+          <p><strong>Tutto l'argomento in un fiato:</strong> esistono test automatizzati per darti la sicurezza di modificare il codice
+            (sec 1), e la forma strategica è una piramide, molti test unitari veloci, meno integrazione, un E2E sottile
+            strato (sec 2). Ogni test è Arrange-Act-Assert su un comportamento (sez. 3). I test unitari isolano a
+            unità (sec 4) utilizzando test double (sec 5) resi possibili dall'iniezione delle dipendenze (sec 6), con guida da tabella
+            e casi parametrizzati per copertura densa (sez. 7). I test di integrazione collegano insieme le dipendenze reali
+            (sec 8), un database reale tramite testcontainers (sec 9), gestori tramite client in-process (sec 10),
+            e accordo tra servizi tramite test contrattuali (sezione 11). E2E copre solo i viaggi critici (sez. 12);
+            la copertura è una torcia e non un obiettivo (sez. 13); la desquamazione è il non determinismo da eliminare (sez 14); e
+            gli impianti e le fabbriche mantengono pulito il setup (sez. 15). Progettazione di unità TDD in loop rosso/verde/refactoring (sez. 16),
+            il determinismo deriva dall'iniezione di tempo, casualità e rete (sez. 17), la performance è il proprio asse di
+            benchmark e test di carico rispetto a uno SLO (sec 18), e la suite si guadagna da vivere solo funzionando velocemente
+            cancello in CI/CD (sec 19). Soprattutto: comportamento del test, non implementazione (sez. 20).</p>
+          <p style="margin-top:14px;font-family:'JetBrains Mono', ui-monospace, monospace;font-size:12px;letter-spacing:.05em;">
+            Radicato in movimento <code>testing</code> documenti e documenti pytest / Testcontainers / il testing-
+            letteratura piramidale (Cohn, Fowler) / esempi Go 1.22+ / Python 3.11+.</p>
+        </div>
+      </section>
+
+    
+      <footer class="bfp-footer">Backend dai Primi Principi / Capitolo 22 / Test. Il codice è destinato a Go 1.22+ e Python 3.11+.</footer>
+</main>
+</div>
+<button class="toc-toggle" onclick="document.querySelector('.toc').classList.toggle('open')"> Contenuto</button>
+
+  
+
+  <script>
+    hljs.highlightAll();
+    document.querySelectorAll('[data-cb]').forEach(block => {
+      const btns = block.querySelectorAll('.code-tabs button');
+      const panels = block.querySelectorAll('.code-panel');
+      btns.forEach(btn => btn.addEventListener('click', () => {
+        const lang = btn.dataset.lang;
+        btns.forEach(b => b.classList.toggle('on', b === btn));
+        panels.forEach(p => p.classList.toggle('on', p.dataset.panel === lang));
+      }));
+    });
+</script>
+<!-- CHAPTER NAVIGATION -->
+<nav class="chapter-nav" id="chapterNav">
+  <a href="../../21.Containerization-and-Deployment-Docker-Kubernetes-and-CICD/html_notes/notes.html" class="nav-chapter-link"><span class="nav-arrow"><svg class="ico-arrow" width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="13.5" y1="8" x2="3.5" y2="8"/><polyline points="7.5,4 3.5,8 7.5,12"/></svg></span><span class="nav-label"><span class="nav-small">Capitolo 21</span>Docker, K8 e CI/CD</span></a>
+  <a href="../../index.html" class="nav-indicator"><span class="nav-dot"></span> Capitolo 22 <span class="nav-sep">/</span> 24</a>
+  <a href="../../23.Message-Brokers-and-Event-Streaming-with-Kafka/html_notes/notes.html" class="nav-chapter-link nav-next"><span class="nav-label"><span class="nav-small">Capitolo 23</span>Broker di messaggi e Kafka</span><span class="nav-arrow"><svg class="ico-arrow" width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="2.5" y1="8" x2="12.5" y2="8"/><polyline points="8.5,4 12.5,8 8.5,12"/></svg></span></a>
+</nav>
+  <script src="../../assets/copy-button.js"></script>
+  <script src="../../assets/enhancements.js"></script>
+<script src="../../assets/shell.js"></script>
+</body>
+
+</html>

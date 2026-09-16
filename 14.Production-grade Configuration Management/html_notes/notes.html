@@ -1,0 +1,1314 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8"/>
+<meta name="referrer" content="no-referrer"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Gestione della configurazione / Capitolo 14 / Backend dai principi primi</title>
+  <meta name="description" content="Capitolo 14 di Backend dai primi principi: gestione della configurazione. Note sui principi primi, diagrammi ed esempi eseguibili in Go e Python.">
+  <meta name="theme-color" content="#f3ede2">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2032%2032'%3E%3Crect%20width='32'%20height='32'%20rx='7'%20fill='%23b8402e'/%3E%3Ctext%20x='16'%20y='23'%20font-family='Georgia,serif'%20font-size='19'%20font-weight='700'%20fill='%23f3ede2'%20text-anchor='middle'%3EB%3C/text%3E%3C/svg%3E">
+<style>
+  :root{
+  --bg: #f3ede2;
+  --surface: #ece3d4;
+  --surface2: #e6dcca;
+  --ink: #211e1a;
+  --ink2: #5b5347;
+  --ink3: #8d8475;
+  --red: #b8402e;
+  --red-bg: #f4ded6;
+  --red-border: #e3c4b8;
+  --sidebar: #ece3d4;
+  --sidebar-text: #211e1a;
+  --sidebar-muted: #5b5347;
+  --sidebar-accent: #b8402e;
+  --code-bg: #232019;
+  --code-text: #e9e2d3;
+  --code-comment: #7d7468;
+  --code-keyword: #e0896a;
+  --code-string: #a9c98a;
+  --code-number: #7fb0c9;
+  --code-type: #d8b66a;
+  --border: #d8cfbe;
+  --accent-gold: #b07d2b;
+  --accent-gold-bg: #f0e5c9;
+  --teal: #3f6f4e;
+  --teal-bg: #e0e9dd;
+  --chapter-num: #b8402e;
+  --divider: #d8cfbe;
+}
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family:"Spline Sans", system-ui, sans-serif;
+    font-size: 17px;
+    line-height: 1.7;
+    
+    min-height: 100vh;
+  }
+
+  /* -- CHAPTER HEADER -- */
+  .chapter-eyebrow {
+    font-family:"JetBrains Mono", ui-monospace, monospace;
+    font-size: 11px;
+    letter-spacing: 0.18em;
+    color: var(--chapter-num);
+    text-transform: uppercase;
+    margin-bottom: 0.75rem;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .chapter-eyebrow::after {
+    content: '';
+    flex: 1;
+    max-width:60px;
+    height: 1px;
+    background: var(--chapter-num);
+    opacity: 0.5;
+  }
+  .chapter-title {
+    font-family:"Fraunces", Georgia, serif;
+    font-size: 52px;
+    font-weight: 700;
+    line-height: 1.05;
+    letter-spacing: -0.02em;
+    color: var(--ink);
+    margin-bottom: 1rem;
+  }
+  .chapter-subtitle {
+    font-size: 19px;
+    font-weight: 300;
+    color: var(--ink3);
+    font-style: italic;
+    margin-bottom: 2.5rem;
+    max-width:560px;
+  }
+  .chapter-divider {
+    border: none;
+    border-top: 1px solid var(--divider);
+    margin: 2.5rem 0;
+  }
+
+  /* -- SECTION HEADINGS -- */
+  .section-num {
+    font-family:"JetBrains Mono", ui-monospace, monospace;
+    font-size: 10px;
+    color: var(--red);
+    letter-spacing: 0.12em;
+    display: inline-block;
+    background: var(--red-bg);
+    padding: 3px 8px;
+    border-radius: 3px;
+    margin-bottom: 10px;
+  }
+  h2 {
+    font-family:"Fraunces", Georgia, serif;
+    font-size: 30px;
+    font-weight: 700;
+    line-height: 1.2;
+    color: var(--ink);
+    margin: 3rem 0 0.75rem;
+  }
+  h2:first-of-type { margin-top: 0; }
+  h3 {
+    font-family:"Fraunces", Georgia, serif;
+    font-size: 21px;
+    font-weight: 700;
+    color: var(--ink);
+    margin: 2.25rem 0 0.6rem;
+  }
+  h4 {
+    font-family:"Spline Sans", system-ui, sans-serif;
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--ink2);
+    margin: 1.5rem 0 0.4rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  p { margin-bottom: 1rem; }
+  a { color: var(--red); text-decoration: none; border-bottom: 1px solid var(--red-border); }
+  a:hover { border-bottom-color: var(--red); }
+
+  /* -- CALLOUT BOXES -- */
+  .callout {
+    border-left: 3px solid var(--red);
+    background: var(--red-bg);
+    padding: 1rem 1.25rem;
+    margin: 1.5rem 0;
+    border-radius: 0 6px 6px 0;
+  }
+  .callout-label {
+    font-family:"JetBrains Mono", ui-monospace, monospace;
+    font-size: 10px;
+    letter-spacing: 0.15em;
+    color: var(--red);
+    text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+  .callout p { margin: 0; font-size: 15px; color: var(--ink2); }
+
+  .callout-gold {
+    border-left-color: var(--accent-gold);
+    background: var(--accent-gold-bg);
+  }
+  .callout-gold .callout-label { color: var(--accent-gold); }
+
+  .callout-teal {
+    border-left-color: var(--teal);
+    background: var(--teal-bg);
+  }
+  .callout-teal .callout-label { color: var(--teal); }
+
+  /* -- CODE BLOCKS -- */
+  pre {
+    background: var(--code-bg);
+    color: var(--code-text);
+    border-radius: 8px;
+    padding: 1.25rem 1.5rem;
+    overflow-x: auto;
+    font-family:"JetBrains Mono", ui-monospace, monospace;
+    font-size: 13.5px;
+    line-height: 1.65;
+    margin: 1.25rem 0;
+    border: 1px solid rgba(255,255,255,0.06);
+  }
+  code {
+    font-family:"JetBrains Mono", ui-monospace, monospace;
+    font-size: 13px;
+    background: var(--surface2);
+    color: var(--red);
+    padding: 2px 6px;
+    border-radius: 3px;
+  }
+  pre code { background: none; color: inherit; padding: 0; font-size: inherit; }
+
+  .kw  { color: var(--code-keyword); }
+  .str { color: var(--code-string); }
+  .num { color: var(--code-number); }
+  .ty  { color: var(--code-type); }
+  .cm  { color: var(--code-comment); font-style: italic; }
+  .fn  { color: #7fb0c9; }
+
+  /* -- CODE FILE HEADER -- */
+  .code-file {
+    background: #1a1813;
+    border-radius: 8px 8px 0 0;
+    padding: 8px 1.5rem;
+    font-family:"JetBrains Mono", ui-monospace, monospace;
+    font-size: 11px;
+    color: #7d7468;
+    border: 1px solid rgba(255,255,255,0.06);
+    border-bottom: none;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 1.25rem;
+  }
+  .code-file + pre { border-radius: 0 0 8px 8px; margin-top: 0; }
+  .code-dot { width:10px; height: 10px; border-radius: 50%; }
+  .dot-r { background: #d05a47; }
+  .dot-y { background: #cf9f4b; }
+  .dot-g { background: #5a9a5f; }
+
+  /* -- DEFINITION TERMS -- */
+  .def-term {
+    font-family:"Fraunces", Georgia, serif;
+    font-style: italic;
+    font-weight: 700;
+    font-size: 18px;
+    color: var(--ink);
+    border-bottom: 2px solid var(--red);
+    display: inline;
+  }
+
+  /* -- DIAGRAM SVG CONTAINERS -- */
+  .diagram-wrap {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 1.5rem;
+    margin: 1.75rem 0;
+    overflow: hidden;
+  }
+  .diagram-caption {
+    font-family:"JetBrains Mono", ui-monospace, monospace;
+    font-size: 11px;
+    color: var(--ink3);
+    margin-top: 0.75rem;
+    text-align: center;
+    letter-spacing: 0.05em;
+  }
+
+  /* -- COMPARISON TABLE -- */
+  .compare-table {
+    width:100%;
+    border-collapse: collapse;
+    font-size: 14px;
+    margin: 1.5rem 0;
+  }
+  .compare-table th {
+    background: var(--sidebar);
+    color: var(--sidebar-text);
+    font-family:"JetBrains Mono", ui-monospace, monospace;
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    padding: 10px 14px;
+    text-align: left;
+    font-weight: 500;
+  }
+  .compare-table td {
+    padding: 9px 14px;
+    border-bottom: 1px solid var(--border);
+    color: var(--ink2);
+    vertical-align: top;
+  }
+  .compare-table tr:nth-child(even) td { background: var(--surface); }
+  .compare-table tr:last-child td { border-bottom: none; }
+  .tag-fast { color: var(--teal); font-weight: 600; }
+  .tag-slow { color: var(--red); font-weight: 600; }
+
+  /* -- STRATEGY CARDS -- */
+  .strategy-grid {
+    display: grid;
+    grid-template-columns:1fr 1fr;
+    gap: 1rem;
+    margin: 1.5rem 0;
+  }
+  .strategy-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1.2rem 1.4rem;
+  }
+  .strategy-card-label {
+    font-family:"JetBrains Mono", ui-monospace, monospace;
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    color: var(--ink3);
+    text-transform: uppercase;
+    margin-bottom: 4px;
+  }
+  .strategy-card h4 {
+    font-family:"Fraunces", Georgia, serif;
+    font-size: 17px;
+    color: var(--ink);
+    margin: 0 0 8px;
+    text-transform: none;
+    letter-spacing: 0;
+    font-style: italic;
+  }
+  .strategy-card p { font-size: 14px; color: var(--ink2); margin: 0; }
+
+  /* -- EVICTION POLICY BADGES -- */
+  .policy-list { list-style: none; margin: 1rem 0 1.5rem; }
+  .policy-list li {
+    display: flex;
+    gap: 14px;
+    align-items: flex-start;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .policy-list li:last-child { border-bottom: none; }
+  .policy-badge {
+    font-family:"JetBrains Mono", ui-monospace, monospace;
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    padding: 4px 10px;
+    border-radius: 4px;
+    white-space: nowrap;
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+  .badge-none { background: var(--surface2); color: var(--ink3); }
+  .badge-lru  { background: var(--teal-bg); color: var(--teal); }
+  .badge-lfu  { background: var(--accent-gold-bg); color: var(--accent-gold); }
+  .badge-ttl  { background: var(--red-bg); color: var(--red); }
+
+  /* -- USE-CASE TILES -- */
+  .usecase-grid {
+    display: grid;
+    grid-template-columns:repeat(2, 1fr);
+    gap: 1rem;
+    margin: 1.5rem 0;
+  }
+  .usecase-tile {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-top: 3px solid var(--red);
+    border-radius: 0 0 8px 8px;
+    padding: 1rem 1.2rem;
+  }
+  .usecase-tile h4 {
+    font-family:"Fraunces", Georgia, serif;
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--ink);
+    margin: 0 0 6px;
+    text-transform: none;
+    letter-spacing: 0;
+  }
+  .usecase-tile p { font-size: 13.5px; color: var(--ink2); margin: 0; }
+
+  /* -- REFERENCE LINKS -- */
+  .ref-box {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1rem 1.25rem;
+    margin: 1rem 0;
+  }
+  .ref-box-label {
+    font-family:"JetBrains Mono", ui-monospace, monospace;
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    color: var(--ink3);
+    text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+  .ref-box a { font-size: 13.5px; display: block; margin-bottom: 4px; }
+
+  /* -- PULL QUOTE -- */
+  .pull-quote {
+    border-top: 2px solid var(--ink);
+    border-bottom: 2px solid var(--ink);
+    padding: 1.25rem 0;
+    margin: 2rem 0;
+    font-family:"Fraunces", Georgia, serif;
+    font-size: 22px;
+    font-style: italic;
+    font-weight: 400;
+    color: var(--ink);
+    line-height: 1.4;
+  }
+
+  /* -- INLINE TERM HIGHLIGHT -- */
+  .term { color: var(--red); font-weight: 600; font-style: italic; }
+
+  /* -- SVG -- */
+  svg text { font-family:"Spline Sans", system-ui, sans-serif; }
+
+  /* -- PRINT / SCROLL -- */
+  @media (max-width:900px) {
+    .chapter-title { font-size: 36px; }
+    .strategy-grid, .usecase-grid { grid-template-columns:1fr; }}
+
+  /* Smooth scroll */
+  html { scroll-behavior: smooth; }
+
+  /* Section spacing */
+  section { padding-top: 1rem; }</style>
+<style>
+.chapter-nav{position:fixed;bottom:0;left:0;right:0;z-index:9998;display:flex;align-items:center;justify-content:space-between;padding:14px clamp(16px,4vw,48px);background:rgba(243,237,226,.88);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border-top:1.5px solid #c7bca6;box-shadow:0 -8px 32px -16px rgba(40,30,20,.18);font-family:"JetBrains Mono", ui-monospace, monospace;}
+.nav-chapter-link{display:flex;align-items:center;gap:12px;text-decoration:none;color:#5b5347;padding:10px 18px;border-radius:10px;transition:all .2s ease;max-width:38%;}
+.nav-chapter-link:hover{background:rgba(184,64,46,.08);color:#b8402e;transform:translateY(-1px);}
+.nav-chapter-link.nav-next{text-align:right;flex-direction:row;}
+.nav-arrow{font-size:22px;color:#b8402e;font-weight:700;flex:none;}
+.nav-label{display:flex;flex-direction:column;gap:2px;font-size:13.5px;line-height:1.3;}
+.nav-small{font-size:10px;letter-spacing:.22em;text-transform:uppercase;color:#8d8475;font-weight:600;}
+.nav-indicator{font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:#b8402e;font-weight:700;text-decoration:none;padding:8px 16px;border:1.5px solid #c7bca6;border-radius:40px;background:rgba(255,255,255,.5);transition:all .2s;white-space:nowrap;}
+.nav-indicator:hover{background:#b8402e;color:#fff;border-color:#b8402e;}
+.nav-dot{display:inline-block;width:7px;height:7px;background:#b8402e;border-radius:50%;margin-right:4px;vertical-align:middle;}
+.nav-sep{color:#c7bca6;margin:0 2px;}
+.nav-disabled{visibility:hidden;pointer-events:none;}
+@media(max-width:700px){.nav-label{font-size:11.5px;}.nav-chapter-link{padding:8px 10px;max-width:38%;}.chapter-nav{padding:10px 12px;}.nav-small{font-size:9px;letter-spacing:.16em;}}
+@media(max-width:520px){.nav-label{display:none;}.nav-chapter-link{max-width:none;padding:8px 12px;}.nav-arrow{font-size:20px;}.nav-indicator{font-size:11px;padding:7px 13px;letter-spacing:.12em;}}
+body{padding-bottom:80px;}
+</style>
+  <link rel="stylesheet" href="../../assets/copy-button.css">
+  <link rel="stylesheet" href="../../assets/enhancements.css">
+  <link rel="stylesheet" href="../../assets/shell.css">
+  <link rel="stylesheet" href="../../assets/theme.css">
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;0,9..144,900;1,9..144,400;1,9..144,600&family=Spline+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="../../assets/theme.js"></script>
+</head>
+<body>
+<button class="bfp-toc-toggle" id="bfpTocToggle" aria-controls="bfpToc" aria-expanded="false"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><line x1="2" y1="4" x2="14" y2="4"/><line x1="2" y1="8" x2="14" y2="8"/><line x1="2" y1="12" x2="14" y2="12"/></svg>Contenuto</button>
+<div class="bfp-toc-scrim" id="bfpTocScrim"></div>
+<div class="bfp-shell">
+    <aside class="bfp-toc" id="bfpToc">
+      <div class="bfp-brand"><span class="bfp-brand-name">Configurazione</span><span class="bfp-brand-slash">/</span><span class="bfp-brand-lens">l'obiettivo del back-end</span></div>
+      <div class="bfp-brand-sub">Capitolo 14/Manuale da campo</div>
+      <div class="bfp-toc-rule"></div>
+      <nav class="bfp-toc-nav">
+        <a class="bfp-toc-link" href="#what-is-config"><span class="bfp-toc-num">01</span><span class="bfp-toc-text">Cos'è la gestione della configurazione?</span></a>
+        <a class="bfp-toc-link" href="#ecommerce"><span class="bfp-toc-num">02</span><span class="bfp-toc-text">Esempio di commercio elettronico</span></a>
+        <a class="bfp-toc-link" href="#distributed"><span class="bfp-toc-num">03</span><span class="bfp-toc-text">Sistemi distribuiti</span></a>
+        <a class="bfp-toc-link" href="#chaos"><span class="bfp-toc-num">04</span><span class="bfp-toc-text">Caos di configurazione</span></a>
+        <a class="bfp-toc-link" href="#types"><span class="bfp-toc-num">05</span><span class="bfp-toc-text">Tipi di configurazione</span></a>
+        <a class="bfp-toc-link" href="#sources"><span class="bfp-toc-num">06</span><span class="bfp-toc-text">Fonti/Archiviazione</span></a>
+        <a class="bfp-toc-link is-sub" href="#env-vars"><span class="bfp-toc-num"></span><span class="bfp-toc-text">Variabili d'ambiente</span></a>
+        <a class="bfp-toc-link is-sub" href="#files"><span class="bfp-toc-num"></span><span class="bfp-toc-text">File di configurazione</span></a>
+        <a class="bfp-toc-link is-sub" href="#kv-cloud"><span class="bfp-toc-num"></span><span class="bfp-toc-text">Negozi KV e cloud</span></a>
+        <a class="bfp-toc-link" href="#environments"><span class="bfp-toc-num">07</span><span class="bfp-toc-text">Configurazione per ambiente</span></a>
+        <a class="bfp-toc-link" href="#security"><span class="bfp-toc-num">08</span><span class="bfp-toc-text">Sicurezza</span></a>
+        <a class="bfp-toc-link" href="#code"><span class="bfp-toc-num">09</span><span class="bfp-toc-text">Esempi di codici</span></a>
+        <div class="bfp-toc-part">Riferimenti</div>
+        <a class="bfp-toc-link" href="#refs"><span class="bfp-toc-num">10</span><span class="bfp-toc-text">Documenti e collegamenti</span></a>
+      </nav>
+    </aside>
+    <main class="bfp-content">
+
+  <!-- CHAPTER HEADER -->
+  <div class="chapter-eyebrow">Capitolo 14 / Gestione della configurazione</div>
+  <h1 class="chapter-title">Configurazione<br/>Gestione</h1>
+  <p class="chapter-subtitle">Il DNA della tua applicazione, il modo in cui lo stesso codice si comporta in modo diverso nei diversi ambienti senza mai toccare la base del codice.</p>
+  <hr class="chapter-divider"/>
+
+  <!-- SECTION 1: WHAT IS CONFIG MANAGEMENT -->
+  <section id="what-is-config">
+    <div class="section-num">01/DEFINIZIONE</div>
+    <h2>Cos'è la gestione della configurazione?</h2>
+
+    <div class="pull-quote">
+      La gestione della configurazione è l'approccio sistematico per organizzare, archiviare, accedere e mantenere tutte le impostazioni della nostra app backend.
+    </div>
+
+    <p>Se seguiamo la definizione, la gestione della configurazione (o semplicemente &quot;gestione della configurazione&quot;) è il <strong>approccio sistematico per organizzare, archiviare, accedere o sostanzialmente mantenere tutte le impostazioni</strong> della nostra app di backend. La parola chiave c'è <em>impostazioni</em>.</p>
+
+    <p>Puoi pensare alla configurazione come a <span class="term">DNA della tua candidatura</span>. Decide come viene eseguito il codice in ambienti diversi. Lo stesso identico codice dell'applicazione può comportarsi in modi completamente diversi a seconda esclusivamente della sua configurazione, e questo è previsto dalla progettazione.</p>
+
+    <h3>Il malinteso comune</h3>
+    <p>Quando alla maggior parte delle persone si dice &quot;gestione della configurazione&quot;, la prima impressione, la prima idea che viene in mente, è quella di memorizzare cose come:</p>
+    <ul style="margin:0.5rem 0 1rem 1.5rem; color:var(--ink2)">
+      <li style="margin-bottom:6px">Password del database e URL di connessione sicura del tuo database</li>
+      <li style="margin-bottom:6px">Chiavi di autenticazione sicure, chiavi segrete per i tuoi segreti JWT, ecc.</li>
+      <li style="margin-bottom:6px">Chiavi API di servizi esterni, come il servizio di consegna della posta elettronica</li>
+    </ul>
+
+    <p>Queste sono le cose che ci vengono in mente ogni volta che parliamo di gestione della configurazione. Ma pensando così <strong>perde molto del suo scopo</strong>.</p>
+
+    <div class="callout callout-gold">
+      <div class="callout-label">L'analogia dell'auto</div>
+      <p>Pensare che la gestione della configurazione sia solo un segreto e che gli URL del DB siano come dire <em>&quot;Una macchina è solo questione di motore.&quot;</em> Il motore è sicuramente la parte più importante di un'auto, ma ti perdi comunque il 90% delle altre caratteristiche dell'auto. Allo stesso modo, la gestione della configurazione ha molte altre dimensioni.</p>
+    </div>
+
+    <h3>L'ambito completo della gestione della configurazione</h3>
+    <p>La gestione della configurazione copre in realtà un'ampia gamma di comportamenti dell'applicazione:</p>
+    <ul style="margin:0.5rem 0 1rem 1.5rem; color:var(--ink2)">
+      <li style="margin-bottom:8px"><strong>Come si avvia la tua applicazione</strong>: la sequenza di bootstrap e ciò di cui ha bisogno per iniziare l'esecuzione</li>
+      <li style="margin-bottom:8px"><strong>Come si connette ai servizi esterni</strong>: database, cache, code di messaggi, API di terze parti</li>
+      <li style="margin-bottom:8px"><strong>Come si comporta nei diversi ambienti</strong>: sviluppo vs messa in scena vs comportamento di produzione</li>
+      <li style="margin-bottom:8px"><strong>Cosa registra, se registra e dove registra</strong>: comportamento e destinazioni della registrazione</li>
+      <li style="margin-bottom:8px"><strong>Dove invia le metriche</strong>: metriche di performance e destinazioni delle metriche di business</li>
+      <li style="margin-bottom:8px"><strong>Quali funzionalità sono abilitate o disabilitate</strong>: per questa versione della distribuzione e per quali utenti</li>
+    </ul>
+
+    <p>C'è molto spazio per la gestione della configurazione. Non si limita solo all'URL del database o alle chiavi segrete, ma influisce su molti comportamenti importanti della tua applicazione backend. Proprio per questo è un argomento così importante.</p>
+  </section>
+
+  <hr class="chapter-divider"/>
+
+  <!-- SECTION 2: E-COMMERCE EXAMPLE -->
+  <section id="ecommerce">
+    <div class="section-num">02 / ESEMPIO LAVORATO</div>
+    <h2>L'esempio della piattaforma di e-commerce</h2>
+    <p>Diciamo che stai costruendo una piattaforma di e-commerce e stai lavorando sul backend. La tua configurazione potrebbe includere tutta una serie di cose, ognuna con caratteristiche molto diverse. Esaminiamo ogni categoria di cui un backend di questo tipo avrebbe bisogno.</p>
+
+    <div class="diagram-wrap">
+      <svg width="100%" viewBox="0 0 720 280" role="img">
+        <title>Categorie di configurazione del backend e-commerce</title>
+        <!-- center node -->
+        <rect x="280" y="120" width="160" height="48" rx="10" fill="#f4ded6" stroke="#b8402e" stroke-width="1"/>
+        <text x="360" y="140" text-anchor="middle" font-size="13" font-weight="600" fill="#211e1a">Commercio elettronico</text>
+        <text x="360" y="156" text-anchor="middle" font-size="11" fill="#b8402e">Configurazione back-end</text>
+        <!-- 6 surrounding nodes -->
+        <rect x="20" y="20" width="180" height="46" rx="8" fill="#e0e9dd" stroke="#3f6f4e" stroke-width="0.8"/>
+        <text x="110" y="40" text-anchor="middle" font-size="12" font-weight="600" fill="#211e1a">Connessione DB</text>
+        <text x="110" y="55" text-anchor="middle" font-size="10" fill="#3f6f4e">host, porta, utente, passaggio, timeout</text>
+
+        <rect x="270" y="20" width="180" height="46" rx="8" fill="#f0e5c9" stroke="#b07d2b" stroke-width="0.8"/>
+        <text x="360" y="40" text-anchor="middle" font-size="12" font-weight="600" fill="#211e1a">Chiavi API di pagamento</text>
+        <text x="360" y="55" text-anchor="middle" font-size="10" fill="#b07d2b">ad es. Tasti a strisce</text>
+
+        <rect x="520" y="20" width="180" height="46" rx="8" fill="#e0e9dd" stroke="#3f6f4e" stroke-width="0.8"/>
+        <text x="610" y="40" text-anchor="middle" font-size="12" font-weight="600" fill="#211e1a">Flag di funzionalità</text>
+        <text x="610" y="55" text-anchor="middle" font-size="10" fill="#3f6f4e">nuovo vs vecchio pagamento</text>
+
+        <rect x="20" y="222" width="180" height="46" rx="8" fill="#f0e5c9" stroke="#b07d2b" stroke-width="0.8"/>
+        <text x="110" y="242" text-anchor="middle" font-size="12" font-weight="600" fill="#211e1a">Ottimizzazione delle prestazioni</text>
+        <text x="110" y="257" text-anchor="middle" font-size="10" fill="#b07d2b">dimensione del pool di connessioni</text>
+
+        <rect x="270" y="222" width="180" height="46" rx="8" fill="#e0e9dd" stroke="#3f6f4e" stroke-width="0.8"/>
+        <text x="360" y="242" text-anchor="middle" font-size="12" font-weight="600" fill="#211e1a">Impostazioni di sicurezza</text>
+        <text x="360" y="257" text-anchor="middle" font-size="10" fill="#3f6f4e">timeout della sessione</text>
+
+        <rect x="520" y="222" width="180" height="46" rx="8" fill="#f0e5c9" stroke="#b07d2b" stroke-width="0.8"/>
+        <text x="610" y="242" text-anchor="middle" font-size="12" font-weight="600" fill="#211e1a">Regole aziendali</text>
+        <text x="610" y="257" text-anchor="middle" font-size="10" fill="#b07d2b">importo massimo dell'ordine</text>
+
+        <!-- connecting lines -->
+        <line x1="200" y1="48" x2="285" y2="120" stroke="#d8cfbe" stroke-width="1"/>
+        <line x1="360" y1="66" x2="360" y2="118" stroke="#d8cfbe" stroke-width="1"/>
+        <line x1="520" y1="48" x2="435" y2="120" stroke="#d8cfbe" stroke-width="1"/>
+        <line x1="200" y1="240" x2="285" y2="168" stroke="#d8cfbe" stroke-width="1"/>
+        <line x1="360" y1="222" x2="360" y2="170" stroke="#d8cfbe" stroke-width="1"/>
+        <line x1="520" y1="240" x2="435" y2="168" stroke="#d8cfbe" stroke-width="1"/>
+      </svg>
+      <div class="diagram-caption">Fig 1.1: Le sei categorie di configurazione di un backend e-commerce</div>
+    </div>
+
+    <p>Suddividendo ciascuna categoria in dettaglio:</p>
+    <ul style="margin:0.5rem 0 1rem 1.5rem; color:var(--ink2)">
+      <li style="margin-bottom:10px"><strong>Dettagli della connessione al database</strong>: dettagli timeout, host, porta, nome utente, password, ecc. Tutti i dettagli di connessione del tuo database.</li>
+      <li style="margin-bottom:10px"><strong>Chiavi API del processore di pagamento</strong>: se utilizzi Stripe, avrai qui le tue chiavi API Stripe.</li>
+      <li style="margin-bottom:10px"><strong>Flag di funzionalità</strong>: quali funzionalità sono abilitate per questa distribuzione e cosa rimane disabilitato. Ad esempio: hai creato un nuovo flusso di pagamento e un flag di funzionalità controlla se stai ancora utilizzando il vecchio flusso di pagamento o quello nuovo. Puoi anche <strong>abilitare in modo condizionale il nuovo flusso per alcuni utenti e il vecchio flusso per altri</strong>.</li>
+      <li style="margin-bottom:10px"><strong>Parametri di ottimizzazione delle prestazioni</strong>: come la dimensione del pool di connessioni (il pool utilizzato per le connessioni al database).</li>
+      <li style="margin-bottom:10px"><strong>Impostazioni di sicurezza</strong>: come i timeout della sessione, che siano 30 secondi, 60 secondi, ecc.</li>
+      <li style="margin-bottom:10px"><strong>Regole aziendali</strong>: per l'e-commerce, potrebbe contenere elementi come l'importo massimo dell'ordine consentito per un utente.</li>
+    </ul>
+
+    <h3>Perché queste configurazioni hanno caratteristiche diverse</h3>
+    <p>Ognuna di queste configurazioni ha caratteristiche fondamentalmente diverse e riconoscere queste differenze è ciò che guida ogni decisione su come archiviarle e proteggerle:</p>
+
+    <table class="compare-table">
+      <thead>
+        <tr><th>Caratteristico</th><th>Esempi</th><th>Implicazione</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Sensibile/segreto</td><td>Password DB, chiave Stripe, segreto JWT</td><td class="tag-slow">Non deve mai avere perdite, può causare gravi perdite/danni</td></tr>
+        <tr><td>Non segreto ma controllo del comportamento</td><td>Livello di registro, indicatori di funzionalità, dimensione del pool</td><td>Controlla il comportamento dell'app in fase di esecuzione</td></tr>
+        <tr><td>Cambiando spesso</td><td>Flag di funzionalità durante un'implementazione</td><td>Hai bisogno di un percorso di aggiornamento veloce e dinamico</td></tr>
+        <tr><td>Cambia raramente</td><td>Regole aziendali (mensile/trimestrale)</td><td>Può essere immagazzinato in modo più statico</td></tr>
+        <tr><td>Lo stesso in tutti gli ambienti</td><td>Alcune regole aziendali</td><td>Configurazione condivisa</td></tr>
+        <tr><td>Diverso per ambiente</td><td>Host DB, dimensione del pool, livello di log</td><td>Configurazione specifica dell'ambiente</td></tr>
+      </tbody>
+    </table>
+
+    <p>Alcuni sono sensibili e dovrebbero essere tenuti segreti, divulgarli potrebbe causare molti danni e perdite. Alcuni non sono segreti ma controllano il comportamento dell'applicazione mentre è in esecuzione. Alcuni cambiano frequentemente; altri cambiano una volta al mese o una volta al trimestre. Alcuni rimangono gli stessi durante lo sviluppo, la messa in scena e la produzione; altri differiscono a seconda dell'ambiente. Questa diversità è il motivo principale per cui la gestione della configurazione necessita di una vera strategia.</p>
+  </section>
+
+  <hr class="chapter-divider"/>
+
+  <!-- SECTION 3: DISTRIBUTED SYSTEMS -->
+  <section id="distributed">
+    <div class="section-num">03 / LA SFIDA</div>
+    <h2>La sfida dei sistemi distribuiti</h2>
+    <p>Oltre a tutta questa diversità c’è una grande sfida: <span class="term">sistemi distribuiti</span>. La maggior parte delle nostre applicazioni moderne, tutti i nostri backend moderni, non funzionano più in modo isolato. La maggior parte di essi fa ora parte di un sistema distribuito complesso.</p>
+
+    <p>Un sistema distribuito è costituito da più parti mobili:</p>
+    <ul style="margin:0.5rem 0 1rem 1.5rem; color:var(--ink2)">
+      <li style="margin-bottom:6px">Servizi multipli</li>
+      <li style="margin-bottom:6px">Database</li>
+      <li style="margin-bottom:6px">Cache (come Redis)</li>
+      <li style="margin-bottom:6px">Code di messaggi</li>
+      <li style="margin-bottom:6px">Integrazioni di terze parti</li>
+      <li style="margin-bottom:6px">Fornitori di autenticazione</li>
+      <li style="margin-bottom:6px">Servizi di posta elettronica</li>
+      <li style="margin-bottom:6px">...e molto altro ancora</li>
+    </ul>
+
+    <p>Tutti questi diversi punti di integrazione, in cui colleghi un servizio separato al tuo backend principale, <strong>richiedono tutti la configurazione</strong>. Il tuo backend ovviamente deve sapere come connettersi a questi servizi. Ma oltre a ciò, deve anche sapere:</p>
+    <ul style="margin:0.5rem 0 1rem 1.5rem; color:var(--ink2)">
+      <li style="margin-bottom:8px"><strong>Come gestire i fallimenti</strong>: cosa succede quando un servizio è inattivo o lento</li>
+      <li style="margin-bottom:8px"><strong>Come ottimizzare le prestazioni</strong>: a seconda dell'ambiente e delle impostazioni</li>
+      <li style="margin-bottom:8px"><strong>Come mantenere la sicurezza</strong>: a seconda dell'ambiente e delle origini di configurazione</li>
+    </ul>
+
+    <p>Tutto ciò dipende da ambienti diversi, impostazioni diverse e configurazioni diverse, che possiamo controllare da diverse fonti. Questo è il motivo per cui, poiché la maggior parte dei backend moderni viene eseguita su sistemi distribuiti, la gestione della configurazione diventa una parte così importante della tua applicazione.</p>
+
+    <div class="callout">
+      <div class="callout-label">Perché la posta in gioco per la configurazione del backend è così alta</div>
+      <p>La posta in gioco è più alta per gli ingegneri backend perché gestiscono il <strong>logica e dati aziendali principali</strong>: praticamente la parte più importante di qualsiasi piattaforma o impresa.<br/><br/>
+      A <strong>frontend mal configurato</strong> potrebbe mostrare una funzione sbagliata, un dialogo sbagliato che non dovrebbe mostrare o reindirizzare a un percorso sbagliato, fastidioso ma recuperabile.<br/><br/>
+      A <strong>backend mal configurato</strong> può esporre i dati dei clienti, elaborare i pagamenti in modo errato o bloccare l'intera piattaforma se una parte importante è interessata. Il raggio dell'esplosione è enorme.</p>
+    </div>
+
+    <p>Inoltre, i sistemi backend vengono eseguiti in ambienti diversi, diversi provider cloud, server locali, contenitori, funzioni serverless, funzioni edge e tutti questi hanno i propri requisiti per diverse configurazioni. Non esiste un unico obiettivo uniforme, il che rende essenziale un approccio sistematico.</p>
+  </section>
+
+  <hr class="chapter-divider"/>
+
+  <!-- SECTION 4: CONFIG CHAOS -->
+  <section id="chaos">
+    <div class="section-num">04 / L'ANTI-PATTERN</div>
+    <h2>Caos di configurazione</h2>
+    <p>Se non hai un approccio sistematico, se non hai una pipeline dedicata, una strategia dedicata per gestire la tua configurazione, ti ritroverai con ciò che chiamiamo <span class="term">caos di configurazione</span>.</p>
+
+    <p>Il caos della configurazione significa che invece di controllare le configurazioni da un punto centralizzato, si crea un pasticcio. Ecco come appare:</p>
+
+    <div class="usecase-grid">
+      <div class="usecase-tile">
+        <h4>Valori sparsi codificati</h4>
+        <p>I valori di configurazione sono codificati e sparsi nella codebase invece di vivere in un unico luogo centralizzato.</p>
+      </div>
+      <div class="usecase-tile">
+        <h4>Comportamento incoerente</h4>
+        <p>La tua applicazione si comporta in modo incoerente nei diversi ambienti perché le configurazioni non sono gestite in modo uniforme.</p>
+      </div>
+      <div class="usecase-tile">
+        <h4>Vulnerabilità della sicurezza</h4>
+        <p>I segreti esposti penetrano nella codebase, nel controllo della versione e nei log, creando vere e proprie falle di sicurezza.</p>
+      </div>
+      <div class="usecase-tile">
+        <h4>Incubo di debug</h4>
+        <p>Non è possibile riprodurre i problemi perché non esiste un modo centralizzato per gestire la configurazione. Non sai quale configurazione ha causato quale interruzione della produzione.</p>
+      </div>
+    </div>
+
+    <p>Quest'ultimo punto è il killer: il debug della tua applicazione diventa un incubo perché non puoi riprodurre i problemi. Non sai veramente cosa sia successo esattamente, quale particolare configurazione abbia causato un particolare problema o quale particolare configurazione abbia causato un'interruzione della produzione. La gestione centralizzata della configurazione è ciò che ti offre questa tracciabilità.</p>
+  </section>
+
+  <hr class="chapter-divider"/>
+
+  <!-- SECTION 5: TYPES OF CONFIG -->
+  <section id="types">
+    <div class="section-num">05 / TIPI</div>
+    <h2>Tipi di configurazione</h2>
+    <p>Non tutte le configurazioni sono uguali. Comprendere i diversi tipi di dati di configurazione è molto importante per scegliere quello giusto <strong>meccanismo di archiviazione, misure di sicurezza e modelli di accesso</strong>: chi può accedere a cosa e in quali ambienti una particolare configurazione dovrebbe essere accessibile. Esaminiamo ogni tipo.</p>
+
+    <!-- App settings -->
+    <h3>5.1: Impostazioni dell'applicazione</h3>
+    <p>Il tipo di configurazione più comune che vedrai nella maggior parte delle app di backend. Ciò include:</p>
+    <ul style="margin:0.5rem 0 1rem 1.5rem; color:var(--ink2)">
+      <li style="margin-bottom:8px"><strong>Livello di registro</strong>: In fase di sviluppo impostiamo il livello di registro su <code>debug</code> in questo modo possiamo vedere e distinguere tra diversi log durante la creazione dell'app localmente. In produzione lo cambiamo in <code>info</code> in questo modo non confondiamo i nostri preziosi registri di produzione.</li>
+      <li style="margin-bottom:8px"><strong>Porto</strong>: su quale porta viene eseguito il backend. Di solito <code>8080</code> localmente; in produzione (VPS o Kubernetes) potresti avere porte diverse.</li>
+      <li style="margin-bottom:8px"><strong>Dimensioni del pool di connessioni</strong>: la dimensione massima del pool per le connessioni al database. Le app back-end utilizzano il pool di connessioni per ottimizzare le connessioni DB.</li>
+      <li style="margin-bottom:8px"><strong>Valori di timeout</strong>: quanto tempo il server deve attendere il completamento di una richiesta.</li>
+    </ul>
+
+    <div class="callout callout-gold">
+      <div class="callout-label">Esempio di timeout / Il caso dell'immagine AI</div>
+      <p>Supponiamo che tu imposti un timeout del server di 60 secondi e avvii una richiesta che genera un'immagine AI (restituita al frontend in base64). Se la generazione di immagini AI richiede in media circa 80 secondi, ma il timeout del server è di 60 secondi, la tua richiesta riceve <strong>caduto</strong>: otterrai un <code>504 Gateway Timeout</code> stato. La configurazione del timeout determina direttamente se una richiesta lenta legittima ha esito positivo o negativo.</p>
+    </div>
+
+    <!-- Database config -->
+    <h3>5.2: Configurazione del database</h3>
+    <p>La configurazione del database include tutti i dettagli di cui la tua applicazione ha bisogno per connettersi al tuo database:</p>
+    <ul style="margin:0.5rem 0 1rem 1.5rem; color:var(--ink2)">
+      <li style="margin-bottom:6px"><strong>Ospite</strong>: dove è in esecuzione il tuo database</li>
+      <li style="margin-bottom:6px"><strong>Porto</strong>: la porta del database</li>
+      <li style="margin-bottom:6px"><strong>Nome utente</strong>: utente del database</li>
+      <li style="margin-bottom:6px"><strong>Parola d'ordine</strong>: password del database (sensibile!)</li>
+      <li style="margin-bottom:6px"><strong>Nome della banca dati</strong>: il DB specifico a cui connettersi</li>
+    </ul>
+    <p>Tutti questi parametri combinati ti consentono di costruire a <strong>URL di connessione</strong>, che l'applicazione utilizza in fase di esecuzione per connettersi al database. Potrebbe anche avere altri parametri, come i timeout delle query (per quanto tempo deve essere eseguita una query sul database prima che scada).</p>
+
+    <!-- External services -->
+    <h3>5.3: Servizi Esterni</h3>
+    <p>I servizi esterni sono disponibili in molti tipi e ognuno ha le proprie esigenze di configurazione, solitamente una sorta di chiave API:</p>
+    <ul style="margin:0.5rem 0 1rem 1.5rem; color:var(--ink2)">
+      <li style="margin-bottom:6px"><strong>Provider di posta elettronica</strong>: Mailchimp, Resend, ecc. -&gt; avrai bisogno di una chiave API per avviare il client e inviare e-mail</li>
+      <li style="margin-bottom:6px"><strong>Processori di pagamento</strong>: Stripe -&gt; una chiave API Stripe</li>
+      <li style="margin-bottom:6px"><strong>Fornitori di autenticazione</strong>: Impiegato -&gt; una chiave API Impiegato</li>
+    </ul>
+    <p>Non importa quale provider utilizzi, molto probabilmente avrai qualche tipo di chiave API nella tua configurazione a cui devi soddisfare.</p>
+
+    <!-- Feature flags -->
+    <h3>5.4: Flag di funzionalità</h3>
+    <p>Esistono flag di funzionalità in modo che tu possa farlo <strong>abilitare o disabilitare dinamicamente particolari funzionalità</strong> della tua applicazione senza modificare il codice.</p>
+
+    <div class="diagram-wrap">
+      <svg width="100%" viewBox="0 0 720 180" role="img">
+        <title>Test A/B dei flag di funzionalità per regione</title>
+        <defs>
+          <marker id="ff" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </marker>
+        </defs>
+        <!-- flag -->
+        <rect x="270" y="20" width="180" height="50" rx="8" fill="#f0e5c9" stroke="#b07d2b" stroke-width="1"/>
+        <text x="360" y="40" text-anchor="middle" font-size="12" font-weight="600" fill="#211e1a">Bandiera delle funzionalità</text>
+        <text x="360" y="56" text-anchor="middle" font-size="10" fill="#b07d2b">new_checkout_enabled</text>
+        <!-- US users -->
+        <rect x="60" y="120" width="220" height="46" rx="8" fill="#e0e9dd" stroke="#3f6f4e" stroke-width="0.8"/>
+        <text x="170" y="140" text-anchor="middle" font-size="12" font-weight="600" fill="#211e1a">Utenti statunitensi -&gt; NUOVO pagamento</text>
+        <text x="170" y="155" text-anchor="middle" font-size="10" fill="#3f6f4e">bandiera = vero</text>
+        <!-- India users -->
+        <rect x="440" y="120" width="220" height="46" rx="8" fill="#f4ded6" stroke="#b8402e" stroke-width="0.8"/>
+        <text x="550" y="140" text-anchor="middle" font-size="12" font-weight="600" fill="#211e1a">Utenti indiani -&gt; VECCHIO pagamento</text>
+        <text x="550" y="155" text-anchor="middle" font-size="10" fill="#b8402e">bandiera = falso</text>
+        <!-- arrows -->
+        <line x1="320" y1="70" x2="190" y2="118" stroke="#3f6f4e" stroke-width="1.2" marker-end="url(#ff)" stroke-dasharray="4 3"/>
+        <line x1="400" y1="70" x2="530" y2="118" stroke="#b8402e" stroke-width="1.2" marker-end="url(#ff)" stroke-dasharray="4 3"/>
+        <text x="360" y="100" text-anchor="middle" font-size="10" fill="#8d8475" font-style="italic">implementazione condizionale per località</text>
+      </svg>
+      <div class="diagram-caption">Fig 2.1: Flag di funzionalità che abilita il nuovo pagamento per gli utenti statunitensi mentre l'India mantiene il vecchio flusso (test A/B)</div>
+    </div>
+
+    <p>L'esempio classico: hai creato un nuovo flusso di pagamento (utilizzando un'API diversa) e non vuoi distribuirlo a tutti gli utenti contemporaneamente. Vuoi fare <strong>Test A/B</strong>: abilita la nuova funzionalità solo per un particolare segmento di utenti a seconda della loro posizione. Ad esempio, abilita il nuovo pagamento per gli utenti degli Stati Uniti, ma mantieni il vecchio flusso per gli utenti dell'India. I flag di funzionalità rendono possibile questa abilitazione/disabilitazione dinamica e richiedono anche la gestione della configurazione.</p>
+
+    <!-- Other types -->
+    <h3>5.5: Altri tipi di configurazione</h3>
+    <p>Oltre alle quattro categorie principali, ce ne sono molte altre:</p>
+    <ul style="margin:0.5rem 0 1rem 1.5rem; color:var(--ink2)">
+      <li style="margin-bottom:8px"><strong>Configurazione infra</strong>: tutte le configurazioni relative a DevOps.</li>
+      <li style="margin-bottom:8px"><strong>Configurazione sicurezza</strong>: il segreto JWT, il segreto della sessione e tutto ciò che riguarda la sicurezza che influisce sulla tua applicazione.</li>
+      <li style="margin-bottom:8px"><strong>Ottimizzazione delle prestazioni</strong>: se il tuo backend è creato con Go (Golang), puoi impostare variabili di ambiente come il numero massimo di CPU (<code>GOMAXPROCS</code>), ecc.</li>
+      <li style="margin-bottom:8px"><strong>Regole aziendali</strong>: diverse regole relative alla logica che si desidera applicare a livello di applicazione, ma centralizzate nella configurazione anziché codificate.</li>
+    </ul>
+  </section>
+
+  <hr class="chapter-divider"/>
+
+  <!-- SECTION 6: SOURCES / STORAGE -->
+  <section id="sources">
+    <div class="section-num">06 / STOCCAGGIO</div>
+    <h2>Sorgenti di configurazione (archiviazione)</h2>
+    <p>Con tutte queste diverse esigenze di configurazione, dobbiamo anche pensare a <strong>dove riporre</strong> le configurazioni. Il luogo in cui memorizzi le tue configurazioni dipende da molti parametri, sicurezza, velocità e dal tuo ambiente. Diamo un'occhiata ai principali meccanismi di stoccaggio.</p>
+
+    <!-- Env vars -->
+    <h3 id="env-vars">6.1: Variabili d'ambiente</h3>
+    <p>Il tipo più comune di archiviazione della configurazione visto dalla maggior parte delle persone. Se hai già lavorato con i backend, hai incontrato <code>.env</code> file. Questi sono più comuni tra le app Node.js, ma sono supportati anche in Python, Go e in qualsiasi linguaggio in cui crei backend.</p>
+
+    <h4>Come funziona a livello locale</h4>
+    <p>Negli ambienti locali, hai un file chiamato <code>.env</code>. Una biblioteca molto famosa chiamata <strong>dotenv</strong> prende tutte le variabili di ambiente da <code>.env</code> file e li carica nell'ambiente del tuo sistema operativo.</p>
+
+    <div class="callout">
+      <div class="callout-label">Distinzione importante</div>
+      <p>Le variabili d'ambiente sono una funzionalità fornita da your <strong>sistema operativo</strong>: questo non è qualcosa che costruisci. Librerie come dotenv prendono semplicemente i valori dai file e li caricano automaticamente nel tuo ambiente, invece di farlo manualmente con <code>export</code> comandi.</p>
+    </div>
+
+    <h4>Come funziona nella distribuzione</h4>
+    <p>Se non sei locale, supponiamo che tu stia distribuendo in un ambiente containerizzato utilizzando Kubernetes, tali tecnologie supportano anche il caricamento di variabili di ambiente durante la distribuzione dell'applicazione. Ecco il tipico flusso di lavoro di distribuzione cloud:</p>
+
+    <div class="diagram-wrap">
+      <svg width="100%" viewBox="0 0 720 175" role="img">
+        <title>Flusso di lavoro di caricamento della variabile ambiente di distribuzione cloud</title>
+        <defs>
+          <marker id="ev" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </marker>
+        </defs>
+        <rect x="15" y="65" width="120" height="50" rx="8" fill="#f4ded6" stroke="#b8402e" stroke-width="0.8"/>
+        <text x="75" y="86" text-anchor="middle" font-size="11" font-weight="600" fill="#211e1a">Distribuzione</text>
+        <text x="75" y="101" text-anchor="middle" font-size="10" fill="#b8402e">trigger</text>
+        <line x1="137" y1="90" x2="168" y2="90" stroke="#8d8475" stroke-width="1.2" marker-end="url(#ev)"/>
+        <rect x="170" y="50" width="170" height="80" rx="8" fill="#f0e5c9" stroke="#b07d2b" stroke-width="0.8"/>
+        <text x="255" y="74" text-anchor="middle" font-size="11" font-weight="600" fill="#211e1a">Recupera i segreti da</text>
+        <text x="255" y="90" text-anchor="middle" font-size="10" fill="#b07d2b">Vault / Negozio parametri</text>
+        <text x="255" y="104" text-anchor="middle" font-size="10" fill="#b07d2b">Mons. segreto Azure/GCP</text>
+        <text x="255" y="120" text-anchor="middle" font-size="9" fill="#8d8475">in una fase particolare</text>
+        <line x1="342" y1="90" x2="373" y2="90" stroke="#8d8475" stroke-width="1.2" marker-end="url(#ev)"/>
+        <rect x="375" y="65" width="155" height="50" rx="8" fill="#e0e9dd" stroke="#3f6f4e" stroke-width="0.8"/>
+        <text x="452" y="86" text-anchor="middle" font-size="11" font-weight="600" fill="#211e1a">Carica nell'env</text>
+        <text x="452" y="101" text-anchor="middle" font-size="10" fill="#3f6f4e">Ambiente del sistema operativo</text>
+        <line x1="532" y1="90" x2="563" y2="90" stroke="#8d8475" stroke-width="1.2" marker-end="url(#ev)"/>
+        <rect x="565" y="65" width="140" height="50" rx="8" fill="#e0e9dd" stroke="#3f6f4e" stroke-width="0.8"/>
+        <text x="635" y="86" text-anchor="middle" font-size="11" font-weight="600" fill="#211e1a">L'applicazione si avvia</text>
+        <text x="635" y="101" text-anchor="middle" font-size="10" fill="#3f6f4e">legge env, corre</text>
+        <text x="360" y="25" text-anchor="middle" font-size="11" fill="#8d8475" font-style="italic">Distribuzione -&gt; recupero dal gestore segreto -&gt; caricamento nell'ambiente -&gt; avvio dell'app</text>
+      </svg>
+      <div class="diagram-caption">Fig 3.1: Flusso di lavoro env var di distribuzione cloud: i trigger di distribuzione vengono recuperati da un servizio segreto, vengono caricati nell'ambiente, l'app viene letta all'avvio</div>
+    </div>
+
+    <p>La distribuzione si attiva; in una fase particolare recupera tutte le variabili di ambiente da un servizio, Vault (HashiCorp), Parameter Store, Azure o Google Secret Manager (qualsiasi provider cloud che offre la gestione dei segreti) e le carica nel tuo ambiente. Quindi, quando l'applicazione si avvia, legge le variabili di ambiente e le funzioni di conseguenza. Questo è il meccanismo di archiviazione più comune per le configurazioni.</p>
+
+    <!-- Files -->
+    <h3 id="files">6.2: File di configurazione</h3>
+    <p>Il secondo tipo di archiviazione sono i file, disponibili in diversi formati:</p>
+
+    <table class="compare-table">
+      <thead>
+        <tr><th>Formato</th><th>Supporto per i commenti?</th><th>Note</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>JSON</td><td class="tag-slow">No</td><td>Il principale svantaggio è che non è possibile aggiungere commenti, quindi è più difficile condividere le conoscenze in un team</td></tr>
+        <tr><td>YAML</td><td class="tag-fast">Sì</td><td>Più famoso per le configurazioni in questi giorni; supporta i commenti per la condivisione delle conoscenze del team</td></tr>
+        <tr><td>TOML</td><td class="tag-fast">Sì</td><td>Uno standard più recente, ampiamente utilizzato anche per la gestione delle configurazioni</td></tr>
+      </tbody>
+    </table>
+
+    <p>Uno dei principali svantaggi di JSON è questo <strong>non è possibile aggiungere commenti</strong>: JSON non supporta i commenti. Ecco perché la maggior parte delle persone usa YAML: puoi aggiungere la tua configurazione <em>e</em> aggiungi commenti in modo che sia più semplice per il tuo team condividere le conoscenze. TOML è uno standard più recente e anche molto popolare.</p>
+
+    <div class="callout callout-gold">
+      <div class="callout-label">Esempi del mondo reale</div>
+      <p><strong>Authelia</strong> (un provider di autenticazione scritto in Go) utilizza a <code>configuration.yaml</code> file contenente impostazioni del server, livello di registro (debug), archiviazione, dettagli di notifica, dettagli di identità, regolamenti, impostazioni di sessione, tutto in un unico file YAML.<br/><br/>
+      <strong>Risposta dell'Apache</strong> (incubatore, open source) utilizza anche <code>config.yaml</code> in molti luoghi, impostazioni dell'app come la porta su cui viene eseguito il server, database (SQLite per ambienti locali) e configurazione dell'interfaccia utente di Swagger. L'archiviazione delle configurazioni in YAML è molto comune nei repository open source.</p>
+    </div>
+
+    <!-- KV stores and cloud -->
+    <h3 id="kv-cloud">6.3: Negozi con valori-chiave e fornitori di servizi cloud</h3>
+
+    <h4>Negozi di valori-chiave</h4>
+    <p>Oltre ai semplici valori env, esistono strumenti cloud-native dedicati come <strong>Console</strong> e <strong>ecc</strong>. A seconda del caso d'uso, puoi utilizzarne uno qualsiasi. I negozi di valori-chiave sono carini <strong>leggero e semplice</strong> da utilizzare rispetto a strutture dati gerarchiche più complicate per la gestione della configurazione. Si comportano principalmente come variabili d'ambiente.</p>
+
+    <h4>Gestori di segreti cloud dedicati</h4>
+    <p>Qui i principali attori sono:</p>
+    <ul style="margin:0.5rem 0 1rem 1.5rem; color:var(--ink2)">
+      <li style="margin-bottom:6px"><strong>HashiCorp Vault</strong></li>
+      <li style="margin-bottom:6px"><strong>Archivio parametri AWS</strong></li>
+      <li style="margin-bottom:6px"><strong>Insieme di credenziali delle chiavi di Azure</strong></li>
+      <li style="margin-bottom:6px"><strong>Gestore segreto di Google</strong></li>
+    </ul>
+
+    <p>Si tratta di servizi dedicati per la gestione della configurazione e dei segreti utilizzati dalla maggior parte delle aziende, perché le distribuzioni odierne sono distribuite, Kubernetes, scalabilità automatica, a volte più provider cloud contemporaneamente per esigenze di scalabilità. Avere tutte le configurazioni centralizzate in uno strumento come HashiCorp Vault, che supporta già tutti questi diversi ambienti, con documenti e integrazioni dedicate, rende l'integrazione il più semplice possibile. L'utilizzo di un provider esterno ha molto senso se si esegue un traffico di utenti intenso in produzione.</p>
+
+    <h4>Strategie ibride</h4>
+    <p>La maggior parte delle volte, i team utilizzano effettivamente <strong>strategie ibride</strong>. Hai una fase di caricamento in cui costruisci le impostazioni dell'applicazione runtime recuperando le configurazioni da più posizioni, ciascuna con una priorità:</p>
+
+    <div class="diagram-wrap">
+      <svg width="100%" viewBox="0 0 720 165" role="img">
+        <title>Caricamento della configurazione ibrida con priorità</title>
+        <defs>
+          <marker id="hy" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </marker>
+        </defs>
+        <!-- sources -->
+        <rect x="20" y="20" width="190" height="40" rx="8" fill="#f0e5c9" stroke="#b07d2b" stroke-width="0.8"/>
+        <text x="115" y="38" text-anchor="middle" font-size="11" font-weight="600" fill="#211e1a">1. Archivio parametri AWS</text>
+        <text x="115" y="52" text-anchor="middle" font-size="9" fill="#b07d2b">massima priorità</text>
+        <rect x="20" y="68" width="190" height="40" rx="8" fill="#e0e9dd" stroke="#3f6f4e" stroke-width="0.8"/>
+        <text x="115" y="86" text-anchor="middle" font-size="11" font-weight="600" fill="#211e1a">2. file config.yaml</text>
+        <text x="115" y="100" text-anchor="middle" font-size="9" fill="#3f6f4e">priorità media</text>
+        <rect x="20" y="116" width="190" height="40" rx="8" fill="#f4ded6" stroke="#b8402e" stroke-width="0.8"/>
+        <text x="115" y="134" text-anchor="middle" font-size="11" font-weight="600" fill="#211e1a">3. Variabili d'ambiente</text>
+        <text x="115" y="148" text-anchor="middle" font-size="9" fill="#b8402e">fallback/predefiniti</text>
+        <!-- merge -->
+        <line x1="210" y1="40" x2="320" y2="78" stroke="#8d8475" stroke-width="1" marker-end="url(#hy)"/>
+        <line x1="210" y1="88" x2="320" y2="85" stroke="#8d8475" stroke-width="1" marker-end="url(#hy)"/>
+        <line x1="210" y1="136" x2="320" y2="92" stroke="#8d8475" stroke-width="1" marker-end="url(#hy)"/>
+        <rect x="322" y="55" width="170" height="60" rx="8" fill="#ece3d4" stroke="#5b5347" stroke-width="0.8"/>
+        <text x="407" y="80" text-anchor="middle" font-size="11" font-weight="600" fill="#211e1a">Fase di caricamento</text>
+        <text x="407" y="96" text-anchor="middle" font-size="10" fill="#5b5347">unire per priorità</text>
+        <line x1="492" y1="85" x2="528" y2="85" stroke="#8d8475" stroke-width="1.2" marker-end="url(#hy)"/>
+        <rect x="530" y="55" width="170" height="60" rx="8" fill="#e0e9dd" stroke="#3f6f4e" stroke-width="0.8"/>
+        <text x="615" y="80" text-anchor="middle" font-size="11" font-weight="600" fill="#211e1a">Impostazioni di esecuzione</text>
+        <text x="615" y="96" text-anchor="middle" font-size="10" fill="#3f6f4e">singolo oggetto di configurazione</text>
+      </svg>
+      <div class="diagram-caption">Fig 3.2: Caricamento della configurazione ibrida: più origini unite per priorità in un unico oggetto delle impostazioni di runtime</div>
+    </div>
+
+    <p>Ad esempio, nella prima priorità potresti recuperare da AWS Parametri Store, quindi da a <code>config.yaml</code>, quindi dalle variabili di ambiente. Decidi tu quale fonte ha la priorità più alta e, a seconda dell'ambiente, carichi tali configurazioni in modo condizionale. Ciò ti offre flessibilità: segreti da un vault, impostazioni strutturate da un file e sostituzioni da env vars, tutti uniti in un'unica configurazione di runtime.</p>
+  </section>
+
+  <hr class="chapter-divider"/>
+
+  <!-- SECTION 7: PER-ENVIRONMENT CONFIG -->
+  <section id="environments">
+    <div class="section-num">07 / AMBIENTI</div>
+    <h2>Perché la configurazione varia in base all'ambiente</h2>
+    <p>Una domanda naturale è: perché abbiamo configurazioni diverse a seconda dell'ambiente in cui operiamo? La risposta è semplice, <strong>ogni ambiente ha una serie di priorità di cui gli altri ambienti non hanno bisogno o non dovrebbero avere</strong>.</p>
+
+    <div class="diagram-wrap">
+      <svg width="100%" viewBox="0 0 720 130" role="img">
+        <title>Quattro ambienti e le loro priorità</title>
+        <rect x="15" y="35" width="165" height="60" rx="8" fill="#e0e9dd" stroke="#3f6f4e" stroke-width="0.8"/>
+        <text x="97" y="58" text-anchor="middle" font-size="12" font-weight="600" fill="#211e1a">Sviluppo</text>
+        <text x="97" y="74" text-anchor="middle" font-size="10" fill="#3f6f4e">produttività degli sviluppatori</text>
+        <text x="97" y="88" text-anchor="middle" font-size="10" fill="#3f6f4e">+debug</text>
+
+        <rect x="190" y="35" width="165" height="60" rx="8" fill="#f0e5c9" stroke="#b07d2b" stroke-width="0.8"/>
+        <text x="272" y="58" text-anchor="middle" font-size="12" font-weight="600" fill="#211e1a">Prova</text>
+        <text x="272" y="74" text-anchor="middle" font-size="10" fill="#b07d2b">convalida automatizzata</text>
+        <text x="272" y="88" text-anchor="middle" font-size="10" fill="#b07d2b">+ garanzia di qualità</text>
+
+        <rect x="365" y="35" width="165" height="60" rx="8" fill="#f0e5c9" stroke="#b07d2b" stroke-width="0.8"/>
+        <text x="447" y="58" text-anchor="middle" font-size="12" font-weight="600" fill="#211e1a">Messa in scena</text>
+        <text x="447" y="74" text-anchor="middle" font-size="10" fill="#b07d2b">produzione di specchi</text>
+        <text x="447" y="88" text-anchor="middle" font-size="10" fill="#b07d2b">individuare i problemi in anticipo</text>
+
+        <rect x="540" y="35" width="165" height="60" rx="8" fill="#f4ded6" stroke="#b8402e" stroke-width="0.8"/>
+        <text x="622" y="58" text-anchor="middle" font-size="12" font-weight="600" fill="#211e1a">Produzione</text>
+        <text x="622" y="74" text-anchor="middle" font-size="10" fill="#b8402e">affidabilità, sicurezza</text>
+        <text x="622" y="88" text-anchor="middle" font-size="10" fill="#b8402e">+ prestazioni</text>
+      </svg>
+      <div class="diagram-caption">Fig 4.1: I quattro ambienti e le loro distinte priorità</div>
+    </div>
+
+    <p>Esplorando la priorità di ciascun ambiente:</p>
+    <ul style="margin:0.5rem 0 1rem 1.5rem; color:var(--ink2)">
+      <li style="margin-bottom:8px"><strong>Sviluppo (locale)</strong>: In esecuzione su localhost. La priorità numero uno è <strong>produttività degli sviluppatori e funzionalità di debug</strong>: così puoi lavorare più velocemente e individuare i problemi più velocemente.</li>
+      <li style="margin-bottom:8px"><strong>Prova</strong>: attivi un'azione GitHub che prepara un ambiente di test per eseguire test di integrazione, test unitari, ecc. La priorità è <strong>convalida automatizzata e garanzia di qualità</strong>.</li>
+      <li style="margin-bottom:8px"><strong>Messa in scena</strong>: una versione ospitata dell'applicazione che funziona nel modo più simile possibile alla produzione, in modo da avere un'idea chiara di come si comporterà la produzione e poter correggere/eseguire il debug dei problemi di conseguenza. La priorità è <strong>produzione speculare</strong>.</li>
+      <li style="margin-bottom:8px"><strong>Produzione</strong>: La cosa vera. La priorità è <strong>affidabilità, sicurezza e prestazioni</strong>.</li>
+    </ul>
+
+    <div class="callout callout-gold">
+      <div class="callout-label">L'intero punto/codice rimane lo stesso</div>
+      <p>Creiamo configurazioni tenendo presente queste priorità. Il <strong>il codice dell'applicazione rimane lo stesso</strong> in tutti gli ambienti, ma a seconda della configurazione, il comportamento cambia. Questo è esattamente ciò che vogliamo. Senza modificare il codice (cosa che dovremmo fare se stessimo codificando le cose), la gestione centralizzata della configurazione significa che non dobbiamo mai toccare il codice della nostra applicazione. Cambiamo semplicemente la configurazione e questo si riflette nel comportamento.</p>
+    </div>
+
+    <h3>Esempio svolto: dimensione del pool di database in tutti gli ambienti</h3>
+    <p>Prendiamo la dimensione del pool di connessioni al database come esempio concreto di come la stessa impostazione differisce in base all'ambiente:</p>
+
+    <table class="compare-table">
+      <thead>
+        <tr><th>Ambiente</th><th>Dimensione massima della piscina</th><th>Ragionamento</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Sviluppo</td><td>10</td><td>Funziona bene a livello locale; le moderne macchine di sviluppo di fascia alta hanno molta capacità per test/sviluppo</td></tr>
+        <tr><td>Messa in scena</td><td class="tag-fast">2</td><td>Deliberatamente minimo a <strong>risparmiare sui costi del cloud</strong>: accettiamo qualche ritardo poiché viene utilizzato da sviluppatori/tester</td></tr>
+        <tr><td>Produzione</td><td class="tag-slow">50</td><td>Deve gestire un'ampia base di utenti e picchi di traffico, quindi è necessaria una dimensione del pool più elevata</td></tr>
+      </tbody>
+    </table>
+
+    <p>In produzione imposti la dimensione del pool su 50 perché devi soddisfare un'ampia base di utenti e prepararti ai picchi di traffico. In fase di sviluppo, 10 funziona bene. La cosa interessante è <strong>messa in scena</strong>: anche se la priorità principale della messa in scena è rispecchiare il più possibile la produzione per individuare tempestivamente i problemi, gestendo un sistema che funzioni <em>esattamente</em> come se la produzione avesse lo stesso costo in bollette del cloud, e questo non è qualcosa che la maggior parte dei team desidera.</p>
+
+    <div class="callout">
+      <div class="callout-label">Il compromesso sui costi nella messa in scena</div>
+      <p>L'allestimento ha una priorità secondaria: <strong>riducendo al minimo i costi del cloud</strong>. Poiché la gestione temporanea viene solitamente utilizzata solo da sviluppatori e tester, puoi prendere decisioni come mantenere la dimensione del pool di database al minimo (ad esempio 2). Puoi accettare qualche ritardo, ma risparmi un sacco di soldi sui costi del cloud. Si tratta di un compromesso deliberato, basato sulla configurazione, ed è possibile proprio perché la dimensione del pool risiede nella configurazione, non nel codice.</p>
+    </div>
+  </section>
+
+  <hr class="chapter-divider"/>
+
+  <!-- SECTION 8: SECURITY -->
+  <section id="security">
+    <div class="section-num">08 / SICUREZZA</div>
+    <h2>Sicurezza della configurazione</h2>
+    <p>Questi sono punti abbastanza ovvi, ma per coprire l'intero ambito, vale la pena menzionarli esplicitamente. Esistono cinque pratiche di sicurezza chiave per la gestione della configurazione.</p>
+
+    <!-- 1 never hardcode -->
+    <h3>8.1: Non codificare mai i segreti</h3>
+    <p>Se disponi di segreti come l'URL del tuo database di produzione, la chiave API del tuo servizio Clerk, il tuo servizio di consegna di posta elettronica o il tuo servizio di elaborazione dei pagamenti, dovresti <strong>non codificare mai quei segreti nella tua base di codice</strong>. Ciò è così ovvio che non ha quasi bisogno di essere spiegato: i segreti codificati finiscono nel controllo della versione, vengono esposti nei log e diventano passività permanenti.</p>
+
+    <!-- 2 cloud secrets manager -->
+    <h3>8.2: Utilizzare un Cloud Secrets Manager</h3>
+    <p>Se possibile, scegli sempre un servizio di gestione dei segreti cloud, HashiCorp Vault, AWS Parametri Store, Azure Key Vault o Google Secret Manager. È sempre una buona idea &quot;ingegnerizzare eccessivamente&quot; quando si tratta della sicurezza della tua applicazione backend.</p>
+
+    <p>Questi servizi gestiscono già automaticamente le funzionalità di sicurezza critiche:</p>
+
+    <div class="diagram-wrap">
+      <svg width="100%" viewBox="0 0 720 150" role="img">
+        <title>Crittografia a riposo e in transito</title>
+        <defs>
+          <marker id="sec" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </marker>
+        </defs>
+        <rect x="20" y="50" width="180" height="56" rx="8" fill="#f0e5c9" stroke="#b07d2b" stroke-width="0.8"/>
+        <text x="110" y="73" text-anchor="middle" font-size="12" font-weight="600" fill="#211e1a">Direttore segreto</text>
+        <text x="110" y="89" text-anchor="middle" font-size="10" fill="#b07d2b">crittografato a riposo </text>
+        <line x1="200" y1="78" x2="280" y2="78" stroke="#3f6f4e" stroke-width="1.2" marker-end="url(#sec)"/>
+        <text x="350" y="58" text-anchor="middle" font-size="10" fill="#3f6f4e" font-style="italic">crittografato in transito (chiamata API)</text>
+        <rect x="282" y="50" width="180" height="56" rx="8" fill="#e0e9dd" stroke="#3f6f4e" stroke-width="0.8"/>
+        <text x="372" y="73" text-anchor="middle" font-size="12" font-weight="600" fill="#211e1a">La tua Infra</text>
+        <text x="372" y="89" text-anchor="middle" font-size="10" fill="#3f6f4e">decrittografare con chiave privata</text>
+        <line x1="462" y1="78" x2="542" y2="78" stroke="#8d8475" stroke-width="1.2" marker-end="url(#sec)"/>
+        <rect x="544" y="50" width="160" height="56" rx="8" fill="#f4ded6" stroke="#b8402e" stroke-width="0.8"/>
+        <text x="624" y="73" text-anchor="middle" font-size="12" font-weight="600" fill="#211e1a">L'app utilizza la configurazione</text>
+        <text x="624" y="89" text-anchor="middle" font-size="10" fill="#b8402e">decifrato, in memoria</text>
+        <text x="360" y="130" text-anchor="middle" font-size="10" fill="#8d8475" font-style="italic">Crittografato sia a riposo (archiviazione) che in transito (trasferimento)</text>
+      </svg>
+      <div class="diagram-caption">Fig 5.1: I gestori segreti crittografano le configurazioni a riposo E in transito; la decrittazione avviene con la tua chiave privata nel tuo infra</div>
+    </div>
+
+    <ul style="margin:0.5rem 0 1rem 1.5rem; color:var(--ink2)">
+      <li style="margin-bottom:8px"><strong>Crittografia a riposo</strong>: Non importa dove memorizzano la tua configurazione; ogni volta che lo archiviano, lo crittografano prima, quindi lo archiviano nel loro database/archiviazione.</li>
+      <li style="margin-bottom:8px"><strong>Crittografia in transito</strong>: quando effettui una chiamata API per recuperare le configurazioni, inviano la versione crittografata. Con la tua chiave privata (memorizzata nel tuo infra, GitHub Action, segreto del repository o ambiente Kubernetes), le configurazioni vengono decodificate e quindi utilizzate.</li>
+    </ul>
+    <p>Queste sono funzionalità di sicurezza essenziali e quando utilizzi un provider cloud come Vault o Parametri Store, tutto questo è già curato, non devi pensarci.</p>
+
+    <!-- 3 access control -->
+    <h3>8.3: Controllo degli accessi (privilegio minimo)</h3>
+    <p>Se hai un team di sviluppatori abbastanza numeroso, prenditi del tempo per definire una strategia su chi dovrebbe avere accesso a quali configurazioni, seguendo le <span class="term">principio del privilegio minimo</span>:</p>
+    <ul style="margin:0.5rem 0 1rem 1.5rem; color:var(--ink2)">
+      <li style="margin-bottom:8px"><strong>Sviluppatori frontend</strong>: dovrebbero avere accesso solo alle configurazioni di cui hanno bisogno: l'URL API backend e le chiavi API per le integrazioni frontend.</li>
+      <li style="margin-bottom:8px"><strong>Ingegneri di back-end</strong>: dovrebbe avere accesso solo a database, istanze Redis, Elasticsearch, ecc.</li>
+      <li style="margin-bottom:8px"><strong>Solo team DevOps</strong>: le configurazioni per l'accesso alle istanze cloud (ad esempio istanze EC2) dovrebbero essere limitate a DevOps.</li>
+    </ul>
+    <p>Seguendo il principio del privilegio minimo, definisci una strategia di controllo degli accessi in modo che ogni persona abbia accesso solo a ciò di cui ha effettivamente bisogno.</p>
+
+    <!-- 4 rotation -->
+    <h3>8.4: Rotazione</h3>
+    <p>Dovresti <strong>ruotare periodicamente</strong> tutte le configurazioni, i segreti delle chiavi API, i segreti JWT e valori sensibili simili, in modo che non siano molto soggetti a perdite. La rotazione regolare limita la finestra di danno nel caso in cui un segreto venga compromesso.</p>
+
+    <!-- 5 validation -->
+    <h3>8.5: Validazione (il punto più importante)</h3>
+    <p>Nella maggior parte dei casi, i team non convalidano le variabili di ambiente o la fonte da cui provengono le configurazioni. Con dotenv, ad esempio, carichi tutte le variabili nel tuo ambiente e accedi ad esse semplicemente tramite <code>process.env.WHATEVER</code>, senza controlli.</p>
+
+    <div class="callout callout-gold">
+      <div class="callout-label">L'unica cosa da togliere da tutto questo argomento</div>
+      <p>Se togli solo una cosa: <strong>convalida sempre le tue configurazioni</strong>, non importa da dove provengano. Convalida all'avvio, prima dell'avvio dell'applicazione, subito dopo la sua distribuzione. Utilizzare una libreria di convalida adeguata:<br/><br/>
+      - <strong>Back-end TypeScript</strong> -&gt; utilizzare <code>Zod</code><br/>
+      - <strong>Vai al backend</strong> -&gt; utilizzare <code>go-playground/validator</code><br/><br/>
+      Utilizza qualsiasi libreria di convalida offerta dal tuo linguaggio/framework e convalida correttamente ogni variabile, quali sono obbligatorie, quali sono facoltative e quali hanno valori predefiniti del codice dell'applicazione.</p>
+    </div>
+
+    <p>Perché è così importante? Si è imparato nel modo più duro. Se hai un requisito obbligatorio per una variabile d'ambiente ma non riesci a fornirlo, il tuo sistema di produzione si rompe o si comporta in modo strano perché non ha accesso a una particolare variabile d'ambiente, ed è <strong>non facile da individuare</strong>. La convalida all'avvio trasforma un silenzioso e misterioso errore di produzione in un messaggio di errore forte, immediato ed evidente che ti dice esattamente quale configurazione manca.</p>
+  </section>
+
+  <hr class="chapter-divider"/>
+
+  <!-- SECTION 9: CODE -->
+  <section id="code">
+    <div class="section-num">09/CODICE</div>
+    <h2>Esempi di codici</h2>
+    <p>Di seguito sono riportate le implementazioni pratiche del caricamento e della convalida della configurazione in Go e Python, che coprono le variabili di ambiente, il caricamento per ambiente, le origini ibride e la convalida di avvio.</p>
+
+    <!-- GO: config struct + validation -->
+    <h3>9.1: Caricamento e convalida della configurazione in Go</h3>
+    <div class="code-file">
+      <div class="code-dot dot-r"></div><div class="code-dot dot-y"></div><div class="code-dot dot-g"></div>
+      <span>config.go / Go + go-playground/validator + godotenv</span>
+    </div>
+<pre><code><span class="kw">package</span> config
+
+<span class="kw">import</span> (
+    <span class="str">"fmt"</span>
+    <span class="str">"log"</span>
+    <span class="str">"os"</span>
+    <span class="str">"strconv"</span>
+
+    <span class="str">"github.com/go-playground/validator/v10"</span>
+    <span class="str">"github.com/joho/godotenv"</span>
+)
+
+<span class="cm">// Config holds all runtime application settings.</span>
+<span class="cm">// The `validate` tags enforce rules at startup, this is the</span>
+<span class="cm">// single most important safeguard for config management.</span>
+<span class="kw">type</span> <span class="ty">Config</span> <span class="kw">struct</span> {
+    <span class="cm">// Application settings</span>
+    Port     <span class="ty">int</span>    <span class="str">`validate:"required,min=1,max=65535"`</span>
+    LogLevel <span class="ty">string</span> <span class="str">`validate:"required,oneof=debug info warn error"`</span>
+    Env      <span class="ty">string</span> <span class="str">`validate:"required,oneof=development staging production"`</span>
+
+    <span class="cm">// Database config (sensitive)</span>
+    DBHost     <span class="ty">string</span> <span class="str">`validate:"required"`</span>
+    DBPort     <span class="ty">int</span>    <span class="str">`validate:"required"`</span>
+    DBUser     <span class="ty">string</span> <span class="str">`validate:"required"`</span>
+    DBPassword <span class="ty">string</span> <span class="str">`validate:"required"`</span>
+    DBName     <span class="ty">string</span> <span class="str">`validate:"required"`</span>
+    DBPoolSize <span class="ty">int</span>    <span class="str">`validate:"required,min=1"`</span>
+
+    <span class="cm">// External services (sensitive)</span>
+    StripeAPIKey <span class="ty">string</span> <span class="str">`validate:"required"`</span>
+
+    <span class="cm">// Feature flags (optional, default false)</span>
+    NewCheckoutEnabled <span class="ty">bool</span>
+}
+
+<span class="cm">// DatabaseURL constructs the connection URL from the parts.</span>
+<span class="kw">func</span> (c *Config) <span class="fn">DatabaseURL</span>() <span class="ty">string</span> {
+    <span class="kw">return</span> fmt.Sprintf(
+        <span class="str">"postgres://%s:%s@%s:%d/%s"</span>,
+        c.DBUser, c.DBPassword, c.DBHost, c.DBPort, c.DBName,
+    )
+}
+
+<span class="cm">// Load reads env vars, applies defaults, then VALIDATES before returning.</span>
+<span class="cm">// Called once at startup, fail loudly here, never silently in production.</span>
+<span class="kw">func</span> <span class="fn">Load</span>() (*Config, error) {
+    <span class="cm">// In local dev, load .env into the OS environment.</span>
+    <span class="cm">// In production this is a no-op (vars already injected by the platform).</span>
+    _ = godotenv.Load()
+
+    cfg := &amp;Config{
+        Port:               getEnvInt(<span class="str">"PORT"</span>, <span class="num">8080</span>),        <span class="cm">// default 8080</span>
+        LogLevel:           getEnv(<span class="str">"LOG_LEVEL"</span>, <span class="str">"info"</span>),    <span class="cm">// default info</span>
+        Env:                getEnv(<span class="str">"APP_ENV"</span>, <span class="str">"development"</span>),
+        DBHost:             os.Getenv(<span class="str">"DB_HOST"</span>),
+        DBPort:             getEnvInt(<span class="str">"DB_PORT"</span>, <span class="num">5432</span>),
+        DBUser:             os.Getenv(<span class="str">"DB_USER"</span>),
+        DBPassword:         os.Getenv(<span class="str">"DB_PASSWORD"</span>),
+        DBName:             os.Getenv(<span class="str">"DB_NAME"</span>),
+        DBPoolSize:         getEnvInt(<span class="str">"DB_POOL_SIZE"</span>, <span class="num">10</span>),  <span class="cm">// dev=10, prod=50</span>
+        StripeAPIKey:       os.Getenv(<span class="str">"STRIPE_API_KEY"</span>),
+        NewCheckoutEnabled: getEnv(<span class="str">"NEW_CHECKOUT"</span>, <span class="str">"false"</span>) == <span class="str">"true"</span>,
+    }
+
+    <span class="cm">// THE critical step, validate everything before the app boots</span>
+    <span class="kw">if</span> err := validator.New().Struct(cfg); err != <span class="kw">nil</span> {
+        <span class="kw">return</span> <span class="kw">nil</span>, fmt.Errorf(<span class="str">"config validation failed: %w"</span>, err)
+    }
+
+    <span class="kw">return</span> cfg, <span class="kw">nil</span>
+}
+
+<span class="kw">func</span> <span class="fn">getEnv</span>(key, fallback <span class="ty">string</span>) <span class="ty">string</span> {
+    <span class="kw">if</span> v := os.Getenv(key); v != <span class="str">""</span> {
+        <span class="kw">return</span> v
+    }
+    <span class="kw">return</span> fallback
+}
+
+<span class="kw">func</span> <span class="fn">getEnvInt</span>(key <span class="ty">string</span>, fallback <span class="ty">int</span>) <span class="ty">int</span> {
+    <span class="kw">if</span> v := os.Getenv(key); v != <span class="str">""</span> {
+        <span class="kw">if</span> n, err := strconv.Atoi(v); err == <span class="kw">nil</span> {
+            <span class="kw">return</span> n
+        }
+    }
+    <span class="kw">return</span> fallback
+}
+
+<span class="cm">// Usage in main.go:</span>
+<span class="cm">//   cfg, err := config.Load()</span>
+<span class="cm">//   if err != nil { log.Fatal(err) }  // crash early, crash loud</span></code></pre>
+
+    <!-- PYTHON: pydantic settings -->
+    <h3>9.2: Caricamento e convalida della configurazione in Python</h3>
+    <div class="code-file">
+      <div class="code-dot dot-r"></div><div class="code-dot dot-y"></div><div class="code-dot dot-g"></div>
+      <span>config.py / Python + pydantic-settings (l'equivalente Python di Zod)</span>
+    </div>
+<pre><code><span class="kw">from</span> enum <span class="kw">import</span> Enum
+<span class="kw">from</span> functools <span class="kw">import</span> lru_cache
+
+<span class="kw">from</span> pydantic <span class="kw">import</span> Field, computed_field
+<span class="kw">from</span> pydantic_settings <span class="kw">import</span> BaseSettings, SettingsConfigDict
+
+
+<span class="kw">class</span> <span class="ty">Environment</span>(str, Enum):
+    DEVELOPMENT = <span class="str">"development"</span>
+    STAGING = <span class="str">"staging"</span>
+    PRODUCTION = <span class="str">"production"</span>
+
+
+<span class="kw">class</span> <span class="ty">Settings</span>(BaseSettings):
+    <span class="str">"""
+    All runtime config. pydantic VALIDATES every field automatically
+    when the object is constructed, mandatory fields without a default
+    raise an error immediately at startup, not silently in production.
+    """</span>
+    model_config = SettingsConfigDict(
+        env_file=<span class="str">".env"</span>,        <span class="cm"># load .env in local dev</span>
+        env_file_encoding=<span class="str">"utf-8"</span>,
+        case_sensitive=<span class="kw">False</span>,
+    )
+
+    <span class="cm"># Application settings (with sensible defaults)</span>
+    port: int = Field(default=<span class="num">8080</span>, ge=<span class="num">1</span>, le=<span class="num">65535</span>)
+    log_level: str = Field(default=<span class="str">"info"</span>, pattern=<span class="str">"^(debug|info|warn|error)$"</span>)
+    app_env: Environment = Environment.DEVELOPMENT
+
+    <span class="cm"># Database config, mandatory, no defaults (will fail if missing)</span>
+    db_host: str
+    db_port: int = <span class="num">5432</span>
+    db_user: str
+    db_password: str          <span class="cm"># sensitive, never hardcoded</span>
+    db_name: str
+    db_pool_size: int = Field(default=<span class="num">10</span>, ge=<span class="num">1</span>)  <span class="cm"># dev=10, prod=50, staging=2</span>
+
+    <span class="cm"># External services, mandatory secret</span>
+    stripe_api_key: str
+
+    <span class="cm"># Feature flag, optional, defaults off</span>
+    new_checkout_enabled: bool = <span class="kw">False</span>
+
+    @computed_field
+    @property
+    <span class="kw">def</span> <span class="fn">database_url</span>(self) -> str:
+        <span class="kw">return</span> (
+            f<span class="str">"postgresql://{self.db_user}:{self.db_password}"</span>
+            f<span class="str">"@{self.db_host}:{self.db_port}/{self.db_name}"</span>
+        )
+
+
+@lru_cache  <span class="cm"># load &amp; validate once, reuse everywhere (singleton)</span>
+<span class="kw">def</span> <span class="fn">get_settings</span>() -> Settings:
+    <span class="cm"># Construction triggers validation. If a mandatory var is</span>
+    <span class="cm"># missing, pydantic raises here, at startup, loudly.</span>
+    <span class="kw">return</span> Settings()
+
+
+<span class="cm"># Usage:</span>
+<span class="cm">#   settings = get_settings()   # crashes early if config invalid</span>
+<span class="cm">#   print(settings.database_url)</span>
+<span class="cm">#   if settings.new_checkout_enabled: ...</span></code></pre>
+
+    <!-- YAML example -->
+    <h3>9.3: Esempio di file di configurazione YAML</h3>
+    <p>Per impostazioni strutturate e non segrete, un file YAML (con commenti, a differenza di JSON) è una scelta comune, come si vede in codebase reali come Authelia e Apache Risposta:</p>
+    <div class="code-file">
+      <div class="code-dot dot-r"></div><div class="code-dot dot-y"></div><div class="code-dot dot-g"></div>
+      <span>config.yaml/impostazioni app strutturate (non segrete)</span>
+    </div>
+<pre><code><span class="cm"># Server settings, note: YAML supports comments, JSON does not</span>
+server:
+  port: <span class="num">8080</span>
+  timeout_seconds: <span class="num">60</span>      <span class="cm"># raise this for slow ops like AI image gen</span>
+
+log:
+  level: <span class="str">debug</span>             <span class="cm"># debug in dev, info in production</span>
+
+database:
+  host: <span class="str">localhost</span>
+  port: <span class="num">5432</span>
+  name: <span class="str">ecommerce</span>
+  pool_size: <span class="num">10</span>            <span class="cm"># dev=10, staging=2, prod=50</span>
+  query_timeout_seconds: <span class="num">30</span>
+
+<span class="cm"># Feature flags, dynamically enable/disable features</span>
+features:
+  new_checkout_enabled: <span class="kw">false</span>
+  rollout_regions: [<span class="str">"US"</span>]   <span class="cm"># A/B test: US gets new checkout</span>
+
+<span class="cm"># Business rules, centralized, not hardcoded</span>
+business:
+  max_order_amount: <span class="num">500000</span>
+
+<span class="cm"># NOTE: secrets (db password, Stripe key, JWT secret) do NOT</span>
+<span class="cm"># belong here, those come from a secrets manager / env vars.</span></code></pre>
+  </section>
+
+  <hr class="chapter-divider"/>
+
+  <!-- REFERENCES -->
+  <section id="refs">
+    <div class="section-num">RIFERIMENTI</div>
+    <h2>Ulteriori letture e documentazione</h2>
+
+    <h4>Strumenti di gestione dei segreti</h4>
+    <div class="ref-box">
+      <a href="https://developer.hashicorp.com/vault/docs" target="_blank">HashiCorp Vault, documenti ufficiali</a>
+      <a href="https://docs.aws.amazon.com/systems-manager/latest/userguide/systems-manager-parameter-store.html" target="_blank">AWS Systems Manager, archivio parametri</a>
+      <a href="https://learn.microsoft.com/en-us/azure/key-vault/" target="_blank">Azure Key Vault, documentazione</a>
+      <a href="https://cloud.google.com/secret-manager/docs" target="_blank">Google Cloud, Documenti Secret Manager</a>
+    </div>
+
+    <h4>Negozi di valori-chiave/configurazioni</h4>
+    <div class="ref-box">
+      <a href="https://developer.hashicorp.com/consul/docs" target="_blank">Console HashiCorp, Docs</a>
+      <a href="https://etcd.io/docs/" target="_blank">etcd, archivio di valori-chiave distribuito</a>
+    </div>
+
+    <h4>Librerie di convalida</h4>
+    <div class="ref-box">
+      <a href="https://zod.dev/" target="_blank">Zod, convalida dello schema TypeScript</a>
+      <a href="https://github.com/go-playground/validator" target="_blank">go-playground/validatore, convalida della struttura Go</a>
+      <a href="https://docs.pydantic.dev/latest/concepts/pydantic_settings/" target="_blank">impostazioni pydantic, convalida della configurazione Python</a>
+    </div>
+
+    <h4>Formati e librerie di file di configurazione</h4>
+    <div class="ref-box">
+      <a href="https://yaml.org/spec/" target="_blank">YAML, specifica</a>
+      <a href="https://toml.io/en/" target="_blank">TOML, il linguaggio minimo evidente di Tom</a>
+      <a href="https://github.com/motdotla/dotenv" target="_blank">dotenv, caricatore .env (Node.js)</a>
+      <a href="https://github.com/joho/godotenv" target="_blank">godotenv, caricatore .env (Vai)</a>
+    </div>
+
+    <h4>Documenti Web MDN</h4>
+    <div class="ref-box">
+      <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/504" target="_blank">MDN, timeout del gateway HTTP 504</a>
+      <a href="https://developer.mozilla.org/en-US/docs/Glossary/Environment_variable" target="_blank">MDN, Variabile d'ambiente (Glossario)</a>
+    </div>
+
+    <div style="margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid var(--divider);">
+      <p style="font-family:'JetBrains Mono', ui-monospace, monospace; font-size:11px; color:var(--ink3); letter-spacing:0.08em;">
+        MANUALE DI INGEGNERIA BACKEND / V2 / CAPITOLO 13 / GESTIONE DELLA CONFIGURAZIONE<br/>
+        Appunti compilati dalla trascrizione della lezione/esempi Go+Python/riferimenti Vault/MDN in linea
+      </p>
+    </div>
+  </section>
+
+
+      <footer class="bfp-footer">Backend dai Primi Principi / Capitolo 14 / Config. Il codice è destinato a Go 1.22+ e Python 3.11+.</footer>
+</main>
+</div>
+<!-- SIDEBAR -->
+
+
+<!-- MAIN -->
+
+
+
+<!-- CHAPTER NAVIGATION -->
+<nav class="chapter-nav" id="chapterNav">
+  <a href="../../13.gRPC-and-Inter-Service-Communication-for-Microservices/html_notes/notes.html" class="nav-chapter-link"><span class="nav-arrow"><svg class="ico-arrow" width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="13.5" y1="8" x2="3.5" y2="8"/><polyline points="7.5,4 3.5,8 7.5,12"/></svg></span><span class="nav-label"><span class="nav-small">Capitolo 13</span>gRPC e comunicazione tra servizi</span></a>
+  <a href="../../index.html" class="nav-indicator"><span class="nav-dot"></span> Capitolo 14 <span class="nav-sep">/</span> 24</a>
+  <a href="../../15.Logging, Monitoring and Observability/html_notes/notes.html" class="nav-chapter-link nav-next"><span class="nav-label"><span class="nav-small">Capitolo 15</span>Registrazione e osservabilità</span><span class="nav-arrow"><svg class="ico-arrow" width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="2.5" y1="8" x2="12.5" y2="8"/><polyline points="8.5,4 12.5,8 8.5,12"/></svg></span></a>
+</nav>
+  <script src="../../assets/copy-button.js"></script>
+  <script src="../../assets/enhancements.js"></script>
+<script src="../../assets/shell.js"></script>
+</body>
+
+</html>

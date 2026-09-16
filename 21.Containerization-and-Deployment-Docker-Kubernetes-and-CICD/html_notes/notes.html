@@ -1,0 +1,2324 @@
+<!DOCTYPE html>
+<html lang="it">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="referrer" content="no-referrer">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Docker, K8 e CI/CD / Capitolo 21 / Backend dai Primi Principi</title>
+  <meta name="description" content="Capitolo 21 di Backend dai primi principi: Docker, K8 e CI/CD. Note sui principi primi, diagrammi ed esempi eseguibili in Go e Python.">
+  <meta name="theme-color" content="#f3ede2">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2032%2032'%3E%3Crect%20width='32'%20height='32'%20rx='7'%20fill='%23b8402e'/%3E%3Ctext%20x='16'%20y='23'%20font-family='Georgia,serif'%20font-size='19'%20font-weight='700'%20fill='%23f3ede2'%20text-anchor='middle'%3EB%3C/text%3E%3C/svg%3E">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/dockerfile.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/yaml.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/bash.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/go.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/python.min.js"></script>
+
+  <style>
+    :root{
+  --paper: #f3ede2;
+  --paper-2: #ece3d4;
+  --ink: #211e1a;
+  --ink-soft: #5b5347;
+  --rust: #b8402e;
+  --rust-deep: #8f2f20;
+  --gold: #b07d2b;
+  --teal: #3f6f4e;
+  --line: #d8cfbe;
+  --code-bg: #232019;
+  --code-bar: #1a1813;
+  --shadow: 0 1px 0 rgba(0,0,0,.04),0 18px 40px -28px rgba(40,30,20,.5);
+}
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0
+    }
+
+    html {
+      scroll-behavior: smooth;
+      scroll-padding-top: 24px
+    }
+
+    body {
+      background: var(--paper);
+      color: var(--ink);
+      font-family:"Spline Sans", system-ui, sans-serif;
+      font-size: 17px;
+      line-height: 1.7;
+      -webkit-font-smoothing: antialiased;
+      background-image: radial-gradient(circle at 12% 8%, rgba(184,64,46, .05), transparent 38%), radial-gradient(circle at 88% 92%, rgba(63,111,78, .05), transparent 42%);
+    }
+
+    .hero {
+      margin-bottom: 64px;
+    }
+
+    .kicker {
+      font-family:"JetBrains Mono", ui-monospace, monospace;
+      font-size: 12.5px;
+      letter-spacing: .3em;
+      text-transform: uppercase;
+      color: var(--rust);
+      font-weight: 700;
+      margin-bottom: 20px;
+    }
+
+    .hero h1 {
+      font-family:"Fraunces", Georgia, serif;
+      font-weight: 900;
+      font-size: clamp(40px, 6.5vw, 78px);
+      line-height: .95;
+      letter-spacing: -.025em;
+      margin-bottom: 24px;
+    }
+
+    .hero h1 em {
+      font-style: italic;
+      color: var(--rust);
+      font-weight: 500;
+    }
+
+    .hero .lede{
+      font-size: 19px;
+      max-width:64ch;
+      color: var(--ink-soft);
+      line-height: 1.6;
+    }
+
+    .hero .meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 32px;
+    }
+
+    .hero .meta span {
+      font-family:"JetBrains Mono", ui-monospace, monospace;
+      font-size: 12px;
+      border: 1px solid var(--line);
+      background: var(--paper-2);
+      padding: 6px 13px;
+      border-radius: 30px;
+      color: var(--ink-soft);
+    }
+
+    .hero .rule {
+      height: 3px;
+      width:120px;
+      background: var(--rust);
+      margin-top: 38px;
+    }
+
+    .part-label {
+      font-family:"JetBrains Mono", ui-monospace, monospace;
+      font-size: 12px;
+      letter-spacing: .22em;
+      text-transform: uppercase;
+      color: var(--rust);
+      font-weight: 700;
+      margin: 64px 0 8px;
+      padding-bottom: 6px;
+      border-bottom: 1px dashed var(--line);
+    }
+
+    .part-label:first-of-type {
+      margin-top: 0;
+    }
+
+    section {
+      margin-bottom: 72px;
+      scroll-margin-top: 20px;
+    }
+
+    .sec-head {
+      display: flex;
+      align-items: flex-start;
+      gap: 18px;
+      margin-bottom: 24px;
+      border-bottom: 1px solid var(--line);
+      padding-bottom: 16px;
+    }
+
+    .sec-num {
+      font-family:"JetBrains Mono", ui-monospace, monospace;
+      font-weight: 700;
+      font-size: 14px;
+      color: #fff;
+      background: var(--rust);
+      border-radius: 8px;
+      padding: 7px 11px;
+      line-height: 1;
+      margin-top: 8px;
+      white-space: nowrap;
+      box-shadow: 0 3px 10px rgba(184,64,46, .3);
+    }
+
+    h2 {
+      font-family:"Fraunces", Georgia, serif;
+      font-weight: 600;
+      font-size: clamp(27px, 3.6vw, 38px);
+      line-height: 1.06;
+      letter-spacing: -.015em;
+    }
+
+    h3 {
+      font-family:"Fraunces", Georgia, serif;
+      font-weight: 600;
+      font-size: 22px;
+      margin: 34px 0 12px;
+      letter-spacing: -.01em;
+    }
+
+    h4 {
+      font-size: 14px;
+      font-weight: 700;
+      letter-spacing: .04em;
+      text-transform: uppercase;
+      color: var(--rust-deep);
+      margin: 24px 0 9px;
+    }
+
+    p {
+      margin-bottom: 15px;
+      max-width:76ch;
+    }
+
+    strong {
+      font-weight: 700;
+      color: var(--ink);
+    }
+
+    ul,
+    ol {
+      margin: 0 0 17px 0;
+      padding-left:0;
+      max-width:76ch;
+    }
+
+    li {
+      margin: 0 0 9px 28px;
+    }
+
+    li::marker {
+      color: var(--rust);
+      font-weight: 700;
+    }
+
+    code:not(pre code) {
+      font-family:"JetBrains Mono", ui-monospace, monospace;
+      font-size: .85em;
+      background: var(--paper-2);
+      border: 1px solid var(--line);
+      padding: .12em .42em;
+      border-radius: 5px;
+      color: var(--rust-deep);
+      white-space: nowrap;
+    }
+
+    .box {
+      border-radius: 12px;
+      padding: 18px 22px;
+      margin: 22px 0;
+      border: 1px solid var(--line);
+      background: var(--paper-2);
+    }
+
+    .box .tag {
+      font-family:"JetBrains Mono", ui-monospace, monospace;
+      font-size: 11px;
+      letter-spacing: .16em;
+      text-transform: uppercase;
+      font-weight: 700;
+      margin-bottom: 7px;
+      display: block;
+    }
+
+    .box p:last-child {
+      margin-bottom: 0;
+    }
+
+    .box.key {
+      background: linear-gradient(180deg, rgba(176,125,43, .1), rgba(176,125,43, .04));
+      border-color: rgba(176,125,43, .4);
+    }
+
+    .box.key .tag {
+      color: var(--gold);
+    }
+
+    .box.gotcha {
+      background: linear-gradient(180deg, rgba(184,64,46, .1), rgba(184,64,46, .03));
+      border-color: rgba(184,64,46, .4);
+    }
+
+    .box.gotcha .tag {
+      color: var(--rust);
+    }
+
+    .box.note {
+      background: linear-gradient(180deg, rgba(63,111,78, .09), rgba(63,111,78, .03));
+      border-color: rgba(63,111,78, .4);
+    }
+
+    .box.note .tag {
+      color: var(--teal);
+    }
+
+    .analogy {
+      font-style: italic;
+      color: var(--ink-soft);
+      font-family:"Fraunces", Georgia, serif;
+      font-size: 18px;
+      line-height: 1.55;
+      border-left: 3px solid var(--gold);
+      padding: 6px 0 6px 22px;
+      margin: 20px 0;
+    }
+
+    .tbl-wrap {
+      overflow-x: auto;
+      margin: 22px 0;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+    }
+
+    table {
+      border-collapse: collapse;
+      width:100%;
+      font-size: 14px;
+    }
+
+    th,
+    td {
+      text-align: left;
+      padding: 11px 15px;
+      border-bottom: 1px solid var(--line);
+      vertical-align: top;
+    }
+
+    th {
+      background: var(--paper-2);
+      font-weight: 700;
+      font-size: 11.5px;
+      letter-spacing: .05em;
+      text-transform: uppercase;
+      color: var(--rust-deep);
+    }
+
+    tr:last-child td {
+      border-bottom: none;
+    }
+
+    td code {
+      white-space: nowrap;
+    }
+
+    .mono-cell {
+      font-family:"JetBrains Mono", ui-monospace, monospace;
+      font-weight: 700;
+      color: var(--rust-deep);
+      font-size: 13px;
+    }
+
+    .yes {
+      color: #3f6f4e;
+      font-weight: 700;
+    }
+
+    .no {
+      color: #b8402e;
+      font-weight: 700;
+    }
+
+    .cond {
+      color: #b07d2b;
+      font-weight: 700;
+    }
+
+    .sc {
+      font-family:"JetBrains Mono", ui-monospace, monospace;
+      font-weight: 700;
+      padding: 2px 8px;
+      border-radius: 6px;
+      font-size: 13px;
+      white-space: nowrap;
+    }
+
+    .sc.s1 {
+      background: #dee5ee;
+      color: #3f6f4e;
+    }
+
+    .sc.s2 {
+      background: #e0e9dd;
+      color: #3f6f4e;
+    }
+
+    .sc.s3 {
+      background: #f0e5c9;
+      color: #b07d2b;
+    }
+
+    .sc.s4 {
+      background: #f4ded6;
+      color: #b8402e;
+    }
+
+    .sc.s5 {
+      background: #eccdc2;
+      color: #8f2f20;
+    }
+
+    .codeblock {
+      background: var(--code-bg);
+      margin: 20px 0;
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 14px 30px -16px var(--shadow);
+      border: 1px solid #35302a;
+    }
+
+    .code-bar {
+      display: flex;
+      align-items: center;
+      background: var(--code-bar);
+      padding: 0 14px;
+      border-bottom: 1px solid #35302a;
+    }
+
+    .code-bar .dots {
+      display: flex;
+      gap: 7px;
+      margin-right: 14px;
+    }
+
+    .code-bar .dots i {
+      width:11px;
+      height: 11px;
+      border-radius: 50%;
+      display: block;
+    }
+
+    .dots i:nth-child(1) {
+      background: #d05a47;
+    }
+
+    .dots i:nth-child(2) {
+      background: #cf9f4b;
+    }
+
+    .dots i:nth-child(3) {
+      background: #5a9a5f;
+    }
+
+    .code-tabs {
+      display: flex;
+    }
+
+    .code-tabs button {
+      font-family:"JetBrains Mono", ui-monospace, monospace;
+      font-size: 12.5px;
+      font-weight: 600;
+      background: none;
+      border: none;
+      color: #9c948a;
+      padding: 13px 18px;
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      transition: .15s;
+    }
+
+    .code-tabs button:hover {
+      color: #e9e2d3;
+    }
+
+    .code-tabs button.on {
+      color: #fff;
+      border-bottom-color: var(--rust);
+    }
+
+    .lang-go {
+      color: #7fb0c9;
+    }
+
+    .lang-py {
+      color: #d8b66a;
+    }
+
+    .code-panel {
+      display: none;
+    }
+
+    .code-panel.on {
+      display: block;
+    }
+
+    .codeblock pre {
+      margin: 0;
+    }
+
+    .codeblock pre code {
+      font-family:"JetBrains Mono", ui-monospace, monospace !important;
+      font-size: 13px;
+      line-height: 1.6;
+      padding: 18px 20px !important;
+      display: block;
+      overflow-x: auto;
+      background: var(--code-bg) !important;
+    }
+
+    .code-cap {
+      font-size: 13px;
+      color: var(--ink-soft);
+      font-style: italic;
+      margin: -8px 2px 22px;
+      font-family:"Fraunces", Georgia, serif;
+    }
+
+    .codeblock.single .code-bar .filename {
+      font-family:"JetBrains Mono", ui-monospace, monospace;
+      font-size: 12.5px;
+      color: #9c948a;
+      padding: 13px 4px;
+    }
+
+    .flow {
+      margin: 22px 0;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: var(--paper-2);
+      padding: 24px 22px;
+    }
+
+    .flow .step {
+      display: flex;
+      gap: 15px;
+      align-items: flex-start;
+      padding: 9px 0;
+    }
+
+    .flow .step .b {
+      font-family:"JetBrains Mono", ui-monospace, monospace;
+      font-weight: 700;
+      font-size: 12px;
+      background: var(--ink);
+      color: var(--paper);
+      min-width:30px;
+      height: 30px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 8px;
+      flex-shrink: 0;
+    }
+
+    .flow .step.srv .b {
+      background: var(--teal);
+    }
+
+    .flow .step.cli .b {
+      background: var(--rust);
+    }
+
+    .flow .step .t {
+      padding-top: 3px;
+      font-size: 14.5px;
+    }
+
+    .flow .arrow {
+      color: var(--line);
+      text-align: center;
+      font-size: 18px;
+      line-height: .4;
+      margin: 0 0 0 14px;
+    }
+
+    /* method card */
+    .method {
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      margin: 26px 0;
+      overflow: hidden;
+      background: var(--paper-2);
+    }
+
+    .method-top {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 14px;
+      padding: 18px 22px;
+      background: linear-gradient(180deg, rgba(33,30,26, .04), transparent);
+      border-bottom: 1px solid var(--line);
+    }
+
+    .method-top .verb {
+      font-family:"JetBrains Mono", ui-monospace, monospace;
+      font-weight: 700;
+      font-size: 18px;
+      color: #fff;
+      background: var(--ink);
+      padding: 6px 14px;
+      border-radius: 8px;
+    }
+
+    .method-top .verb.get {
+      background: #3f6f4e;
+    }
+
+    .method-top .verb.post {
+      background: var(--rust);
+    }
+
+    .method-top .verb.put {
+      background: #8a6420;
+    }
+
+    .method-top .verb.patch {
+      background: #b07d2b;
+    }
+
+    .method-top .verb.delete {
+      background: #8f2f20;
+    }
+
+    .method-top .verb.head {
+      background: #37607f;
+    }
+
+    .method-top .verb.options {
+      background: var(--teal);
+    }
+
+    .method-top .verb.connect {
+      background: #5b5347;
+    }
+
+    .method-top .verb.trace {
+      background: #8d8475;
+    }
+
+    .method-top .props {
+      display: flex;
+      gap: 7px;
+      flex-wrap: wrap;
+      margin-left:auto;
+    }
+
+    .method-top .props span {
+      font-family:"JetBrains Mono", ui-monospace, monospace;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 4px 9px;
+      border-radius: 20px;
+      border: 1px solid var(--line);
+      background: var(--paper);
+    }
+
+    .method-top .props .y {
+      color: #3f6f4e;
+      border-color: #bcd3b6;
+    }
+
+    .method-top .props .c {
+      color: #b07d2b;
+      border-color: #ddc79a;
+    }
+
+    .method-body {
+      padding: 6px 22px 20px;
+    }
+
+    .method-body .gloss {
+      font-family:"Fraunces", Georgia, serif;
+      font-style: italic;
+      font-size: 17px;
+      color: var(--ink-soft);
+      margin: 14px 0;
+    }
+
+    .foot {
+      border-top: 3px solid var(--rust);
+      margin-top: 56px;
+      padding-top: 28px;
+      color: var(--ink-soft);
+      font-size: 14px;
+    }
+
+    .foot strong {
+      color: var(--ink);
+    }
+
+    .toc-toggle {
+      display: none;
+    }
+
+    /* ============ VISUALIZATION STYLES (added) ============ */
+    .viz {
+      margin: 30px 0;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: linear-gradient(180deg, #f6f0e6, var(--paper-2));
+      padding: 24px 22px 18px;
+      box-shadow: 0 10px 26px -18px var(--shadow);
+    }
+
+    .viz-cap {
+      font-family:"JetBrains Mono", ui-monospace, monospace;
+      font-size: 11px;
+      letter-spacing: .18em;
+      text-transform: uppercase;
+      color: var(--rust);
+      font-weight: 700;
+      margin-bottom: 4px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .viz-cap::before {
+      content: "";
+      width:18px;
+      height: 2px;
+      background: var(--rust);
+      display: inline-block;
+    }
+
+    .viz-title {
+      font-family:"Fraunces", Georgia, serif;
+      font-weight: 600;
+      font-size: 18px;
+      letter-spacing: -.01em;
+      margin-bottom: 16px;
+      color: var(--ink);
+    }
+
+    .viz svg {
+      display: block;
+      width:100%;
+      height: auto;
+      overflow: visible;
+    }
+
+    .viz svg text {
+      font-family:"Spline Sans", system-ui, sans-serif;
+    }
+
+    .viz svg .mono {
+      font-family:"JetBrains Mono", ui-monospace, monospace;
+    }
+
+    .viz svg .serif {
+      font-family:"Fraunces", Georgia, serif;
+    }
+
+    .viz-note {
+      font-size: 12.5px;
+      color: var(--ink-soft);
+      font-style: italic;
+      font-family:"Fraunces", Georgia, serif;
+      margin-top: 14px;
+      padding-top: 12px;
+      border-top: 1px dashed var(--line);
+    }
+
+    @media(max-width:980px) {
+
+      .toc-toggle {
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        position: fixed;
+        top: 16px;
+        left:16px;
+        z-index: 60;
+        background: var(--ink);
+        color: var(--paper);
+        border: none;
+        font-family:"JetBrains Mono", ui-monospace, monospace;
+        font-size: 13px;
+        font-weight: 600;
+        padding: 11px 16px;
+        border-radius: 10px;
+        cursor: pointer;
+        box-shadow: 0 6px 18px var(--shadow);
+      }
+
+      .method-top .props {
+        margin-left:0;
+        width:100%;
+      }}
+
+    @media(max-width:560px) {
+      body {
+        font-size: 16px;
+      }}
+
+    ::selection {
+      background: var(--rust);
+      color: #fff;
+    }</style>
+<style>
+.chapter-nav{position:fixed;bottom:0;left:0;right:0;z-index:9998;display:flex;align-items:center;justify-content:space-between;padding:14px clamp(16px,4vw,48px);background:rgba(243,237,226,.88);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border-top:1.5px solid #c7bca6;box-shadow:0 -8px 32px -16px rgba(40,30,20,.18);font-family:"JetBrains Mono", ui-monospace, monospace;}
+.nav-chapter-link{display:flex;align-items:center;gap:12px;text-decoration:none;color:#5b5347;padding:10px 18px;border-radius:10px;transition:all .2s ease;max-width:38%;}
+.nav-chapter-link:hover{background:rgba(184,64,46,.08);color:#b8402e;transform:translateY(-1px);}
+.nav-chapter-link.nav-next{text-align:right;flex-direction:row;}
+.nav-arrow{font-size:22px;color:#b8402e;font-weight:700;flex:none;}
+.nav-label{display:flex;flex-direction:column;gap:2px;font-size:13.5px;line-height:1.3;}
+.nav-small{font-size:10px;letter-spacing:.22em;text-transform:uppercase;color:#8d8475;font-weight:600;}
+.nav-indicator{font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:#b8402e;font-weight:700;text-decoration:none;padding:8px 16px;border:1.5px solid #c7bca6;border-radius:40px;background:rgba(255,255,255,.5);transition:all .2s;white-space:nowrap;}
+.nav-indicator:hover{background:#b8402e;color:#fff;border-color:#b8402e;}
+.nav-dot{display:inline-block;width:7px;height:7px;background:#b8402e;border-radius:50%;margin-right:4px;vertical-align:middle;}
+.nav-sep{color:#c7bca6;margin:0 2px;}
+.nav-disabled{visibility:hidden;pointer-events:none;}
+@media(max-width:700px){.nav-label{font-size:11.5px;}.nav-chapter-link{padding:8px 10px;max-width:38%;}.chapter-nav{padding:10px 12px;}.nav-small{font-size:9px;letter-spacing:.16em;}}
+@media(max-width:520px){.nav-label{display:none;}.nav-chapter-link{max-width:none;padding:8px 12px;}.nav-arrow{font-size:20px;}.nav-indicator{font-size:11px;padding:7px 13px;letter-spacing:.12em;}}
+body{padding-bottom:80px;}
+</style>
+  <link rel="stylesheet" href="../../assets/copy-button.css">
+  <link rel="stylesheet" href="../../assets/enhancements.css">
+  <link rel="stylesheet" href="../../assets/shell.css">
+  <link rel="stylesheet" href="../../assets/theme.css">
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;0,9..144,900;1,9..144,400;1,9..144,600&family=Spline+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script src="../../assets/theme.js"></script>
+</head>
+
+<body>
+<button class="bfp-toc-toggle" id="bfpTocToggle" aria-controls="bfpToc" aria-expanded="false"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><line x1="2" y1="4" x2="14" y2="4"/><line x1="2" y1="8" x2="14" y2="8"/><line x1="2" y1="12" x2="14" y2="12"/></svg>Contenuto</button>
+<div class="bfp-toc-scrim" id="bfpTocScrim"></div>
+<div class="bfp-shell">
+    <aside class="bfp-toc" id="bfpToc">
+      <div class="bfp-brand"><span class="bfp-brand-name">Contenitori</span><span class="bfp-brand-slash">/</span><span class="bfp-brand-lens">l'obiettivo del back-end</span></div>
+      <div class="bfp-brand-sub">Capitolo 21/Manuale da campo</div>
+      <div class="bfp-toc-rule"></div>
+      <nav class="bfp-toc-nav">
+        <a class="bfp-toc-link" href="#s1"><span class="bfp-toc-num">01</span><span class="bfp-toc-text">La soluzione del problema dei contenitori</span></a>
+        <a class="bfp-toc-link" href="#s2"><span class="bfp-toc-num">02</span><span class="bfp-toc-text">Contenitori vs VM</span></a>
+        <a class="bfp-toc-link" href="#s3"><span class="bfp-toc-num">03</span><span class="bfp-toc-text">Cos'è realmente un contenitore</span></a>
+        <a class="bfp-toc-link" href="#s4"><span class="bfp-toc-num">04</span><span class="bfp-toc-text">Immagini, livelli e Union FS</span></a>
+        <a class="bfp-toc-link" href="#s5"><span class="bfp-toc-num">05</span><span class="bfp-toc-text">Il Dockerfile</span></a>
+        <a class="bfp-toc-link" href="#s6"><span class="bfp-toc-num">06</span><span class="bfp-toc-text">Costruzioni multistadio</span></a>
+        <a class="bfp-toc-link" href="#s7"><span class="bfp-toc-num">07</span><span class="bfp-toc-text">Ottimizzazione e memorizzazione nella cache delle immagini</span></a>
+        <a class="bfp-toc-link" href="#s8"><span class="bfp-toc-num">08</span><span class="bfp-toc-text">Runtime, registri e tag</span></a>
+        <a class="bfp-toc-link" href="#s9"><span class="bfp-toc-num">09</span><span class="bfp-toc-text">Reti e volumi</span></a>
+        <a class="bfp-toc-link" href="#s10"><span class="bfp-toc-num">10</span><span class="bfp-toc-text">Docker Componi</span></a>
+        <a class="bfp-toc-link" href="#s11"><span class="bfp-toc-num">11</span><span class="bfp-toc-text">Perché orchestrazione</span></a>
+        <a class="bfp-toc-link" href="#s12"><span class="bfp-toc-num">12</span><span class="bfp-toc-text">Architettura Kubernetes</span></a>
+        <a class="bfp-toc-link" href="#s13"><span class="bfp-toc-num">13</span><span class="bfp-toc-text">Baccelli</span></a>
+        <a class="bfp-toc-link" href="#s14"><span class="bfp-toc-num">14</span><span class="bfp-toc-text">Distribuzioni e set di repliche</span></a>
+        <a class="bfp-toc-link" href="#s15"><span class="bfp-toc-num">15</span><span class="bfp-toc-text">Servizi, API gateway e ingresso</span></a>
+        <a class="bfp-toc-link" href="#s16"><span class="bfp-toc-num">16</span><span class="bfp-toc-text">Configurazione, segreti e inv</span></a>
+        <a class="bfp-toc-link" href="#s17"><span class="bfp-toc-num">17</span><span class="bfp-toc-text">Sonde e risorse sanitarie</span></a>
+        <a class="bfp-toc-link" href="#s18"><span class="bfp-toc-num">18</span><span class="bfp-toc-text">Ridimensionamento e implementazioni</span></a>
+        <a class="bfp-toc-link" href="#s19"><span class="bfp-toc-num">19</span><span class="bfp-toc-text">Condutture CI/CD</span></a>
+        <a class="bfp-toc-link" href="#s20"><span class="bfp-toc-num">20</span><span class="bfp-toc-text">Distribuisci strategie e GitOps</span></a>
+        <a class="bfp-toc-link" href="#s21"><span class="bfp-toc-num">21</span><span class="bfp-toc-text">Scheda di riferimento sulla produzione</span></a>
+      </nav>
+    </aside>
+    <main class="bfp-content">
+
+      <header class="hero">
+        <div class="kicker">Un riferimento dettagliato al backend</div>
+        <h1>Contenitori, spedizione del tuo <em>codice</em><br>e il suo mondo insieme.</h1>
+        <p class="lede">Una guida dettagliata sui principi primi su come il codice backend viene impacchettato ed eseguito in produzione, dalle funzionalità del kernel che creano un <em>contenitore</em> (namespace e cgroup), attraverso immagini Docker,
+          livelli e build multistadio, nell'orchestrazione Kubernetes (pod, distribuzioni, servizi, sonde, scalabilità automatica),
+          e verso pipeline CI/CD e implementazioni senza tempi di inattività. Scritto per spiegare non solo <em>cosa</em> ogni pezzo
+          fa ma <em>perché</em> esiste e <em>come</em> funziona sotto. Esempi di applicazioni sia in Go che in Python.</p>
+        <div class="meta">
+          <span>Spazi dei nomi Linux + cgroup</span>
+          <span>Docker/OCI</span>
+          <span>Kubernetes</span>
+          <span>21 sezioni</span>
+        </div>
+        <div class="rule"></div>
+      </header>
+
+      <div class="part-label">Parte I / Perché esistono i contenitori</div>
+
+      <!-- 1 -->
+      <section id="s1">
+        <div class="sec-head">
+          <div class="sec-num">01</div>
+          <h2>La soluzione del problema dei contenitori</h2>
+        </div>
+        <p>Ogni concetto di contenitore più avanti in questo manuale è una risposta a un problema ricorrente: <strong>codice su cui viene eseguito
+          una macchina si guasta su un'altra perché le due macchine non sono identiche.</strong> Il tuo laptop ha Python 3.11,
+          il server ha 3.9; la tua build presuppone una libreria di sistema che manca al prodotto; una variabile d'ambiente è impostata qui
+          e disarmato lì. Il risultato è la battuta più vecchia del software, &quot;ma funziona sulla mia macchina&quot;, ed è così
+          non è uno scherzo, è una classe di interruzioni.</p>
+
+        <p>La causa principale è che un programma in esecuzione non è mai solo il suo codice sorgente. E' il codice <em>inoltre</em> un intero
+          ambiente invisibile: il Language Runtime e la sua versione esatta, librerie di terze parti, pacchetti di sistema,
+          configurazione, percorsi di file e dipendenze a livello di sistema operativo. Tradizionalmente quell'ambiente veniva riprodotto manualmente
+          ogni macchina, passaggi di installazione, script di configurazione, una pagina wiki che nessuno ha tenuto aggiornato e qualsiasi deriva
+          tra gli ambienti è diventato un bug che appare solo in un posto.</p>
+
+        <div class="analogy">Prima dei contenitori, distribuire il software era come spedire una ricetta e sperare che il destinatario la ricevesse
+          la cucina ha lo stesso forno, le stesse pentole e la stessa marca di farina. I contenitori spediscono il <em>intera cucina</em>, forno, pentole, ingredienti, premisurati, sigillati in una scatola che funziona allo stesso modo ovunque la si apra.</div>
+
+        <div class="viz">
+          <div class="viz-cap">Il divario di distribuzione</div>
+          <div class="viz-title">Un programma è composto da codice più un ambiente, e l'ambiente è ciò che va alla deriva</div>
+          <svg viewBox="0 0 720 250" xmlns="http://www.w3.org/2000/svg" role="img"
+            aria-label="Lo stesso codice dell'applicazione in esecuzione su ambienti diversi su un laptop rispetto a un server, che porta a guasti, rispetto a un contenitore che raggruppa codice e ambiente in modo che funzioni in modo identico">
+            <text x="20" y="22" class="mono" font-size="12" font-weight="700" fill="#b8402e">SENZA contenitori, stesso codice, mondi diversi</text>
+            <rect x="20" y="34" width="200" height="86" rx="10" fill="#f7e9e2" stroke="#b8402e"/>
+            <text x="120" y="54" font-size="12" font-weight="700" fill="#8f2f20" text-anchor="middle">il tuo portatile</text>
+            <text x="120" y="74" class="mono" font-size="10" fill="#5b5347" text-anchor="middle">app + Python 3.11</text>
+            <text x="120" y="90" class="mono" font-size="10" fill="#5b5347" text-anchor="middle">librerie A, B (v2)</text>
+            <text x="120" y="108" font-size="11" font-weight="700" fill="#3f6f4e" text-anchor="middle">✓ funziona</text>
+            <rect x="500" y="34" width="200" height="86" rx="10" fill="#eccdc2" stroke="#8f2f20"/>
+            <text x="600" y="54" font-size="12" font-weight="700" fill="#8f2f20" text-anchor="middle">il server</text>
+            <text x="600" y="74" class="mono" font-size="10" fill="#5b5347" text-anchor="middle">app + Python 3.9</text>
+            <text x="600" y="90" class="mono" font-size="10" fill="#5b5347" text-anchor="middle">librerie A (v1), niente B</text>
+            <text x="600" y="108" font-size="11" font-weight="700" fill="#8f2f20" text-anchor="middle">✗ pause</text>
+            <defs><marker id="da" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0 0 L7 3 L0 6 Z" fill="#8f2f20"/></marker></defs>
+            <path d="M222 77 H498" stroke="#8f2f20" stroke-width="1.6" stroke-dasharray="5 4" marker-end="url(#da)"/>
+            <text x="360" y="70" font-size="11" font-style="italic" fill="#8f2f20" text-anchor="middle">&quot;funziona sulla mia macchina&quot;</text>
+
+            <text x="20" y="158" class="mono" font-size="12" font-weight="700" fill="#3f6f4e">CON un contenitore l'ambiente viaggia con il codice</text>
+            <rect x="20" y="170" width="200" height="60" rx="10" fill="#211e1a"/>
+            <text x="120" y="192" font-size="12" font-weight="700" fill="#fff" text-anchor="middle">immagine del contenitore</text>
+            <text x="120" y="210" class="mono" font-size="9.5" fill="#7fd1c4" text-anchor="middle">app + runtime + librerie + config</text>
+            <rect x="290" y="170" width="120" height="60" rx="10" fill="#e0e9dd" stroke="#3f6f4e"/><text x="350" y="205" font-size="11" font-weight="700" fill="#3f6f4e" text-anchor="middle">portatile ✓</text>
+            <rect x="430" y="170" width="120" height="60" rx="10" fill="#e0e9dd" stroke="#3f6f4e"/><text x="490" y="205" font-size="11" font-weight="700" fill="#3f6f4e" text-anchor="middle">messa in scena ✓</text>
+            <rect x="570" y="170" width="130" height="60" rx="10" fill="#e0e9dd" stroke="#3f6f4e"/><text x="635" y="205" font-size="11" font-weight="700" fill="#3f6f4e" text-anchor="middle">prodotto ✓</text>
+            <defs><marker id="da2" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0 0 L7 3 L0 6 Z" fill="#3f6f4e"/></marker></defs>
+            <path d="M222 200 H288" stroke="#3f6f4e" stroke-width="1.6" marker-end="url(#da2)"/>
+          </svg>
+          <div class="viz-note">Un contenitore racchiude l'applicazione <em>e</em> l'intero ambiente di runtime in uno solo
+            artefatto immutabile, quindi &quot;la cosa che corre&quot; è identica in byte ovunque.</div>
+        </div>
+
+        <h4>Tre problemi, una soluzione</h4>
+        <ul>
+          <li><strong>Inferno di dipendenza e deriva</strong>: il runtime esatto e le librerie sono integrati, quindi c'è
+            nessun &quot;passaggio di installazione&quot; per sbagliare e nessuna distorsione di versione tra gli ambienti.</li>
+          <li><strong>Isolamento</strong>: due app che necessitano di versioni contrastanti della stessa libreria possono essere eseguite parallelamente
+            affiancati su un host, ciascuno nella propria scatola sigillata, senza interferire.</li>
+          <li><strong>Densità e portabilità</strong>: i contenitori sono abbastanza leggeri da poterne contenere molti in uno solo
+            macchina e spostarsi liberamente tra laptop, CI e qualsiasi cloud, la base dell'orchestrazione
+            (Parte IV) e il moderno CI/CD (Parte V).</li>
+        </ul>
+
+        <div class="box key"><span class="tag">L'unica idea</span>
+          <p>Un contenitore fa <strong>&quot;la cosa che viene eseguita in produzione&quot; identica a &quot;la cosa che hai costruito e testato&quot;.</strong>
+            Tutto il resto, immagini, Docker, Kubernetes, pipeline, sono macchinari per costruire, spedire,
+            ed eseguire lo stesso artefatto su larga scala.</p>
+        </div>
+      </section>
+
+      <!-- 2 -->
+      <section id="s2">
+        <div class="sec-head">
+          <div class="sec-num">02</div>
+          <h2>Contenitori e macchine virtuali</h2>
+        </div>
+        <p>La domanda istintiva è &quot;non è solo una macchina virtuale?&quot; La risposta rivela quali sono effettivamente i contenitori
+          sono. A <strong>La VM virtualizza l'hardware</strong>: un hypervisor emula un'intera macchina e ogni VM esegue il suo
+          <em>proprio sistema operativo completo</em>, il proprio kernel, sopra il quale si trovano le sue librerie e la tua app.
+          A <strong>il contenitore virtualizza il sistema operativo</strong>: tutti i contenitori su un host <em>condividere quello dell'host
+          singolo nocciolo</em>e l'isolamento viene applicato dalle funzionalità del kernel anziché dall'emulazione di hardware separato.</p>
+
+        <div class="viz">
+          <div class="viz-cap">La differenza decisiva</div>
+          <div class="viz-title">Ciascuna VM fornisce un sistema operativo completo; i contenitori condividono un kernel</div>
+          <svg viewBox="0 0 720 280" xmlns="http://www.w3.org/2000/svg" role="img"
+            aria-label="Affiancati: macchine virtuali ciascuna con un sistema operativo guest su un hypervisor, rispetto ai contenitori che condividono un kernel host tramite un runtime del contenitore">
+            <text x="180" y="20" class="mono" font-size="12" font-weight="700" fill="#8f2f20" text-anchor="middle">Macchine virtuali</text>
+            <text x="540" y="20" class="mono" font-size="12" font-weight="700" fill="#3f6f4e" text-anchor="middle">Contenitori</text>
+            <!-- VM side -->
+            <g>
+              <rect x="30" y="30" width="140" height="70" rx="8" fill="#eccdc2" stroke="#8f2f20"/>
+              <text x="100" y="48" font-size="10.5" font-weight="700" fill="#8f2f20" text-anchor="middle">App A</text>
+              <text x="100" y="64" class="mono" font-size="8.5" fill="#5b5347" text-anchor="middle">contenitori/librerie</text>
+              <rect x="40" y="70" width="120" height="22" rx="5" fill="#e8b9b9"/><text x="100" y="85" class="mono" font-size="9" fill="#7a1f1f" text-anchor="middle">Sistema operativo guest + kernel</text>
+              <rect x="190" y="30" width="140" height="70" rx="8" fill="#eccdc2" stroke="#8f2f20"/>
+              <text x="260" y="48" font-size="10.5" font-weight="700" fill="#8f2f20" text-anchor="middle">App B</text>
+              <text x="260" y="64" class="mono" font-size="8.5" fill="#5b5347" text-anchor="middle">contenitori/librerie</text>
+              <rect x="200" y="70" width="120" height="22" rx="5" fill="#e8b9b9"/><text x="260" y="85" class="mono" font-size="9" fill="#7a1f1f" text-anchor="middle">Sistema operativo guest + kernel</text>
+              <rect x="30" y="108" width="300" height="30" rx="6" fill="#211e1a"/><text x="180" y="128" font-size="11" font-weight="700" fill="#fff" text-anchor="middle">Hypervisor</text>
+              <rect x="30" y="144" width="300" height="28" rx="6" fill="#d8cfbe"/><text x="180" y="163" font-size="10.5" font-weight="600" fill="#5b5347" text-anchor="middle">Sistema operativo host + kernel</text>
+              <rect x="30" y="178" width="300" height="26" rx="6" fill="#bcae95"/><text x="180" y="196" font-size="10.5" font-weight="600" fill="#3a342b" text-anchor="middle">Hardware fisico</text>
+            </g>
+            <!-- Container side -->
+            <g>
+              <rect x="390" y="30" width="95" height="62" rx="8" fill="#e0e9dd" stroke="#3f6f4e"/>
+              <text x="437" y="50" font-size="10.5" font-weight="700" fill="#3f6f4e" text-anchor="middle">App A</text>
+              <text x="437" y="66" class="mono" font-size="8" fill="#5b5347" text-anchor="middle">contenitori/librerie</text>
+              <text x="437" y="80" class="mono" font-size="8" fill="#3f6f4e" text-anchor="middle">nessun nocciolo</text>
+              <rect x="495" y="30" width="95" height="62" rx="8" fill="#e0e9dd" stroke="#3f6f4e"/>
+              <text x="542" y="50" font-size="10.5" font-weight="700" fill="#3f6f4e" text-anchor="middle">App B</text>
+              <text x="542" y="66" class="mono" font-size="8" fill="#5b5347" text-anchor="middle">contenitori/librerie</text>
+              <text x="542" y="80" class="mono" font-size="8" fill="#3f6f4e" text-anchor="middle">nessun nocciolo</text>
+              <rect x="600" y="30" width="95" height="62" rx="8" fill="#e0e9dd" stroke="#3f6f4e"/>
+              <text x="647" y="50" font-size="10.5" font-weight="700" fill="#3f6f4e" text-anchor="middle">App C</text>
+              <text x="647" y="66" class="mono" font-size="8" fill="#5b5347" text-anchor="middle">contenitori/librerie</text>
+              <text x="647" y="80" class="mono" font-size="8" fill="#3f6f4e" text-anchor="middle">nessun nocciolo</text>
+              <rect x="390" y="100" width="305" height="30" rx="6" fill="#3f6f4e"/><text x="542" y="120" font-size="11" font-weight="700" fill="#fff" text-anchor="middle">Runtime del contenitore (ad esempio containerd)</text>
+              <rect x="390" y="136" width="305" height="36" rx="6" fill="#3a6a3a"/><text x="542" y="159" font-size="11" font-weight="700" fill="#fff" text-anchor="middle">UN kernel del sistema operativo host condiviso</text>
+              <rect x="390" y="178" width="305" height="26" rx="6" fill="#bcae95"/><text x="542" y="196" font-size="10.5" font-weight="600" fill="#3a342b" text-anchor="middle">Hardware fisico</text>
+            </g>
+            <text x="360" y="232" class="serif" font-size="13" font-style="italic" fill="#5b5347" text-anchor="middle">Nessun sistema operativo guest per app significa che i contenitori si avviano in millisecondi, pesano megabyte e non gigabyte,</text>
+            <text x="360" y="252" class="serif" font-size="13" font-style="italic" fill="#5b5347" text-anchor="middle">e puoi inserirne molti di più sullo stesso hardware.</text>
+          </svg>
+          <div class="viz-note">L'unità di isolamento di una VM è un intero computer emulato; quello di un contenitore è un gruppo di processi
+            recintato dal nocciolo. Quella singola scelta architettonica spiega ogni differenza pratica di seguito.</div>
+        </div>
+
+        <div class="tbl-wrap">
+          <table>
+            <thead><tr><th>Dimensione</th><th>Macchina virtuale</th><th>Contenitore</th></tr></thead>
+            <tbody>
+              <tr><td>Isola di</td><td>Emulazione dell'hardware (hypervisor)</td><td>Funzionalità del kernel (spazi dei nomi + cgroup)</td></tr>
+              <tr><td>Sistema operativo per istanza</td><td>Sistema operativo guest completo + kernel proprio</td><td>Condivide il kernel host; nessun sistema operativo guest</td></tr>
+              <tr><td>Dimensioni</td><td>Gigabyte</td><td>Megabyte</td></tr>
+              <tr><td>Ora di inizio</td><td>Secondi in minuti (avviare un sistema operativo)</td><td>Millisecondi (avvia un processo)</td></tr>
+              <tr><td>Densità per host</td><td>Decine</td><td>Da centinaia a migliaia</td></tr>
+              <tr><td>Forza di isolamento</td><td>Più forte (noccioli separati)</td><td>Più debole (kernel condiviso), un vero compromesso</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="box gotcha"><span class="tag">Il compromesso del kernel condiviso</span>
+          <p>La condivisione di un kernel è ciò che rende leggeri i contenitori <em>e</em> è il loro principale avvertimento sulla sicurezza: a livello di kernel
+            l'escape influisce su ogni contenitore sull'host, mentre le VM hanno un confine più spesso. Ecco perché multi-tenant
+            le piattaforme spesso eseguono contenitori <em>dentro</em> VM e perché la sicurezza dei container (sezione 17 e security
+            capitolo) si concentra sui privilegi minimi, sugli utenti non root e sulle capacità di eliminazione. I contenitori sono isolamento,
+            non una sandbox di sicurezza rigida per impostazione predefinita.</p>
+        </div>
+      </section>
+
+      <!-- 3 -->
+      <section id="s3">
+        <div class="sec-head">
+          <div class="sec-num">03</div>
+          <h2>Cos'è realmente un contenitore</h2>
+        </div>
+        <p>Demistificato: <strong>un contenitore è solo un normale processo Linux (o alcuni) a cui è stato detto al kernel
+          isolare.</strong> Non c'è alcun oggetto &quot;contenitore&quot; nel kernel, la magia sta nelle tre vecchie funzionalità di Linux
+          combinati in questo modo un processo <em>crede</em> ha una macchina tutta per sé. Comprendere questi tre rimuove tutto
+          mistero e spiega ogni limite e comportamento che incontrerai.</p>
+
+        <div class="viz">
+          <div class="viz-cap">I tre ingredienti</div>
+          <div class="viz-title">Un contenitore = spazi dei nomi + cgroup + un'immagine del filesystem</div>
+          <svg viewBox="0 0 720 240" xmlns="http://www.w3.org/2000/svg" role="img"
+            aria-label="Tre pilastri di un contenitore: spazi dei nomi per ciò che può vedere, cgroup per ciò che può utilizzare e un filesystem di unione per ciò su cui viene eseguito">
+            <rect x="20" y="30" width="210" height="150" rx="12" fill="#f7e9e2" stroke="#b8402e"/>
+            <text x="125" y="56" font-size="14" font-weight="700" fill="#8f2f20" text-anchor="middle">Spazi dei nomi</text>
+            <text x="125" y="74" class="mono" font-size="10" fill="#b8402e" text-anchor="middle">COSA PUÒ VEDERE</text>
+            <g font-size="10.5" fill="#5b5347"><text x="40" y="98">/ pid, its own process tree</text><text x="40" y="118">/ net, its own interfaces</text><text x="40" y="138">/ mnt, its own mounts</text><text x="40" y="158">/ uts/ipc/user, hostname, ...</text></g>
+            <rect x="255" y="30" width="210" height="150" rx="12" fill="#e0e9dd" stroke="#3f6f4e"/>
+            <text x="360" y="56" font-size="14" font-weight="700" fill="#3f6f4e" text-anchor="middle">cgroups</text>
+            <text x="360" y="74" class="mono" font-size="10" fill="#3f6f4e" text-anchor="middle">COSA PUÒ UTILIZZARE</text>
+            <g font-size="10.5" fill="#5b5347"><text x="275" y="98">/ CPU shares / quota</text><text x="275" y="118">/ memory limit</text><text x="275" y="138">/ I/O bandwidth</text><text x="275" y="158">/ pids count</text></g>
+            <rect x="490" y="30" width="210" height="150" rx="12" fill="#f0e5c9" stroke="#b07d2b"/>
+            <text x="595" y="56" font-size="14" font-weight="700" fill="#b07d2b" text-anchor="middle">Unione FS</text>
+            <text x="595" y="74" class="mono" font-size="10" fill="#b07d2b" text-anchor="middle">SU COSA GIRA</text>
+            <g font-size="10.5" fill="#5b5347"><text x="510" y="98">/ the image's layers</text><text x="510" y="118">/ read-only base + libs</text><text x="510" y="138">/ thin writable top layer</text><text x="510" y="158">/ its private root &quot;/&quot;</text></g>
+            <text x="360" y="212" class="serif" font-size="13" font-style="italic" fill="#5b5347" text-anchor="middle">Combinando i tre elementi, un processo ordinario si convince di possedere la macchina, di quell'illusione che è un contenitore.</text>
+          </svg>
+        </div>
+
+        <h3>1. Namespace: l'illusione di essere soli</h3>
+        <p>A <strong>spazio dei nomi</strong> partiziona una risorsa globale del kernel in modo che il processo veda solo la propria porzione. Il
+          Lo spazio dei nomi PID fa credere al processo principale del contenitore che sia PID 1 senza fratelli; lo spazio dei nomi di rete
+          gli fornisce le proprie interfacce e porte; lo spazio dei nomi mount fornisce la propria visione del filesystem. Da
+          all'interno sembra una macchina privata. Dall'host si tratta solo di processi con etichette extra, <code>ps</code> sull'host li vede tutti.</p>
+
+        <h3>2. cgroups: imporre limiti</h3>
+        <p>Gli spazi dei nomi nascondono il resto del sistema; <strong>gruppi di controllo (cgroups)</strong> limitare l'entità del processo
+          consumo, CPU, memoria, I/O, conteggio dei processi. Questo è ciò che impedisce a un container di affamare i suoi vicini,
+          ed è esattamente il meccanismo attivato da Kubernetes quando imposti la risorsa <em>richieste</em> e <em>limiti</em>
+          (sez. 17). Supera un limite di memoria e l'OOM killer del kernel termina il contenitore, il famoso
+          <code>OOMKilled</code> stato.</p>
+
+        <h3>3. Un'immagine del filesystem: la propria radice</h3>
+        <p>Infine il processo ha bisogno di file: i propri <code>/</code> con un runtime, librerie e il tuo file binario. Quello arriva
+          dal <strong>immagine</strong>, stratificato sullo spazio dei nomi di montaggio come file system root del contenitore (sec 04).
+          Il processo non può vedere i file dell'host, solo quelli dell'immagine, più qualunque cosa tu monti esplicitamente (sez. 09).</p>
+
+        <div class="box note"><span class="tag">Perché &quot;contenitori Linux&quot; in particolare</span>
+          <p>Gli spazi dei nomi e i cgroup lo sono <em>kernel Linux</em> funzionalità, quindi i contenitori sono nativamente una tecnologia Linux.
+            Docker su macOS o Windows esegue silenziosamente una VM Linux leggera e i tuoi contenitori risiedono al suo interno, il che
+            ecco perché un &quot;contenitore&quot; sul tuo Mac è davvero Linux-in-a-VM sotto il cofano. Il manufatto è portatile; il nocciolo
+            le funzionalità di cui ha bisogno sono quelle di Linux.</p>
+        </div>
+      </section>
+
+      <div class="part-label">Parte II / Docker / Immagini e contenitori</div>
+
+      <!-- 4 -->
+      <section id="s4">
+        <div class="sec-head"><div class="sec-num">04</div><h2>Immagini, livelli e filesystem dell'unione</h2></div>
+        <p>Due parole si confondono costantemente, quindi azzeccale per prime. An <strong>immagine</strong> è l'immutabile, su disco
+          <em>modello</em>, un filesystem impacchettato più metadati (cosa eseguire, quali porte, env). A
+          <strong>contenitore</strong> è un <em>istanza in esecuzione</em> di un'immagine, l'immagine portata in vita come un
+          processo isolato (sez 03). La relazione è esattamente classe-oggetto: un'immagine, molti contenitori.</p>
+
+        <div class="analogy">Un'immagine sta a un contenitore come una classe sta a un oggetto o cosa sta a un pasto cotto al forno e surgelato
+          lo stesso pasto riscaldato nel piatto. Costruisci l'immagine una volta; esegui molti contenitori identici da esso.</div>
+
+        <h3>Le immagini sono pile di livelli di sola lettura</h3>
+        <p>La parte intelligente è <em>come</em> un'immagine memorizza il suo filesystem: come una pila di <strong>strati</strong>, ciascuno
+          uno una serie di modifiche ai file, impilate da a <strong>file system union</strong> che li fonde in uno solo
+          coerente <code>/</code>. Ogni istruzione nella tua build aggiunge un livello (sez. 05). I livelli sono immutabili e
+          <strong>indirizzato al contenuto</strong>, quindi i livelli identici vengono memorizzati una volta e <em>condiviso</em> tra le immagini, se dieci immagini utilizzano la stessa base, quella base risiede su disco e viaggia sulla rete una sola volta.</p>
+
+        <div class="viz">
+          <div class="viz-cap">File system dell'Unione</div>
+          <div class="viz-title">Livelli di sola lettura condivisi tra contenitori, ciascuno con la propria parte superiore sottile scrivibile</div>
+          <svg viewBox="0 0 720 270" xmlns="http://www.w3.org/2000/svg" role="img"
+            aria-label="Una pila di livelli di immagine di sola lettura condivisi da due contenitori, ciascuno dei quali aggiunge il proprio livello scrivibile in cima tramite copia su scrittura">
+            <text x="20" y="22" class="mono" font-size="11" font-weight="700" fill="#b07d2b">IMMAGINE = livelli di sola lettura (condivisi)</text>
+            <rect x="20" y="32" width="300" height="26" rx="5" fill="#f0e5c9" stroke="#b07d2b"/><text x="34" y="50" class="mono" font-size="10" fill="#8a6420">Binario dell'app L4 COPY +2 MB</text>
+            <rect x="20" y="62" width="300" height="26" rx="5" fill="#f0e5c9" stroke="#b07d2b"/><text x="34" y="80" class="mono" font-size="10" fill="#8a6420">L'installazione pip/go L3 richiede +40 MB</text>
+            <rect x="20" y="92" width="300" height="26" rx="5" fill="#f0e5c9" stroke="#b07d2b"/><text x="34" y="110" class="mono" font-size="10" fill="#8a6420">Librerie di runtime L2 apt-get +25 MB</text>
+            <rect x="20" y="122" width="300" height="26" rx="5" fill="#f0e6cc" stroke="#b07d2b"/><text x="34" y="140" class="mono" font-size="10" fill="#8a6420">Immagine base L1 (ad esempio Debian) 50 MB</text>
+            <text x="170" y="166" class="serif" font-size="11" font-style="italic" fill="#5b5347" text-anchor="middle">questi quattro livelli vengono archiviati una volta e condivisi</text>
+
+            <!-- two containers -->
+            <text x="500" y="22" class="mono" font-size="11" font-weight="700" fill="#3f6f4e">I CONTENITORI aggiungono un piano scrivibile</text>
+            <rect x="400" y="40" width="140" height="24" rx="5" fill="#e0e9dd" stroke="#3f6f4e"/><text x="470" y="57" class="mono" font-size="10" fill="#3f6f4e" text-anchor="middle">scrivibile (C1)</text>
+            <rect x="560" y="40" width="140" height="24" rx="5" fill="#e0e9dd" stroke="#3f6f4e"/><text x="630" y="57" class="mono" font-size="10" fill="#3f6f4e" text-anchor="middle">scrivibile (C2)</text>
+            <defs><marker id="ua" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0 0 L6 3 L0 6 Z" fill="#b07d2b"/></marker></defs>
+            <path d="M470 64 V96 C470 110 360 110 322 96" stroke="#b07d2b" stroke-width="1.3" fill="none" stroke-dasharray="3 3" marker-end="url(#ua)"/>
+            <path d="M630 64 V100 C630 116 360 116 322 100" stroke="#b07d2b" stroke-width="1.3" fill="none" stroke-dasharray="3 3" marker-end="url(#ua)"/>
+            <text x="550" y="92" font-size="10" fill="#5b5347">entrambi condividono lo stesso</text>
+            <text x="550" y="108" font-size="10" fill="#5b5347">livelli di sola lettura sottostanti</text>
+
+            <text x="20" y="200" class="mono" font-size="11" font-weight="700" fill="#b8402e">copia su scrittura</text>
+            <text x="20" y="220" font-size="11.5" fill="#5b5347">Un contenitore legge direttamente dai livelli condivisi. L'istante in cui <tspan font-weight="700">modifica</tspan> un fascicolo,</text>
+            <text x="20" y="238" font-size="11.5" fill="#5b5347">quel file viene copiato nel proprio livello scrivibile, l'immagine sottostante non viene mai toccata.</text>
+            <text x="20" y="258" font-size="11" font-style="italic" fill="#8f2f20">Quel livello scrivibile è effimero: elimina il contenitore e quelle modifiche svaniscono (sec 09 per la persistenza).</text>
+          </svg>
+          <div class="viz-note">La condivisione dei livelli è il motivo per cui estrarre la tua seconda immagine in base allo stesso runtime è quasi istantaneo,
+            e perché la dimensione dell'immagine è dominata dalla scelta di base (sez. 07).</div>
+        </div>
+
+        <div class="box gotcha"><span class="tag">Il livello scrivibile non è spazio di archiviazione</span>
+          <p>Tutto ciò che un contenitore scrive sul proprio filesystem muore con il contenitore. Registri, caricamenti, file di database
+            le scritte &quot;dentro&quot; scompaiono al riavvio. I dati persistenti devono vivere in a <strong>volume</strong> (sez 09) o un
+            servizio esterno. Questa effimerità è una caratteristica, è ciò che rende i contenitori usa e getta e
+            sostituibile, ma è la trappola per principianti più comune.</p>
+        </div>
+      </section>
+
+      <!-- 5 -->
+      <section id="s5">
+        <div class="sec-head"><div class="sec-num">05</div><h2>Il Dockerfile</h2></div>
+        <p>A <strong>Dockerfile</strong> è la ricetta che costruisce un'immagine: una sequenza di istruzioni, eseguite dall'alto
+          in basso, <em>ciascuno producendo uno strato</em> (sez. 04). <code>docker build</code> lo legge, esegue ogni passaggio e
+          memorizza il risultato nella cache. Poiché il file è testo semplice nel repository, la build è riproducibile e rivedibile e l'ambiente diventa codice. Ecco lo stesso servizio web containerizzato in Go e in Python:</p>
+
+        <div class="codeblock" data-cb>
+          <div class="code-bar"><div class="dots"><i></i><i></i><i></i></div>
+            <div class="code-tabs"><button class="on" data-lang="go"><span class="lang-go">&amp;#9679;</span> Vai</button><button data-lang="py"><span class="lang-py">&amp;#9679;</span> Pitone</button></div></div>
+          <div class="code-panel on" data-panel="go"><pre><code class="language-dockerfile"># FROM picks the base image, the first (bottom) layer. Pin a version, never :latest
+FROM golang:1.22
+
+# WORKDIR sets the working dir for the instructions that follow (and at runtime)
+WORKDIR /app
+
+# Copy dependency manifests FIRST and download, this layer caches across code edits (sec 7)
+COPY go.mod go.sum ./
+RUN go mod download
+
+# Now copy the source and build the binary
+COPY . .
+RUN go build -o /server ./cmd/server
+
+# Document the port the app listens on (metadata; publishing happens at run time sec 8)
+EXPOSE 8080
+
+# CMD is the default command run when a container starts from this image
+CMD ["/server"]</code></pre></div>
+          <div class="code-panel" data-panel="py"><pre><code class="language-dockerfile"># Pin a slim base, smaller and fewer CVEs than the full image
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Copy the manifest FIRST so the dependency layer caches across code edits (sec 7)
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Then copy the application code
+COPY . .
+
+EXPOSE 8080
+
+# Exec form (JSON array), runs the process directly as PID 1, so signals work (sec  graceful shutdown)
+CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8080"]</code></pre></div>
+        </div>
+
+        <div class="tbl-wrap">
+          <table>
+            <thead><tr><th>Istruzioni</th><th>Cosa fa</th></tr></thead>
+            <tbody>
+              <tr><td><code>FROM</code></td><td>L'immagine di base, il livello iniziale. Tutto si basa su di esso.</td></tr>
+              <tr><td><code>WORKDIR</code></td><td>Imposta (e crea) la directory corrente per i passaggi successivi e in fase di esecuzione.</td></tr>
+              <tr><td><code>COPY</code> / <code>ADD</code></td><td>Copia i file dal contesto di compilazione nell'immagine. Preferisco <code>COPY</code>; <code>ADD</code> ha un comportamento URL/tar sorprendente.</td></tr>
+              <tr><td><code>RUN</code></td><td>Esegui un comando a <em>costruire</em> time (installa deps, compila), inserisce il risultato in un livello.</td></tr>
+              <tr><td><code>ENV</code></td><td>Imposta le variabili di ambiente integrate nell'immagine (impostazioni predefinite di configurazione, sezione 16).</td></tr>
+              <tr><td><code>EXPOSE</code></td><td>Documenta la porta di ascolto. Informativo; non lo pubblica (sez 08).</td></tr>
+              <tr><td><code>ENTRYPOINT</code> / <code>CMD</code></td><td>Cosa viene eseguito all'avvio del contenitore. <code>ENTRYPOINT</code> = l'eseguibile, <code>CMD</code> = argomenti predefiniti.</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="box note"><span class="tag">Costruisci contesto e <code>RUN</code> contro <code>CMD</code></span>
+          <p>Due confusioni frequenti. Il <strong>costruire il contesto</strong> è la directory che indichi <code>docker build</code>
+            at, tutto ciò che contiene viene inviato al builder, quindi un contesto gonfio (ad es. <code>node_modules</code>, a
+            <code>.git</code> cartella) rallenta le build; taglialo con <code>.dockerignore</code> (sez. 07). E <strong><code>RUN</code>
+            viene eseguito in fase di compilazione</strong> (incorporato nell'immagine) while <strong><code>CMD</code>/<code>ENTRYPOINT</code>
+            eseguire in fase di esecuzione</strong> (quando si avvia un contenitore). Mescolarli è un classico errore iniziale.</p>
+        </div>
+      </section>
+
+      <!-- 6 -->
+      <section id="s6">
+        <div class="sec-head"><div class="sec-num">06</div><h2>Costruzioni multistadio</h2></div>
+        <p>La tecnica di maggior impatto per la produzione di immagini. Il problema: <em>edificio</em> ha bisogno di strumenti pesanti
+          (compilatori, SDK completo, dipendenze di sviluppo in fase di compilazione) che il <em>correre</em> l'app no. Spedisci loro e il tuo
+          l'immagine è enorme e piena di superficie di attacco. A <strong>costruzione in più fasi</strong> utilizza una fase per costruire e a
+          in secondo luogo, mettere in scena quello <em>copia solo l'artefatto finito</em>, la toolchain viene scartata.</p>
+
+        <div class="viz">
+          <div class="viz-cap">Multistadio</div>
+          <div class="viz-title">Costruisci in una fase pesante, copia solo l'artefatto in una piccola immagine finale</div>
+          <svg viewBox="0 0 720 220" xmlns="http://www.w3.org/2000/svg" role="img"
+            aria-label="Una fase di builder di grandi dimensioni con SDK completo che produce un binario, con solo quel binario copiato in una piccola fase di runtime finale, il builder scartato">
+            <text x="180" y="22" class="mono" font-size="11" font-weight="700" fill="#8f2f20" text-anchor="middle">FASE 1 / costruttore (scartato)</text>
+            <rect x="30" y="32" width="300" height="150" rx="12" fill="#eccdc2" stroke="#8f2f20"/>
+            <text x="180" y="56" font-size="12" font-weight="700" fill="#8f2f20" text-anchor="middle">golang:1.22 / python completo</text>
+            <g class="mono" font-size="10" fill="#5b5347"><text x="50" y="80">+ compilatore/SDK completo</text><text x="50" y="100">+ creare dipendenze</text><text x="50" y="120">+ il tuo albero sorgente</text><text x="50" y="140">+ oggetti intermedi</text></g>
+            <rect x="70" y="150" width="220" height="22" rx="5" fill="#211e1a"/><text x="180" y="166" class="mono" font-size="10" fill="#7fd1c4" text-anchor="middle">/server (the only keeper)</text>
+            <text x="180" y="200" font-size="11" font-style="italic" fill="#8f2f20" text-anchor="middle">~900 MB, eliminati dopo la creazione</text>
+
+            <defs><marker id="ma" markerWidth="10" markerHeight="10" refX="7" refY="3.5" orient="auto"><path d="M0 0 L8 3.5 L0 7 Z" fill="#3f6f4e"/></marker></defs>
+            <path d="M332 161 H388" stroke="#3f6f4e" stroke-width="2.4" marker-end="url(#ma)"/>
+            <text x="360" y="150" class="mono" font-size="9" fill="#3f6f4e" text-anchor="middle">COPIA --da</text>
+
+            <text x="540" y="22" class="mono" font-size="11" font-weight="700" fill="#3f6f4e" text-anchor="middle">FASE 2 / finale (spedito)</text>
+            <rect x="400" y="92" width="300" height="90" rx="12" fill="#e0e9dd" stroke="#3f6f4e"/>
+            <text x="550" y="116" font-size="12" font-weight="700" fill="#3f6f4e" text-anchor="middle">senza distro / alpino</text>
+            <rect x="440" y="128" width="220" height="22" rx="5" fill="#211e1a"/><text x="550" y="144" class="mono" font-size="10" fill="#7fd1c4" text-anchor="middle">/server</text>
+            <text x="550" y="172" font-size="11" font-style="italic" fill="#3f6f4e" text-anchor="middle">~15 MB, solo binario + runtime minimo</text>
+          </svg>
+        </div>
+
+        <div class="codeblock" data-cb>
+          <div class="code-bar"><div class="dots"><i></i><i></i><i></i></div>
+            <div class="code-tabs"><button class="on" data-lang="go"><span class="lang-go">&amp;#9679;</span> Vai</button><button data-lang="py"><span class="lang-py">&amp;#9679;</span> Pitone</button></div></div>
+          <div class="code-panel on" data-panel="go"><pre><code class="language-dockerfile"># ---- Stage 1: build with the full Go toolchain ----
+FROM golang:1.22 AS builder
+WORKDIR /app
+COPY go.mod go.sum ./
+RUN go mod download
+COPY . .
+# static binary, no libc dependency, perfect for a scratch/distroless final image
+RUN CGO_ENABLED=0 go build -o /server ./cmd/server
+
+# ---- Stage 2: tiny runtime, no compiler, non-root ----
+FROM gcr.io/distroless/static:nonroot
+COPY --from=builder /server /server   # copy ONLY the artifact across stages
+EXPOSE 8080
+USER nonroot:nonroot                  # never run as root (sec 17, security)
+ENTRYPOINT ["/server"]
+# Result: a ~10-15 MB image with no shell, no package manager, minimal CVEs</code></pre></div>
+          <div class="code-panel" data-panel="py"><pre><code class="language-dockerfile"># ---- Stage 1: install deps into a venv with build tools available ----
+FROM python:3.11 AS builder
+WORKDIR /app
+RUN python -m venv /venv
+ENV PATH="/venv/bin:$PATH"
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt   # may compile native wheels here
+
+# ---- Stage 2: slim runtime, copy the ready venv, run non-root ----
+FROM python:3.11-slim
+COPY --from=builder /venv /venv          # copy ONLY the built virtualenv
+ENV PATH="/venv/bin:$PATH"
+WORKDIR /app
+COPY . .
+RUN useradd -m app && chown -R app /app
+USER app                                 # non-root (sec 17)
+EXPOSE 8080
+CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8080"]</code></pre></div>
+        </div>
+        <p class="code-cap">Go viene compilato in un singolo binario statico, quindi la fase finale può essere quasi vuota (senza distro/scratch).
+          Python ha bisogno dell'interprete, quindi la vittoria deriva dalla copia di un virtualenv precostruito in a <code>-slim</code>
+          base invece di trasportare i compilatori.</p>
+
+        <div class="box key"><span class="tag">Perché questo è importante nella produzione</span>
+          <p>Le immagini più piccole vengono visualizzate più velocemente (ridimensionamento automatico e implementazioni più rapide, sezione 18), costano meno da archiviare e
+            trasferimento e ridurre drasticamente la superficie di attacco, un'immagine senza distro non ha alcun guscio per un utente malintenzionato
+            da usare. Le build in più fasi sono l'impostazione predefinita per qualsiasi immagine di servizio seria.</p>
+        </div>
+      </section>
+
+      <!-- 7 -->
+      <section id="s7">
+        <div class="sec-head"><div class="sec-num">07</div><h2>Ottimizzazione delle immagini e memorizzazione nella cache dei livelli</h2></div>
+        <p>Due leve rendono le costruzioni veloci e le immagini snelle, ed entrambe seguono direttamente dal modello a livelli (sez. 04). Il
+          il primo è <strong>ordinamento della cache</strong>; il secondo è <strong>scelta dell'immagine di base</strong> oltre a potare cosa
+          tu copi.</p>
+
+        <h3>Ordinare le istruzioni da quelle modificate meno a quelle modificate più frequentemente</h3>
+        <p>Docker memorizza nella cache ogni livello e lo riutilizza nella build successiva <em>purché quell'istruzione e tutto prima
+          sono invariati</em>. Nel momento in cui gli input di un livello cambiano, quel livello e <em>ogni strato dopo di esso</em> sono
+          ricostruito. Quindi la regola d'oro è: mettere le cose che cambiano raramente (installazione delle dipendenze) <em>prima</em> il
+          cose che cambiano ad ogni commit (copiando la tua fonte). Ecco perché ogni Dockerfile sopra copia la dipendenza
+          manifest e installa <em>prima</em> copiando l'intero sorgente, modifichi costantemente il codice ma le dipendenze
+          raramente, quindi il costoso livello di installazione rimane memorizzato nella cache.</p>
+
+        <div class="viz">
+          <div class="viz-cap">Invalidazione della cache</div>
+          <div class="viz-title">Cambia un livello e tutto ciò che è sotto si ricostruisce</div>
+          <svg viewBox="0 0 720 200" xmlns="http://www.w3.org/2000/svg" role="img"
+            aria-label="Due ordinamenti di build: deps-before-code mantiene il livello di dipendenza memorizzato nella cache su una modifica del codice, code-before-deps lo interrompe">
+            <text x="180" y="20" class="mono" font-size="11" font-weight="700" fill="#3f6f4e" text-anchor="middle">deps PRIMA del codice, bene</text>
+            <rect x="40" y="30" width="280" height="24" rx="5" fill="#eccdc2" stroke="#8f2f20"/><text x="54" y="47" class="mono" font-size="10" fill="#8f2f20">COPIA. .  + costruire ↻ ricostruito</text>
+            <rect x="40" y="58" width="280" height="24" rx="5" fill="#e0e9dd" stroke="#3f6f4e"/><text x="54" y="75" class="mono" font-size="10" fill="#3f6f4e">ESEGUI installazione dipendes ✓ NELLA CACH</text>
+            <rect x="40" y="86" width="280" height="24" rx="5" fill="#e0e9dd" stroke="#3f6f4e"/><text x="54" y="103" class="mono" font-size="10" fill="#3f6f4e">COPIA manifesto ✓ NELLA CACH</text>
+            <rect x="40" y="114" width="280" height="24" rx="5" fill="#e0e9dd" stroke="#3f6f4e"/><text x="54" y="131" class="mono" font-size="10" fill="#3f6f4e">DALLA base ✓ NELLA CACH</text>
+            <text x="180" y="160" font-size="11" font-style="italic" fill="#3f6f4e" text-anchor="middle">modifica il codice -&gt; ricostruisce solo il livello superiore (secondi)</text>
+
+            <text x="540" y="20" class="mono" font-size="11" font-weight="700" fill="#8f2f20" text-anchor="middle">codice PRIMA deps, cattivo</text>
+            <rect x="400" y="30" width="280" height="24" rx="5" fill="#eccdc2" stroke="#8f2f20"/><text x="414" y="47" class="mono" font-size="10" fill="#8f2f20">ESEGUI installazione dips ↻ ricostruito</text>
+            <rect x="400" y="58" width="280" height="24" rx="5" fill="#eccdc2" stroke="#8f2f20"/><text x="414" y="75" class="mono" font-size="10" fill="#8f2f20">COPIA. .               ↻ cache dei busti</text>
+            <rect x="400" y="86" width="280" height="24" rx="5" fill="#e0e9dd" stroke="#3f6f4e"/><text x="414" y="103" class="mono" font-size="10" fill="#3f6f4e">DALLA base ✓ NELLA CACH</text>
+            <text x="540" y="135" font-size="11" font-style="italic" fill="#8f2f20" text-anchor="middle">modifica codice -&gt; deps reinstalla ogni volta (minuti)</text>
+          </svg>
+        </div>
+
+        <h3>Scegli una base piccola e copia meno</h3>
+        <ul>
+          <li><strong>Immagine di base</strong>: <code>-slim</code> le varianti perdono centinaia di MB; <strong>alpino</strong>
+            è minuscolo (musl libc, controlla la compatibilità); <strong>senza distro</strong> spedisce solo la tua app e il relativo runtime
+            senza shell o gestore di pacchetti (il più sicuro). Scegli il più piccolo che esegue la tua app.</li>
+          <li><strong><code>.dockerignore</code></strong>: mantiene la spazzatura fuori dal contesto di creazione e dall'immagine
+            (build più veloci, immagini più piccole, nessun segreto trapelato).</li>
+          <li><strong>Combina correlati <code>RUN</code>s e ripulisci nello stesso livello</strong>: eliminazione di una cache
+            nell'a <em>più tardi</em> il livello non riduce l'immagine (i byte vivono ancora nel livello precedente); pulito dentro
+            lo stesso <code>RUN</code>.</li>
+        </ul>
+
+        <div class="codeblock single">
+          <div class="code-bar"><div class="dots"><i></i><i></i><i></i></div><span class="filename">.dockerignore / taglia il contesto di compilazione</span></div>
+          <pre><code class="language-bash">.git
+node_modules
+*.md
+.env            # never bake secrets into an image (sec 16)
+**/__pycache__
+*.log
+dist/
+.vscode/</code></pre>
+        </div>
+
+        <div class="box gotcha"><span class="tag">La pulizia deve essere nello stesso livello</span>
+          <p><code>RUN apt-get install ...</code> su una riga e <code>RUN rm -rf /var/lib/apt/lists/*</code> il prossimo
+            lo fa <em>no</em> ridurre le dimensioni, i file esistono ancora nel livello di installazione. Incatenateli:
+            <code>RUN apt-get update &amp;&amp; apt-get install -y X &amp;&amp; rm -rf /var/lib/apt/lists/*</code> quindi il
+            la pulizia avviene prima che lo strato venga sigillato.</p>
+        </div>
+      </section>
+
+      <!-- 8 -->
+      <section id="s8">
+        <div class="sec-head"><div class="sec-num">08</div><h2>Runtime, registri e tag</h2></div>
+        <p>Hai creato un'immagine, ora eseguila, condividila e creane la versione. Tre comandi coprono il 90% dell'uso quotidiano e
+          tre concetti (registro, tag, runtime) inquadrano il ciclo di vita.</p>
+
+        <div class="codeblock single">
+          <div class="code-bar"><div class="dots"><i></i><i></i><i></i></div><span class="filename">il ciclo di vita quotidiano di Docker</span></div>
+          <pre><code class="language-bash"># BUILD an image from the Dockerfile in . and name:tag it
+docker build -t myapp:1.4.0 .
+
+# RUN a container from it:
+#   -d detached  -p host:container publishes a port  -e sets an env var (sec 16)
+docker run -d -p 8080:8080 -e DATABASE_URL=$DB myapp:1.4.0
+
+# Inspect & debug
+docker ps                      # running containers
+docker logs -f &lt;id&gt;            # stream stdout/stderr (your app should log there sec logging)
+docker exec -it &lt;id&gt; sh        # shell INTO a running container to poke around
+docker stop &lt;id&gt;               # sends SIGTERM, then SIGKILL after a grace period (sec graceful shutdown)
+
+# SHARE via a registry
+docker tag  myapp:1.4.0 registry.example.com/team/myapp:1.4.0
+docker push registry.example.com/team/myapp:1.4.0     # upload
+docker pull registry.example.com/team/myapp:1.4.0     # download (what prod/K8s does)</code></pre>
+        </div>
+
+        <h3>Registro, repository, tag</h3>
+        <p>A <strong>registro</strong> è il server che memorizza le immagini (Docker Hub, GitHub Container Registry, AWS ECR,
+          Registro degli artefatti di Google). A <strong>deposito</strong> è un'immagine con nome al suo interno; un <strong>etichetta</strong>
+          è un'etichetta per una versione specifica (<code>myapp:1.4.0</code>). Premendo si caricano i tuoi livelli; tirando i download
+          loro e, grazie ai livelli indirizzati al contenuto (sez. 04), solo i livelli che il registro non possiede già
+          spostarsi sul filo. Questo ciclo push/pull è il passaggio tra la tua build (sez. 19) e il punto in cui si trova l'immagine
+          corre (Parte IV).</p>
+
+        <div class="viz">
+          <div class="viz-cap">Il ciclo di vita dell'immagine</div>
+          <div class="viz-title">Crea una volta, esegui il push in un registro, esegui il pull ovunque per eseguirlo</div>
+          <svg viewBox="0 0 720 150" xmlns="http://www.w3.org/2000/svg" role="img"
+            aria-label="Dockerfile crea un'immagine, che viene inviata a un registro, quindi estratta ed eseguita da CI, staging e produzione">
+            <defs><marker id="ba" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0 0 L7 3 L0 6 Z" fill="#8f2f20"/></marker></defs>
+            <rect x="20" y="50" width="120" height="50" rx="9" fill="#b8402e"/><text x="80" y="72" font-size="11.5" font-weight="700" fill="#fff" text-anchor="middle">compilazione della finestra mobile</text><text x="80" y="89" class="mono" font-size="9" fill="#f4d9cf" text-anchor="middle">Dockerfile</text>
+            <path d="M142 75 H210" stroke="#8f2f20" stroke-width="1.8" marker-end="url(#ba)"/><text x="176" y="67" class="mono" font-size="9" fill="#8f2f20" text-anchor="middle">spingere</text>
+            <rect x="212" y="44" width="150" height="62" rx="9" fill="#211e1a"/><text x="287" y="70" font-size="12" font-weight="700" fill="#fff" text-anchor="middle">Registro</text><text x="287" y="88" class="mono" font-size="9" fill="#e9e2d3" text-anchor="middle">memorizza i livelli contrassegnati</text>
+            <g stroke="#3f6f4e" stroke-width="1.8" fill="none"><path d="M362 60 C420 40 460 36 520 34" marker-end="url(#ba2)"/><path d="M362 75 H520" marker-end="url(#ba2)"/><path d="M362 90 C420 110 460 114 520 116" marker-end="url(#ba2)"/></g>
+            <defs><marker id="ba2" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0 0 L7 3 L0 6 Z" fill="#3f6f4e"/></marker></defs>
+            <text x="445" y="58" class="mono" font-size="9" fill="#3f6f4e" text-anchor="middle">tirare</text>
+            <rect x="522" y="22" width="150" height="26" rx="6" fill="#e0e9dd" stroke="#3f6f4e"/><text x="597" y="39" font-size="10.5" font-weight="700" fill="#3f6f4e" text-anchor="middle">CI esegue i test</text>
+            <rect x="522" y="62" width="150" height="26" rx="6" fill="#e0e9dd" stroke="#3f6f4e"/><text x="597" y="79" font-size="10.5" font-weight="700" fill="#3f6f4e" text-anchor="middle">messa in scena</text>
+            <rect x="522" y="102" width="150" height="26" rx="6" fill="#e0e9dd" stroke="#3f6f4e"/><text x="597" y="119" font-size="10.5" font-weight="700" fill="#3f6f4e" text-anchor="middle">produzione (K8)</text>
+          </svg>
+        </div>
+
+        <div class="box gotcha"><span class="tag">Non schierare mai <code>:latest</code></span>
+          <p><code>latest</code> è solo un tag che si muove; non significa &quot;più nuovo&quot; e non ti dà idea <em>cosa</em> è
+            correre. Due macchine che tirano <code>:latest</code> un giorno a parte può ottenere immagini diverse, l'esatto
+            i contenitori non riproducibili esistono per uccidere. Tagga con una versione immutabile o con git commit SHA
+            (<code>myapp:1.4.0</code>, <code>myapp:git-9f2c1a</code>) in modo che un contenitore in esecuzione venga mappato all'origine esatta.</p>
+        </div>
+
+        <div class="box note"><span class="tag">OCI: lo standard sottostante</span>
+          <p>&quot;Immagine Docker&quot; è una abbreviazione, il formato è standardizzato dal file <strong>Iniziativa Open Container
+            (OCI)</strong>, motivo per cui le immagini create con Docker vengono eseguite in altri runtime (containerd, CRI-O, Podman)
+            e su Kubernetes senza Docker installato. Costruisci secondo una specifica, non per un fornitore.</p>
+        </div>
+      </section>
+
+      <div class="part-label">Parte III / Multi-container e sviluppo locale</div>
+
+      <!-- 9 -->
+      <section id="s9">
+        <div class="sec-head"><div class="sec-num">09</div><h2>Reti e volumi</h2></div>
+        <p>Due esigenze emergono nel momento in cui si corre più di un giocattolo: i contenitori devono <strong>parlare tra loro</strong>, e
+          alcuni dati devono <strong>sopravvivere al contenitore</strong>. Docker risponde a queste domande con reti e volumi ed entrambi risolvono direttamente le lacune lasciate dal modello di isolamento (sez. 03) e dallo strato effimero scrivibile (sez. 04).</p>
+
+        <h3>Networking: da isolato a connesso</h3>
+        <p>Per impostazione predefinita, ogni contenitore ha il proprio spazio dei nomi di rete, quindi non può vederne altri. Metti i contenitori sullo stesso
+          <strong>rete bridge definita dall'utente</strong> e Docker fornisce loro una LAN virtuale privata <em>inoltre</em> integrato
+          DNS: un contenitore ne raggiunge un altro semplicemente tramite il suo nome (<code>http://db:5432</code>). Questo è il fondamento di
+          rilevamento dei servizi, ed è per questo che Compose (sez. 10) e Kubernetes (sez. 15) consentono ai servizi di indirizzarsi tra loro tramite
+          nome invece di IP fragili. Separatamente, <strong>editoria portuale</strong> (<code>-p 8080:8080</code>) colpisce a
+          foro dall'ospite in un contenitore in modo che il mondo esterno possa raggiungerlo.</p>
+
+        <div class="viz">
+          <div class="viz-cap">Rete di contenitori</div>
+          <div class="viz-title">Una rete definita dall'utente fornisce la scoperta basata sul nome; una porta pubblicata espone un servizio</div>
+          <svg viewBox="0 0 720 200" xmlns="http://www.w3.org/2000/svg" role="img"
+            aria-label="Un contenitore API e un contenitore database su una rete bridge si comunicano per nome, con solo la porta API pubblicata sull'host">
+            <rect x="60" y="40" width="520" height="130" rx="14" fill="#f3eee4" stroke="#d8cfbe"/>
+            <text x="78" y="62" class="mono" font-size="10.5" font-weight="700" fill="#8f2f20">rete bridge: appnet</text>
+            <rect x="110" y="80" width="150" height="64" rx="10" fill="#e0e9dd" stroke="#3f6f4e"/><text x="185" y="104" font-size="12" font-weight="700" fill="#3f6f4e" text-anchor="middle">API</text><text x="185" y="124" class="mono" font-size="9" fill="#5b5347" text-anchor="middle">:8080</text>
+            <rect x="380" y="80" width="150" height="64" rx="10" fill="#e0e9dd" stroke="#3f6f4e"/><text x="455" y="104" font-size="12" font-weight="700" fill="#3f6f4e" text-anchor="middle">db</text><text x="455" y="124" class="mono" font-size="9" fill="#5b5347" text-anchor="middle">:5432</text>
+            <defs><marker id="na" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0 0 L7 3 L0 6 Z" fill="#3f6f4e"/></marker></defs>
+            <path d="M260 112 H378" stroke="#3f6f4e" stroke-width="1.8" marker-end="url(#na)"/><text x="319" y="104" class="mono" font-size="9.5" fill="#3f6f4e" text-anchor="middle">connettersi a &quot;db&quot;</text>
+            <!-- host + published port -->
+            <rect x="60" y="20" width="180" height="0" /> 
+            <defs><marker id="na2" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0 0 L7 3 L0 6 Z" fill="#b8402e"/></marker></defs>
+            <text x="185" y="190" class="mono" font-size="10" fill="#b8402e" text-anchor="middle">host :8080 -&gt; api :8080 (pubblicato)</text>
+            <path d="M185 80 V40 C185 28 360 28 360 28" stroke="#b8402e" stroke-width="1.6" fill="none" stroke-dasharray="4 3" marker-end="url(#na2)"/>
+            <text x="470" y="32" font-size="10.5" fill="#8f2f20">db NON è pubblicato, privato nella rete</text>
+          </svg>
+        </div>
+
+        <h3>Volumi: dati che sopravvivono</h3>
+        <p>Poiché il livello scrivibile di un contenitore viene distrutto con il contenitore (sez 04), tutto ciò che deve persistere, i file di un database, i caricamenti degli utenti, risiedono in un <strong>volume</strong>: storage gestito da Docker (o dal
+          host) e montato nel contenitore, disaccoppiato dal suo ciclo di vita. Elimina e ricrea il contenitore; il
+          il volume e i relativi dati rimangono. Ci sono due gusti: <strong>volumi nominati</strong> (Gestito da Docker, l'impostazione predefinita
+          per dati reali) e <strong>legare i supporti</strong> (una directory host mappata, utile nello sviluppo per
+          codice live-edit senza ricompilazione).</p>
+
+        <div class="tbl-wrap">
+          <table>
+            <thead><tr><th>Meccanismo</th><th>Usalo per</th></tr></thead>
+            <tbody>
+              <tr><td><strong>Volume denominato</strong> <code>-v dbdata:/var/lib/postgresql/data</code></td><td>Dati persistenti delle app gestiti da Docker, database, cache che desideri conservare.</td></tr>
+              <tr><td><strong>Legare il supporto</strong> <code>-v ./src:/app/src</code></td><td>Ricarica in tempo reale in fase di sviluppo, modifica sull'host e visualizza immediatamente le modifiche nel contenitore.</td></tr>
+              <tr><td><strong>tmpfs</strong></td><td>Dati scratch sensibili conservati solo nella RAM, mai scritti su disco.</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="box gotcha"><span class="tag">Contenitori senza stato, volumi con stato</span>
+          <p>Trattare i contenitori come usa e getta e mantenere tutto lo stato durevole in volumi o servizi gestiti esterni. Dentro
+            Soprattutto Kubernetes, il modello prevalente è <em>senza stato</em> contenitori di app (banalmente scalati e
+            sostituito, sezione 18) con lo stato inviato ai database gestiti o ai volumi persistenti. Se uccidi a
+            il contenitore perde dati, il progetto ha fatto trapelare lo stato nel posto sbagliato.</p>
+        </div>
+      </section>
+
+      <!-- 10 -->
+      <section id="s10">
+        <div class="sec-head"><div class="sec-num">10</div><h2>Docker Componi</h2></div>
+        <p>Eseguire un'app reale significa diversi contenitori, API, database, cache e forse un lavoratore (il task-queue
+          configurazione del capitolo), con le reti, i volumi, l'ambiente e l'ordine di avvio corretti. Cablandolo a mano con molti
+          <code>docker run</code> comandi è noioso e soggetto a errori. <strong>Docker Componi</strong> dichiara il tutto
+          stack locale in un file YAML e lo visualizza con un singolo comando. È lo standard per lo sviluppo locale e
+          semplici distribuzioni a host singolo.</p>
+
+        <div class="codeblock single">
+          <div class="code-bar"><div class="dots"><i></i><i></i><i></i></div><span class="filename">compose.yaml / un'API (il tuo servizio Go o Python), Postgres e Redis</span></div>
+          <pre><code class="language-yaml">services:
+  api:
+    build: .                      # build the image from the local Dockerfile (sec 5/6)
+    ports:
+      - "8080:8080"               # publish to the host (sec 9)
+    environment:                  # config via env, not baked in (sec 16)
+      DATABASE_URL: postgres://app:secret@db:5432/app   # reach "db" by name (sec 9 DNS)
+      REDIS_URL: redis://cache:6379
+    depends_on:
+      db:
+        condition: service_healthy   # wait until the DB passes its healthcheck
+      cache:
+        condition: service_started
+
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: secret
+      POSTGRES_DB: app
+    volumes:
+      - dbdata:/var/lib/postgresql/data   # named volume = data survives restarts (sec 9)
+    healthcheck:                          # so depends_on can wait for readiness
+      test: ["CMD-SHELL", "pg_isready -U app"]
+      interval: 5s
+      retries: 5
+
+  cache:
+    image: redis:7
+
+volumes:
+  dbdata:                          # declared once, referenced above</code></pre>
+        </div>
+
+        <div class="codeblock single">
+          <div class="code-bar"><div class="dots"><i></i><i></i><i></i></div><span class="filename">eseguire lo stack</span></div>
+          <pre><code class="language-bash">docker compose up -d        # build (if needed) + start everything in the background
+docker compose ps           # status of all services
+docker compose logs -f api  # tail one service's logs
+docker compose down         # stop & remove containers + network (volumes kept)
+docker compose down -v      # ...and delete the volumes too (fresh DB)</code></pre>
+        </div>
+
+        <div class="box note"><span class="tag">Componi contro Kubernetes</span>
+          <p>Comporre è per <strong>un ospite</strong>: eccellente per sviluppatori locali e piccole distribuzioni, ma non è così
+            pianificazione su più macchine, riparazione automatica o scalabilità automatica. Nell'istante in cui hai bisogno di molti nodi, riavvii automatici,
+            aggiornamenti continui e ridimensionamento orizzontale, sei diventato troppo grande per Compose e desideri un orchestratore (Parte IV). Il
+            il modello mentale prosegue: un Compose <code>service</code> si associa strettamente a una distribuzione + servizio Kubernetes.</p>
+        </div>
+
+        <div class="viz">
+          <div class="viz-cap">Dove siamo</div>
+          <div class="viz-title">Da un container a una flotta, il percorso verso l'orchestrazione</div>
+          <svg viewBox="0 0 720 120" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Progressione da un singolo contenitore, a Compose su un host, a Kubernetes su più nodi">
+            <defs><marker id="pa" markerWidth="10" markerHeight="10" refX="7" refY="3.5" orient="auto"><path d="M0 0 L8 3.5 L0 7 Z" fill="#8f2f20"/></marker></defs>
+            <rect x="20" y="40" width="180" height="50" rx="10" fill="#f7e9e2" stroke="#b8402e"/><text x="110" y="62" font-size="11.5" font-weight="700" fill="#8f2f20" text-anchor="middle">1 contenitore</text><text x="110" y="80" class="mono" font-size="9" fill="#5b5347" text-anchor="middle">esecuzione della finestra mobile</text>
+            <path d="M202 65 H258" stroke="#8f2f20" stroke-width="1.8" marker-end="url(#pa)"/>
+            <rect x="260" y="40" width="180" height="50" rx="10" fill="#f0e5c9" stroke="#b07d2b"/><text x="350" y="62" font-size="11.5" font-weight="700" fill="#b07d2b" text-anchor="middle">molti, un ospite</text><text x="350" y="80" class="mono" font-size="9" fill="#5b5347" text-anchor="middle">composizione della finestra mobile</text>
+            <path d="M442 65 H498" stroke="#8f2f20" stroke-width="1.8" marker-end="url(#pa)"/>
+            <rect x="500" y="40" width="200" height="50" rx="10" fill="#e0e9dd" stroke="#3f6f4e"/><text x="600" y="62" font-size="11.5" font-weight="700" fill="#3f6f4e" text-anchor="middle">flotta, molti nodi</text><text x="600" y="80" class="mono" font-size="9" fill="#5b5347" text-anchor="middle">Kubernetes -&gt; Parte IV</text>
+          </svg>
+        </div>
+      </section>
+
+      <div class="part-label">Parte IV / Kubernetes / Orchestrazione</div>
+
+      <!-- 11 -->
+      <section id="s11">
+        <div class="sec-head"><div class="sec-num">11</div><h2>Perché orchestrazione</h2></div>
+        <p>Docker ti offre contenitori; di per sé non li esegue in modo affidabile su molte macchine. Nel momento in cui tu
+          avere dozzine di contenitori su una flotta di server, appare una nuova serie di problemi che no <code>docker run</code>
+          può risolvere, e <strong>orchestrazione</strong> è lo strato che li risolve. Kubernetes (spesso &quot;K8&quot;)
+          è lo standard di fatto.</p>
+
+        <div class="tbl-wrap">
+          <table>
+            <thead><tr><th>Il problema a scala di flotta</th><th>Cosa fa un orchestratore</th></tr></thead>
+            <tbody>
+              <tr><td>Su quale macchina dovrebbe funzionare ciascun contenitore?</td><td><strong>Pianificazione</strong>: posiziona i contenitori sui nodi in base alla CPU/memoria disponibile.</td></tr>
+              <tr><td>Un container (o un intero nodo) muore alle 3 del mattino.</td><td><strong>Autoguarigione</strong>: riavvia i contenitori bloccati, riprogramma i nodi morti, automaticamente.</td></tr>
+              <tr><td>Picchi di traffico; hai bisogno di più copie, poi di meno.</td><td><strong>Ridimensionamento</strong>: esegue N repliche e le aggiunge/rimuove su richiesta (sec 18).</td></tr>
+              <tr><td>I contenitori vanno e vengono; i loro IP cambiano.</td><td><strong>Individuazione del servizio + bilanciamento del carico</strong>: un indirizzo stabile che si espande in repliche sane (sec 15).</td></tr>
+              <tr><td>Spedisci una nuova versione senza tempi di inattività.</td><td><strong>Aggiornamenti continui e rollback</strong>: sostituire le repliche gradualmente, ripristinarle in caso di fallimento (sez. 18).</td></tr>
+              <tr><td>La configurazione e i segreti differiscono in base all'ambiente.</td><td><strong>Gestione della configurazione</strong>: inserisce impostazioni/segreti senza ricostruire l'immagine (sec 16).</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>L’idea centrale: stato dichiarativo, desiderato</h3>
+        <p>Il cambiamento di mentalità che fa sì che Kubernetes faccia clic: non si immettono comandi imperativi (&quot;avvia un contenitore qui&quot;).
+          Tu <strong>dichiarare lo stato desiderato</strong> (&quot;Voglio 5 repliche di questa immagine, raggiungibili a questo indirizzo&quot;)
+          e Kubernetes lavora continuamente per far corrispondere la realtà. Se un contenitore muore, il numero effettivo scende a 4 e un controllo
+          loop nota il divario e ne inizia un altro, senza che tu faccia nulla. Descrivi il <em>cosa</em>;
+          Kubernetes gestisce il <em>come</em> e lo mantiene vero.</p>
+
+        <div class="analogy">L'imperativo è avvisare l'autista ad ogni svolta. Il dichiarativo sta dando una destinazione ad a
+          pilota automatico con correzione automatica: deriva fuori rotta, uno schianto, un nodo morto e torna indietro da solo,
+          continuamente, senza nuove istruzioni.</div>
+
+        <div class="box key"><span class="tag">Riconciliazione in una riga</span>
+          <p>Tutto in Kubernetes è un confronto tra cicli di controllo <strong>stato desiderato</strong> (cosa hai dichiarato) a
+            <strong>stato reale</strong> (cosa sta succedendo) e agire per colmare il divario. Interiorizza quel ciclo e
+            l'intero sistema, distribuzioni, ridimensionamento, guarigione, implementazioni, diventa un'idea applicata più e più volte.</p>
+        </div>
+      </section>
+
+      <!-- 12 -->
+      <section id="s12">
+        <div class="sec-head"><div class="sec-num">12</div><h2>Architettura Kubernetes</h2></div>
+        <p>Un cluster Kubernetes è composto da due tipi di macchine: a <strong>piano di controllo</strong> (il cervello che decide cosa
+          dovrebbe essere eseguito) e una serie di <strong>nodi lavoratori</strong> (il muscolo dove scorrono effettivamente i contenitori). Tu parli
+          solo al piano di controllo, invii lo stato desiderato e il cluster lo realizza.</p>
+
+        <div class="viz">
+          <div class="viz-cap">Anatomia del grappolo</div>
+          <div class="viz-title">Il piano di controllo decide; i nodi corrono; il ciclo di riconciliazione li collega</div>
+          <svg viewBox="0 0 720 320" xmlns="http://www.w3.org/2000/svg" role="img"
+            aria-label="Piano di controllo con api-server, scheduler, controller-manager ed etcd, che comunica con i nodi di lavoro, ciascuno dei quali esegue kubelet, kube-proxy e pod">
+            <!-- control plane -->
+            <rect x="20" y="40" width="320" height="170" rx="14" fill="#f3eee4" stroke="#b8402e"/>
+            <text x="180" y="62" class="mono" font-size="11" font-weight="700" fill="#8f2f20" text-anchor="middle">PIANO DI CONTROLLO, il cervello</text>
+            <rect x="40" y="74" width="135" height="44" rx="8" fill="#b8402e"/><text x="107" y="92" font-size="11" font-weight="700" fill="#fff" text-anchor="middle">server API</text><text x="107" y="108" class="mono" font-size="8" fill="#f4d9cf" text-anchor="middle">l'unica porta d'ingresso</text>
+            <rect x="185" y="74" width="135" height="44" rx="8" fill="#ece3d4" stroke="#b8402e"/><text x="252" y="92" font-size="11" font-weight="700" fill="#8f2f20" text-anchor="middle">pianificatore</text><text x="252" y="108" class="mono" font-size="8" fill="#5b5347" text-anchor="middle">sceglie un nodo</text>
+            <rect x="40" y="126" width="135" height="44" rx="8" fill="#ece3d4" stroke="#b8402e"/><text x="107" y="144" font-size="10.5" font-weight="700" fill="#8f2f20" text-anchor="middle">controllore-mons</text><text x="107" y="160" class="mono" font-size="8" fill="#5b5347" text-anchor="middle">esegue i loop</text>
+            <rect x="185" y="126" width="135" height="44" rx="8" fill="#211e1a"/><text x="252" y="144" font-size="11" font-weight="700" fill="#fff" text-anchor="middle">ecc</text><text x="252" y="160" class="mono" font-size="8" fill="#e9e2d3" text-anchor="middle">la fonte della verità</text>
+            <text x="180" y="194" font-size="10" font-style="italic" fill="#5b5347" text-anchor="middle">tutto lo stato vive in etcd; tutto parla tramite il server API</text>
+
+            <!-- nodes -->
+            <rect x="380" y="30" width="320" height="120" rx="12" fill="#f3eee4" stroke="#3f6f4e"/>
+            <text x="540" y="50" class="mono" font-size="10.5" font-weight="700" fill="#3f6f4e" text-anchor="middle">NODO LAVORATORE 1, il muscolo</text>
+            <rect x="396" y="58" width="120" height="30" rx="6" fill="#3f6f4e"/><text x="456" y="78" font-size="10" font-weight="700" fill="#fff" text-anchor="middle">kubelet</text>
+            <rect x="524" y="58" width="160" height="30" rx="6" fill="#e0e9dd" stroke="#3f6f4e"/><text x="604" y="78" font-size="9.5" fill="#3f6f4e" text-anchor="middle">kube-proxy (rete)</text>
+            <rect x="396" y="96" width="84" height="44" rx="7" fill="#dbeede" stroke="#3f6f4e"/><text x="438" y="122" font-size="10" fill="#3f6f4e" text-anchor="middle">baccello</text>
+            <rect x="488" y="96" width="84" height="44" rx="7" fill="#dbeede" stroke="#3f6f4e"/><text x="530" y="122" font-size="10" fill="#3f6f4e" text-anchor="middle">baccello</text>
+            <rect x="580" y="96" width="104" height="44" rx="7" fill="#dbeede" stroke="#3f6f4e"/><text x="632" y="122" font-size="10" fill="#3f6f4e" text-anchor="middle">baccello</text>
+
+            <rect x="380" y="160" width="320" height="58" rx="12" fill="#f3eee4" stroke="#3f6f4e"/>
+            <text x="540" y="180" class="mono" font-size="10.5" font-weight="700" fill="#3f6f4e" text-anchor="middle">NODO LAVORATORE 2</text>
+            <rect x="396" y="188" width="84" height="22" rx="6" fill="#dbeede" stroke="#3f6f4e"/><text x="438" y="203" font-size="9" fill="#3f6f4e" text-anchor="middle">baccello</text>
+            <rect x="488" y="188" width="84" height="22" rx="6" fill="#dbeede" stroke="#3f6f4e"/><text x="530" y="203" font-size="9" fill="#3f6f4e" text-anchor="middle">baccello</text>
+            <rect x="580" y="188" width="104" height="22" rx="6" fill="#dbeede" stroke="#3f6f4e"/><text x="632" y="203" font-size="9" fill="#3f6f4e" text-anchor="middle">baccello</text>
+
+            <defs><marker id="ka" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0 0 L7 3 L0 6 Z" fill="#8f2f20"/></marker></defs>
+            <path d="M340 110 H378" stroke="#8f2f20" stroke-width="1.6" marker-end="url(#ka)"/>
+            <!-- you -->
+            <rect x="20" y="244" width="150" height="40" rx="9" fill="#211e1a"/><text x="95" y="263" font-size="11" font-weight="700" fill="#fff" text-anchor="middle">tu: kubectl applica</text><text x="95" y="278" class="mono" font-size="8.5" fill="#e9e2d3" text-anchor="middle">stato desiderato (YAML)</text>
+            <path d="M95 244 V214 C95 200 107 188 107 162" stroke="#8f2f20" stroke-width="1.6" fill="none" marker-end="url(#ka)"/>
+            <text x="360" y="266" class="serif" font-size="12.5" font-style="italic" fill="#5b5347">api-server scrive lo stato desiderato su etcd; controller + scheduler lo riconciliano sui nodi; i kubelet gestiscono i pod.</text>
+            <text x="360" y="300" class="serif" font-size="12.5" font-style="italic" fill="#5b5347">I kubelet riportano continuamente lo stato attuale, chiudendo il ciclo.</text>
+          </svg>
+        </div>
+
+        <div class="tbl-wrap">
+          <table>
+            <thead><tr><th>Componente</th><th>Ruolo</th></tr></thead>
+            <tbody>
+              <tr><td class="mono-cell">server API</td><td>Il punto di ingresso unico. Ogni lettura/scrittura dello stato del cluster passa attraverso questo (your <code>kubectl</code>, ogni componente).</td></tr>
+              <tr><td class="mono-cell">ecc</td><td>Archivio di valori-chiave distribuito che contiene l'intero stato del cluster, la fonte della verità.</td></tr>
+              <tr><td class="mono-cell">pianificatore</td><td>Decide su quale nodo viene eseguito un nuovo pod, in base alle richieste e ai vincoli delle risorse.</td></tr>
+              <tr><td class="mono-cell">titolare-responsabile</td><td>Esegue i cicli di riconciliazione (il controller di distribuzione e così via) che portano il valore reale a quello desiderato.</td></tr>
+              <tr><td class="mono-cell">kubelet</td><td>L'agente su ciascun nodo; avvia/arresta i contenitori e segnala il loro stato al server API.</td></tr>
+              <tr><td class="mono-cell">kube-proxy</td><td>Programma la rete dei nodi in modo che gli IP virtuali del servizio vengano instradati ai pod giusti (sez. 15).</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="box note"><span class="tag">Raramente lo esegui tu stesso</span>
+          <p>Managed Kubernetes (GKE, EKS, AKS) gestisce il piano di controllo per te, quindi in pratica interagisci con il
+            cluster esclusivamente tramite il server API tramite <code>kubectl</code> e YAML. Conoscere le parti è ancora importante
+            debug, &quot;pod bloccato in Pending&quot; è solitamente lo scheduler che non trova alcun nodo con spazio (sec 17).</p>
+        </div>
+      </section>
+
+      <!-- 13 -->
+      <section id="s13">
+        <div class="sec-head"><div class="sec-num">13</div><h2>Baccelli</h2></div>
+        <p>Il <strong>baccello</strong> è l'unità atomica di Kubernetes, la cosa più piccola che schedula. Fondamentalmente, lo fai
+          <em>no</em> distribuire direttamente i contenitori; distribuisci i pod e un pod si avvolge <em>uno o più</em> contenitori che
+          sono sempre co-localizzati sullo stesso nodo e <strong>condividere uno spazio dei nomi e uno spazio di archiviazione di rete</strong>. Contenitori
+          in un baccello si raggiungono <code>localhost</code> e possono condividere volumi montati, sono un singolo
+          unità cooperante.</p>
+
+        <p>Di solito un pod contiene esattamente un contenitore (la tua app). Il caso multi-contenitore è il <strong>sidecar</strong>
+          modello: un assistente accanto all'app principale, uno spedizioniere di log, un esportatore di metriche o un proxy mesh di servizi
+          (l'Inviato dal capitolo 19 del gRPC). Il sidecar condivide la rete del pod in modo che possa osservare o proxy
+          il traffico dell'app in modo trasparente.</p>
+
+        <div class="viz">
+          <div class="viz-cap">Interni del pod</div>
+          <div class="viz-title">I contenitori in un pod condividono una rete e possono condividere spazio di archiviazione</div>
+          <svg viewBox="0 0 720 190" xmlns="http://www.w3.org/2000/svg" role="img"
+            aria-label="Un pod contenente un contenitore dell'app e un sidecar che condivide un singolo IP tramite localhost e un volume condiviso">
+            <rect x="120" y="30" width="480" height="130" rx="16" fill="#f3eee4" stroke="#3f6f4e" stroke-dasharray="6 4"/>
+            <text x="360" y="52" class="mono" font-size="11" font-weight="700" fill="#3f6f4e" text-anchor="middle">POD, condivide un IP e un ciclo di vita</text>
+            <rect x="150" y="66" width="180" height="56" rx="10" fill="#e0e9dd" stroke="#3f6f4e"/><text x="240" y="90" font-size="12" font-weight="700" fill="#3f6f4e" text-anchor="middle">contenitore dell'app</text><text x="240" y="108" class="mono" font-size="9" fill="#5b5347" text-anchor="middle">:8080</text>
+            <rect x="390" y="66" width="180" height="56" rx="10" fill="#f0e5c9" stroke="#b07d2b"/><text x="480" y="90" font-size="12" font-weight="700" fill="#b07d2b" text-anchor="middle">sidecar</text><text x="480" y="108" class="mono" font-size="9" fill="#5b5347" text-anchor="middle">mittente/proxy del log</text>
+            <defs><marker id="poa" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0 0 L6 3 L0 6 Z" fill="#3f6f4e"/></marker></defs>
+            <path d="M330 94 H388" stroke="#3f6f4e" stroke-width="1.6" marker-end="url(#poa)"/><text x="359" y="86" class="mono" font-size="8.5" fill="#3f6f4e" text-anchor="middle">localhost</text>
+            <text x="360" y="146" font-size="11" font-style="italic" fill="#5b5347" text-anchor="middle">un IP pod/stesso nodo/vivono e muoiono insieme</text>
+          </svg>
+        </div>
+
+        <div class="box gotcha"><span class="tag">I baccelli sono mortali e usa e getta</span>
+          <p>Un baccello lo è <em>effimero</em>: può essere eliminato e sostituito in qualsiasi momento (guasto del nodo, ridimensionamento, implementazione),
+            e il sostituto ottiene a <strong>nuovo IP</strong>. Quindi non codifichi mai l'IP di un pod e non fai mai affidamento su a
+            baccello specifico sopravvissuto. Proprio per questo esistono i Servizi (sez. 15), per fornire un indirizzo stabile in
+            di fronte a un set di pod in costante movimento e perché consenti a una distribuzione di gestire i pod anziché
+            creandoli direttamente (sez 14).</p>
+        </div>
+      </section>
+
+      <!-- 14 -->
+      <section id="s14">
+        <div class="sec-head"><div class="sec-num">14</div><h2>Distribuzioni e set di repliche</h2></div>
+        <p>Non crei quasi mai i baccelli a mano, un baccello nudo non viene sostituito se muore. Invece dichiari a
+          <strong>Distribuzione</strong>: &quot;mantieni N repliche di questo modello di pod in esecuzione, sempre.&quot; Il Deployment gestisce a
+          <strong>Set di repliche</strong>, il cui unico compito è mantenere il conteggio delle repliche e ReplicaSet gestisce il
+          baccelli. Questo è il ciclo di riconciliazione (sez 11) reso concreto: dichiara 5, un pod muore, l'effettivo diventa 4, il
+          il controller ne avvia uno nuovo, autoriparante, gratuitamente.</p>
+
+        <div class="viz">
+          <div class="viz-cap">La catena di proprietà</div>
+          <div class="viz-title">Distribuzione -&gt; ReplicaSet -&gt; Pod, mantenuti al conteggio desiderato</div>
+          <svg viewBox="0 0 720 210" xmlns="http://www.w3.org/2000/svg" role="img"
+            aria-label="Una distribuzione che possiede un ReplicaSet che mantiene tre pod; quando uno muore viene creato un sostituto">
+            <rect x="40" y="80" width="150" height="56" rx="10" fill="#b8402e"/><text x="115" y="104" font-size="12" font-weight="700" fill="#fff" text-anchor="middle">Distribuzione</text><text x="115" y="122" class="mono" font-size="9" fill="#f4d9cf" text-anchor="middle">repliche: 3</text>
+            <defs><marker id="oa" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0 0 L7 3 L0 6 Z" fill="#8f2f20"/></marker></defs>
+            <path d="M192 108 H248" stroke="#8f2f20" stroke-width="1.8" marker-end="url(#oa)"/><text x="220" y="100" class="mono" font-size="8" fill="#8f2f20" text-anchor="middle">gestisce</text>
+            <rect x="250" y="80" width="150" height="56" rx="10" fill="#ece3d4" stroke="#b8402e"/><text x="325" y="104" font-size="12" font-weight="700" fill="#8f2f20" text-anchor="middle">Set di repliche</text><text x="325" y="122" class="mono" font-size="9" fill="#5b5347" text-anchor="middle">continua a contare = 3</text>
+            <path d="M402 95 C450 70 470 64 510 60" stroke="#8f2f20" stroke-width="1.6" fill="none" marker-end="url(#oa)"/>
+            <path d="M402 108 H510" stroke="#8f2f20" stroke-width="1.6" marker-end="url(#oa)"/>
+            <path d="M402 121 C450 146 470 152 510 156" stroke="#8f2f20" stroke-width="1.6" fill="none" marker-end="url(#oa)"/>
+            <rect x="512" y="40" width="170" height="40" rx="8" fill="#e0e9dd" stroke="#3f6f4e"/><text x="597" y="64" font-size="10.5" fill="#3f6f4e" text-anchor="middle">pod ✓ in funzione</text>
+            <rect x="512" y="88" width="170" height="40" rx="8" fill="#e0e9dd" stroke="#3f6f4e"/><text x="597" y="112" font-size="10.5" fill="#3f6f4e" text-anchor="middle">pod ✓ in funzione</text>
+            <rect x="512" y="136" width="170" height="40" rx="8" fill="#eccdc2" stroke="#8f2f20" stroke-dasharray="4 3"/><text x="597" y="155" font-size="10.5" fill="#8f2f20" text-anchor="middle">pod ✗ morto -&gt;</text><text x="597" y="170" font-size="9" font-style="italic" fill="#3f6f4e" text-anchor="middle">il controller lo ricrea</text>
+            <text x="360" y="200" class="serif" font-size="12.5" font-style="italic" fill="#5b5347" text-anchor="middle">Il valore effettivo è sceso a 2, quello desiderato è 3 -&gt; il divario viene rilevato e viene avviato automaticamente un nuovo pod.</text>
+          </svg>
+        </div>
+
+        <div class="codeblock single">
+          <div class="code-bar"><div class="dots"><i></i><i></i><i></i></div><span class="filename">deploy.yaml / dichiara 3 repliche della tua immagine</span></div>
+          <pre><code class="language-yaml">apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api
+spec:
+  replicas: 3                 # desired state: always keep 3 pods
+  selector:
+    matchLabels: { app: api } # which pods this Deployment owns
+  template:                   # the POD TEMPLATE stamped out for each replica
+    metadata:
+      labels: { app: api }
+    spec:
+      containers:
+        - name: api
+          image: registry.example.com/team/myapp:1.4.0   # pinned tag, never :latest (sec 8)
+          ports:
+            - containerPort: 8080
+          # resources, env, and probes go here too, see sec 16 and sec 17</code></pre>
+        </div>
+
+        <div class="codeblock single">
+          <div class="code-bar"><div class="dots"><i></i><i></i><i></i></div><span class="filename">guidandolo con kubectl</span></div>
+          <pre><code class="language-bash">kubectl apply -f deployment.yaml     # submit desired state (declarative)
+kubectl get pods -l app=api          # see the 3 pods it created
+kubectl scale deployment/api --replicas=10   # change desired count -&gt; controller adds 7
+kubectl rollout status deployment/api        # watch a new version roll out (sec 18)
+kubectl rollout undo  deployment/api          # roll back to the previous version (sec 18)</code></pre>
+        </div>
+
+        <div class="box note"><span class="tag">Altri tipi di carico di lavoro</span>
+          <p>La distribuzione è per <em>senza stato</em> app (il caso comune). Esistono fratelli per altre forme:
+            <strong>StatefulSet</strong> per le app con stato che necessitano di identità/archiviazione stabile (database),
+            <strong>DaemonSet</strong> per eseguire un pod per nodo (agenti di log/metriche) e <strong>Lavoro</strong>/<strong>CronJob</strong>
+            per le attività eseguite fino al completamento e pianificate (il lato batch del capitolo della coda delle attività). Stessa riconciliazione
+            idea, garanzie diverse.</p>
+        </div>
+      </section>
+
+      <!-- 15 -->
+      <section id="s15">
+        <div class="sec-head"><div class="sec-num">15</div><h2>Servizi, API gateway e ingresso</h2></div>
+        <p>I pod sono mortali e i loro IP variano (sez. 13), quindi non è possibile indirizzare il traffico verso un pod. A <strong>Servizio</strong>
+          è la soluzione: a <em>stabile</em> IP virtuale e nome DNS davanti a un set dinamico di pod, con carico integrato
+          bilanciamento. Utilizza a <strong>selettore di etichette</strong> per tenere traccia di &quot;tutti i pod con <code>app: api</code>&quot;, come
+          i pod vanno e vengono, il set di endpoint integri del servizio si aggiorna automaticamente e i chiamanti non se ne accorgono mai. Questo
+          è il rilevamento dei servizi di Kubernetes ed è il motivo per cui un servizio ne indirizza un altro per nome (<code>http://api</code>),
+          esattamente come ha fatto Compose su un host (sez. 9).</p>
+
+        <div class="viz">
+          <div class="viz-cap">Astrazione del servizio</div>
+          <div class="viz-title">Un indirizzo stabile che bilancia il carico tra i pod attualmente corrispondenti</div>
+          <svg viewBox="0 0 720 210" xmlns="http://www.w3.org/2000/svg" role="img"
+            aria-label="Un chiamante che raggiunge un IP di servizio stabile che bilancia il carico su tre pod corrispondenti, lasciandone automaticamente uno morto">
+            <rect x="20" y="80" width="120" height="50" rx="9" fill="#b8402e"/><text x="80" y="102" font-size="11" font-weight="700" fill="#fff" text-anchor="middle">chiamante</text><text x="80" y="119" class="mono" font-size="8.5" fill="#f4d9cf" text-anchor="middle">http://api</text>
+            <defs><marker id="sa" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0 0 L7 3 L0 6 Z" fill="#3f6f4e"/></marker></defs>
+            <path d="M142 105 H218" stroke="#3f6f4e" stroke-width="1.8" marker-end="url(#sa)"/>
+            <rect x="220" y="74" width="150" height="62" rx="10" fill="#3f6f4e"/><text x="295" y="100" font-size="12" font-weight="700" fill="#fff" text-anchor="middle">Servizio: API</text><text x="295" y="118" class="mono" font-size="8.5" fill="#dceeea" text-anchor="middle">IP stabile + DNS / selettore app=api</text>
+            <g stroke="#3f6f4e" stroke-width="1.5" fill="none"><path d="M372 90 C430 64 460 58 510 54" marker-end="url(#sa)"/><path d="M372 105 H510" marker-end="url(#sa)"/><path d="M372 120 C430 146 460 152 510 156" marker-end="url(#sa)"/></g>
+            <rect x="512" y="36" width="170" height="36" rx="8" fill="#e0e9dd" stroke="#3f6f4e"/><text x="597" y="59" font-size="10" fill="#3f6f4e" text-anchor="middle">pod (app=api) ✓</text>
+            <rect x="512" y="86" width="170" height="36" rx="8" fill="#e0e9dd" stroke="#3f6f4e"/><text x="597" y="109" font-size="10" fill="#3f6f4e" text-anchor="middle">pod (app=api) ✓</text>
+            <rect x="512" y="136" width="170" height="36" rx="8" fill="#f1eee8" stroke="#bbb" stroke-dasharray="4 3"/><text x="597" y="159" font-size="10" fill="#999" text-anchor="middle">baccello rimosso, lasciato cadere</text>
+            <text x="360" y="198" class="serif" font-size="12.5" font-style="italic" fill="#5b5347" text-anchor="middle">Solo <tspan font-style="normal" class="mono" font-size="11">Pronto</tspan> i pod (per sonda di disponibilità sec 17) ricevono traffico; il resto viene estratto dalla rotazione.</text>
+          </svg>
+        </div>
+
+        <h3>Tipi di servizi e ingresso</h3>
+        <p>A <code>ClusterIP</code> Il servizio (impostazione predefinita) è raggiungibile solo all'interno del cluster, perfetto per
+          chiamate da servizio a servizio. Per accettare traffico da <em>fuori</em>, puoi usare a <code>LoadBalancer</code>
+          Servizio (il cloud fornisce un bilanciatore del carico esterno, uno per servizio, costoso su larga scala) o, lontano
+          più comunemente per HTTP, an <strong>Ingresso</strong>: un singolo punto di ingresso L7 instradato in base all'host e al percorso
+          molti servizi di supporto. L'ingresso è il luogo in cui risiedono la terminazione TLS e il routing host/percorso, ovvero quello del cluster
+          porta d'ingresso pubblica e la sede naturale per il bordo REST descritto nel capitolo gRPC (sez. 18-19 lì).</p>
+
+        <div class="tbl-wrap">
+          <table>
+            <thead><tr><th>Esposizione</th><th>Raggiungibile da</th><th>Utilizzare per</th></tr></thead>
+            <tbody>
+              <tr><td><code>ClusterIP</code></td><td>Solo all'interno del cluster</td><td>Da servizio a servizio (la maggior parte dei servizi interni)</td></tr>
+              <tr><td><code>NodePort</code></td><td>Una porta su ogni nodo</td><td>Accesso esterno di base/sviluppo</td></tr>
+              <tr><td><code>LoadBalancer</code></td><td>Internet (cloud LB)</td><td>Un servizio TCP/UDP esposto direttamente</td></tr>
+              <tr><td><strong>Ingresso</strong></td><td>Internet, attraverso le regole L7</td><td>Routing host/percorso HTTP + TLS per molti servizi attraverso un punto di ingresso</td></tr>
+              <tr><td><strong>API del gateway</strong></td><td>Internet, attraverso ascoltatori e percorsi</td><td>Routing HTTP/TCP orientato al ruolo con un gateway riutilizzabile e risorse di routing separate</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="codeblock single">
+          <div class="code-bar"><div class="dots"><i></i><i></i><i></i></div><span class="filename">service.yaml + ingresso.yaml</span></div>
+          <pre><code class="language-yaml">apiVersion: v1
+kind: Service
+metadata:
+  name: api               # other pods reach this as http://api (cluster DNS)
+spec:
+  selector: { app: api }  # front the pods labelled app=api (from the Deployment sec 14)
+  ports:
+    - port: 80            # the Service port callers use
+      targetPort: 8080    # the containerPort it forwards to
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: edge
+spec:
+  rules:
+    - host: api.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: api          # route external HTTP to the api Service
+                port: { number: 80 }</code></pre>
+        </div>
+
+        <h3>API gateway: GatewayClass, Gateway e HTTPRoute</h3>
+        <p><strong>API del gateway</strong> è la nuova alternativa a <strong>Ingresso</strong>. Incontrerai ancora Ingress nei sistemi di produzione: la sua API è stabile, ma Kubernetes l'ha congelata e consiglia invece Gateway per i nuovi progetti.</p>
+        <p>L'Ingress riportato sopra inserisce il nome host, il percorso e il servizio di destinazione in un'unica risorsa. L'API Gateway separa il punto di ingresso da tali regole di routing, in modo che diverse applicazioni possano condividere un Gateway definendo i propri percorsi.</p>
+        <p>Vedi il <a href="https://kubernetes.io/docs/concepts/services-networking/gateway/">Documentazione dell'API gateway</a> e il <a href="https://kubernetes.io/docs/concepts/services-networking/ingress/">Documentazione in ingresso</a>.</p>
+
+        <p>Le tre risorse dividono il lavoro:</p>
+        <ul>
+          <li><strong>GatewayClass</strong> è un progetto con ambito cluster condiviso da molti gateway. Suo <code>controllerName</code> seleziona l'implementazione, come Envoy Gateway, che configurerà e gestirà i propri proxy o bilanciatori del carico.</li>
+          <li><strong>Porta</strong> è un punto di ingresso individuale creato utilizzando quella classe. Fa riferimento al progetto <code>gatewayClassName: envoy</code> e definisce gli ascoltatori: i protocolli e le porte che accettano il traffico, come HTTP sulla porta 80.</li>
+          <li><strong>HTTPRoute</strong> contiene le regole Ingress familiari: abbina un nome host e un percorso, quindi invia la richiesta a un servizio. <code>parentRefs</code> lo collega a un Gateway; <code>backendRefs</code> identifica il servizio e la porta di destinazione.</li>
+        </ul>
+
+        <p>Pensa alla relazione immagine-contenitore di prima: una definizione riutilizzabile, molte istanze. Una GatewayClass può servire molti gateway e a ciascun gateway possono essere collegati diversi HTTPRoute.</p>
+
+        <div class="viz">
+          <div class="viz-cap">Flusso di richiesta API gateway</div>
+          <div class="viz-title">Le risorse dell'infrastruttura e del routing indirizzano il traffico verso pod integri</div>
+          <svg viewBox="0 0 720 250" xmlns="http://www.w3.org/2000/svg" role="img"
+            aria-label="È possibile fare riferimento a una GatewayClass da molti gateway mentre il traffico client passa attraverso un gateway e HTTPRoute verso un servizio e pod integri">
+            <defs><marker id="gwa" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0 0 L7 3 L0 6 Z" fill="#3f6f4e"/></marker><marker id="gwc" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0 0 L7 3 L0 6 Z" fill="#8f2f20"/></marker></defs>
+            <rect x="150" y="18" width="140" height="44" rx="9" fill="#f4d9cf" stroke="#b8402e"/><text x="220" y="45" font-size="12" font-weight="700" fill="#8f2f20" text-anchor="middle">GatewayClass</text>
+            <path d="M220 64 V105" stroke="#8f2f20" stroke-width="1.6" stroke-dasharray="5 4" marker-end="url(#gwc)"/><text x="235" y="87" class="mono" font-size="8.5" fill="#8f2f20">gatewayClassName: inviato</text>
+            <rect x="18" y="112" width="96" height="52" rx="9" fill="#b8402e"/><text x="66" y="143" font-size="11.5" font-weight="700" fill="#fff" text-anchor="middle">cliente</text>
+            <rect x="150" y="106" width="140" height="64" rx="10" fill="#211e1a"/><text x="220" y="132" font-size="12" font-weight="700" fill="#fff" text-anchor="middle">Porta</text><text x="220" y="151" class="mono" font-size="8.5" fill="#7fd1c4" text-anchor="middle">uno dei tanti:80</text>
+            <rect x="326" y="106" width="140" height="64" rx="10" fill="#f1e3cf" stroke="#b75d14"/><text x="396" y="132" font-size="12" font-weight="700" fill="#b75d14" text-anchor="middle">HTTPRoute</text><text x="396" y="151" class="mono" font-size="8.5" fill="#5b5347" text-anchor="middle">regole host + percorso</text>
+            <rect x="502" y="106" width="100" height="64" rx="10" fill="#3f6f4e"/><text x="552" y="132" font-size="12" font-weight="700" fill="#fff" text-anchor="middle">Servizio</text><text x="552" y="151" class="mono" font-size="8.5" fill="#fff" text-anchor="middle">punto finale stabile</text>
+            <rect x="646" y="92" width="58" height="40" rx="8" fill="#e0e9dd" stroke="#3f6f4e"/><text x="675" y="116" font-size="10" fill="#3f6f4e" text-anchor="middle">Baccello</text>
+            <rect x="646" y="146" width="58" height="40" rx="8" fill="#e0e9dd" stroke="#3f6f4e"/><text x="675" y="170" font-size="10" fill="#3f6f4e" text-anchor="middle">Baccello</text>
+            <g stroke="#3f6f4e" stroke-width="1.8" fill="none"><path d="M116 138 H148" marker-end="url(#gwa)"/><path d="M292 138 H324" marker-end="url(#gwa)"/><path d="M468 138 H500" marker-end="url(#gwa)"/><path d="M604 127 C620 116 630 112 644 112" marker-end="url(#gwa)"/><path d="M604 149 C620 160 630 166 644 166" marker-end="url(#gwa)"/></g>
+            <text x="360" y="222" class="serif" font-size="12.5" font-style="italic" fill="#5b5347" text-anchor="middle">È possibile fare riferimento a una GatewayClass da molti Gateway; ciascun Gateway può instradare il traffico ai Servizi.</text>
+          </svg>
+        </div>
+
+        <p>Come Ingress, l'API Gateway necessita di un controller per trasformare la configurazione in una rete funzionante. Il titolare del trattamento nominato da <code>controllerName</code> deve essere installato e funzionante; scrivendo il suo nome non lo installa.</p>
+        <p>Questo YAML utilizza Envoy Gateway come esempio di implementazione. Altre implementazioni dell'API Gateway possono essere utilizzate con il proprio nome controller documentato.</p>
+        <p>Il controller legge gli ascoltatori, instrada e configura i proxy che gestiscono le richieste. Il diagramma mostra come si adatta la configurazione; Gateway e HTTPRoute sono oggetti API, non server separati.</p>
+
+        <div class="codeblock single">
+          <div class="code-bar"><div class="dots"><i></i><i></i><i></i></div><span class="filename">gatewayclass.yaml</span></div>
+          <pre><code class="language-yaml">apiVersion: gateway.networking.k8s.io/v1
+kind: GatewayClass
+metadata:
+  name: envoy
+spec:
+  controllerName: gateway.envoyproxy.io/gatewayclass-controller</code></pre>
+        </div>
+
+        <div class="codeblock single">
+          <div class="code-bar"><div class="dots"><i></i><i></i><i></i></div><span class="filename">gateway.yaml</span></div>
+          <pre><code class="language-yaml">apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: api-gateway
+spec:
+  gatewayClassName: envoy
+  listeners:
+    - name: http
+      protocol: HTTP
+      port: 80</code></pre>
+        </div>
+
+        <div class="codeblock single">
+          <div class="code-bar"><div class="dots"><i></i><i></i><i></i></div><span class="filename">api-httproute.yaml</span></div>
+          <pre><code class="language-yaml">apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: api-httproute
+spec:
+  parentRefs:
+    - name: api-gateway
+  hostnames:
+    - "api.example.com"
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: api
+          port: 80</code></pre>
+        </div>
+
+      </section>
+
+      <!-- 16 -->
+      <section id="s16">
+        <div class="sec-head"><div class="sec-num">16</div><h2>Configurazione, segreti e ambiente</h2></div>
+        <p>Un'immagine deve esserlo <strong>indipendente dall’ambiente</strong>: il <em>stesso</em> l'immagine testata viene eseguita in sviluppo, staging,
+          e prod, differisce solo la configurazione (URL del database, flag di funzionalità, credenziali). Quindi configurazione
+          è <em>iniettato in fase di esecuzione</em>, mai inserito nell'immagine. Questa è la forma containerizzata di
+          regola fondamentale del capitolo sulla gestione della configurazione e la classica espressione di &quot;configurazione nell'ambiente&quot; a dodici fattori.
+          Kubernetes fornisce due oggetti: <strong>ConfigMaps</strong> per impostazioni non segrete e <strong>Segreti</strong>
+          per i valori sensibili.</p>
+
+        <div class="viz">
+          <div class="viz-cap">Iniezione di configurazione</div>
+          <div class="viz-title">Una immagine, tanti ambienti, configurazione fornita dall'esterno</div>
+          <svg viewBox="0 0 720 180" xmlns="http://www.w3.org/2000/svg" role="img"
+            aria-label="Un'immagine combinata con diversi ConfigMap e Secret da eseguire in fase di sviluppo, staging e produzione">
+            <rect x="280" y="20" width="160" height="40" rx="9" fill="#211e1a"/><text x="360" y="38" font-size="11" font-weight="700" fill="#fff" text-anchor="middle">un'immagine testata</text><text x="360" y="53" class="mono" font-size="8.5" fill="#7fd1c4" text-anchor="middle">miaapp:1.4.0</text>
+            <defs><marker id="ca" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0 0 L7 3 L0 6 Z" fill="#3f6f4e"/></marker></defs>
+            <g stroke="#3f6f4e" stroke-width="1.5" fill="none"><path d="M300 60 C220 80 180 92 140 100" marker-end="url(#ca)"/><path d="M360 62 V100" marker-end="url(#ca)"/><path d="M420 60 C500 80 540 92 580 100" marker-end="url(#ca)"/></g>
+            <rect x="40" y="104" width="200" height="58" rx="10" fill="#e0e9dd" stroke="#3f6f4e"/><text x="140" y="126" font-size="11" font-weight="700" fill="#3f6f4e" text-anchor="middle">dev</text><text x="140" y="144" class="mono" font-size="8.5" fill="#5b5347" text-anchor="middle">+ ConfigMap-dev + Secret-dev</text>
+            <rect x="260" y="104" width="200" height="58" rx="10" fill="#f0e5c9" stroke="#b07d2b"/><text x="360" y="126" font-size="11" font-weight="700" fill="#b07d2b" text-anchor="middle">messa in scena</text><text x="360" y="144" class="mono" font-size="8.5" fill="#5b5347" text-anchor="middle">+ ConfigMap-stg + Secret-stg</text>
+            <rect x="480" y="104" width="200" height="58" rx="10" fill="#f7e9e2" stroke="#b8402e"/><text x="580" y="126" font-size="11" font-weight="700" fill="#8f2f20" text-anchor="middle">produzione</text><text x="580" y="144" class="mono" font-size="8.5" fill="#5b5347" text-anchor="middle">+ Prodotto ConfigMap + Prodotto segreto</text>
+          </svg>
+        </div>
+
+        <div class="codeblock single">
+          <div class="code-bar"><div class="dots"><i></i><i></i><i></i></div><span class="filename">configmap + secret, inserito come env vars</span></div>
+          <pre><code class="language-yaml">apiVersion: v1
+kind: ConfigMap
+metadata: { name: api-config }
+data:
+  LOG_LEVEL: "info"
+  FEATURE_NEW_CHECKOUT: "true"
+---
+apiVersion: v1
+kind: Secret
+metadata: { name: api-secrets }
+type: Opaque
+stringData:                       # plaintext here; stored base64-encoded in etcd
+  DATABASE_URL: "postgres://app:secret@db:5432/app"
+---
+# ...inside the Deployment's container spec (sec 14):
+#   envFrom:
+#     - configMapRef: { name: api-config }    # all keys -&gt; env vars
+#     - secretRef:    { name: api-secrets }   # secret keys -&gt; env vars
+# Your app then reads os.Getenv("LOG_LEVEL") / os.environ["DATABASE_URL"] (sec config chapter)</code></pre>
+        </div>
+
+        <div class="box gotcha"><span class="tag">I segreti non sono crittografati per impostazione predefinita</span>
+          <p>Un segreto Kubernetes è solo <strong>codifica base64</strong> in etcd, non crittografato, base64 lo è
+            codifica, non protezione. Per una reale sicurezza abilitata <em>crittografia a riposo</em> per etcd, blocca RBAC così pochi
+            le identità possono leggere i segreti e per i sistemi sensibili utilizzare un gestore esterno (Vault, archivi segreti cloud,
+            o il driver CSI Secrets Store). E non affidare mai veri valori segreti a Git, lo stesso
+            disciplina delle credenziali che non perdono mai come i capitoli sicurezza e autenticazione.</p>
+        </div>
+      </section>
+
+      <!-- 17 -->
+      <section id="s17">
+        <div class="sec-head"><div class="sec-num">17</div><h2>Sonde sanitarie e gestione delle risorse</h2></div>
+        <p>Affinché l'autoriparazione e l'assenza di tempi di inattività funzionino, Kubernetes deve conoscere due cose su ogni pod: <em>lo è
+          vivo?</em> e <em>è pronto per il traffico?</em> Non può indovinare, deve dirlo la tua app, tramite
+          <strong>sonde</strong>. E per pianificare e isolare in modo equo, è necessario sapere quanta CPU e memoria ciascuno
+          il contenitore vuole, via <strong>richieste e limiti</strong> (i cgroup del sec 03, sono emersi come config).</p>
+
+        <h3>Tre indagini, tre domande</h3>
+        <ul>
+          <li><strong>Vivacità</strong>: &quot;il processo è sano o incastrato?&quot; Se fallisce, Kubernetes
+            <em>si riavvia</em> il contenitore. Rileva situazioni di stallo e stati sospesi che un arresto anomalo non farebbe.</li>
+          <li><strong>Prontezza</strong>: &quot;può servire le richieste in questo momento?&quot; Se fallisce, il pod viene estratto
+            la sua rotazione del Servizio (sec 15) ma <em>no</em> riavviato. Questo è ciò che consente implementazioni senza tempi di inattività e
+            contropressione: un pod in fase di riscaldamento o sovraccaricato brevemente smette di ricevere traffico finché non si riprende.</li>
+          <li><strong>Avvio</strong>: &quot;un'app che si avvia lentamente ha terminato l'avvio?&quot; Protegge le altre sonde quindi a
+            un lungo avvio a freddo non viene confuso con un fallimento.</li>
+        </ul>
+
+        <div class="viz">
+          <div class="viz-cap">Vitalità vs prontezza</div>
+          <div class="viz-title">Riavvio in caso di errore di attività; interrompere l'invio del traffico in caso di errore di preparazione</div>
+          <svg viewBox="0 0 720 180" xmlns="http://www.w3.org/2000/svg" role="img"
+            aria-label="L'errore del sonda di attività porta al riavvio del contenitore; Il guasto della sonda di disponibilità porta alla rimozione dalla rotazione del bilanciatore del carico">
+            <rect x="270" y="20" width="180" height="40" rx="9" fill="#3f6f4e"/><text x="360" y="38" font-size="11" font-weight="700" fill="#fff" text-anchor="middle">kubelet sonda il pod</text><text x="360" y="53" class="mono" font-size="8.5" fill="#dceeea" text-anchor="middle">GET /healthz / /ready</text>
+            <defs><marker id="ha" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0 0 L7 3 L0 6 Z" fill="#8f2f20"/></marker></defs>
+            <path d="M320 60 C260 90 220 100 180 108" stroke="#8f2f20" stroke-width="1.6" fill="none" marker-end="url(#ha)"/>
+            <path d="M400 60 C460 90 500 100 540 108" stroke="#b07d2b" stroke-width="1.6" fill="none" marker-end="url(#ha)"/>
+            <rect x="30" y="112" width="280" height="52" rx="10" fill="#eccdc2" stroke="#8f2f20"/><text x="170" y="134" font-size="11" font-weight="700" fill="#8f2f20" text-anchor="middle">la vitalità fallisce</text><text x="170" y="152" font-size="10" fill="#5b5347" text-anchor="middle">-&gt; RIAVVIA il contenitore</text>
+            <rect x="410" y="112" width="280" height="52" rx="10" fill="#f0e5c9" stroke="#b07d2b"/><text x="550" y="134" font-size="11" font-weight="700" fill="#b07d2b" text-anchor="middle">la prontezza fallisce</text><text x="550" y="152" font-size="10" fill="#5b5347" text-anchor="middle">-&gt; rimuovi dalla rotazione del servizio</text>
+          </svg>
+        </div>
+
+        <h3>Richieste e limiti</h3>
+        <p>A <strong>richiesta</strong> è l'importo che lo scheduler riserva per un contenitore (e utilizza per scegliere un nodo); un
+          <strong>limite</strong> è il limite rigido imposto dal runtime tramite cgroups. Supera un limite della CPU e il
+          il contenitore è <em>strozzato</em>; superare un limite di memoria ed è <em>ucciso</em> (<code>OOMKilled</code>).
+          Impostarli bene fa la differenza tra un gruppo stabile e un vicino caotico e rumoroso, e loro si nutrono
+          scalabilità automatica (sez. 18).</p>
+
+        <div class="codeblock single">
+          <div class="code-bar"><div class="dots"><i></i><i></i><i></i></div><span class="filename">sonde + risorse nelle specifiche del contenitore</span></div>
+          <pre><code class="language-yaml"># ...inside the Deployment's containers: entry (sec 14)
+          livenessProbe:
+            httpGet: { path: /healthz, port: 8080 }   # wedged? -&gt; restart
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          readinessProbe:
+            httpGet: { path: /ready, port: 8080 }      # ready for traffic? -&gt; in/out of rotation
+            periodSeconds: 5
+          resources:
+            requests: { cpu: "100m", memory: "128Mi" } # scheduler reserves this
+            limits:   { cpu: "500m", memory: "256Mi" } # cgroup ceiling; over memory -&gt; OOMKilled</code></pre>
+        </div>
+
+        <div class="box note"><span class="tag">Le sonde si accoppiano con lo spegnimento graduale</span>
+          <p>Le sonde rappresentano solo la metà della gestione pulita del ciclo di vita. L'altra metà è il capitolo sulla chiusura graziosa: su a
+            implementazione o riduzione, invia Kubernetes <code>SIGTERM</code> e attende un periodo di grazia prima
+            <code>SIGKILL</code>. La tua app dovrebbe fallire immediatamente la verifica di idoneità (interrompere il nuovo traffico), quindi terminare
+            richieste in corso, quindi escono, quindi nessuna richiesta viene abbandonata durante il volo. Le sonde decidono cosa ottiene il traffico;
+            lo spegnimento regolare decide come esce un pod.</p>
+        </div>
+      </section>
+
+      <!-- 18 -->
+      <section id="s18">
+        <div class="sec-head"><div class="sec-num">18</div><h2>Ridimensionamento e implementazioni</h2></div>
+        <p>Due operazioni quotidiane chiudono l'orchestrazione: gestire più carico (<strong>ridimensionamento</strong>) e spedizione nuova
+          versioni senza tempi di inattività (<strong>implementazioni</strong>). Entrambi si appoggiano a tutto ciò che è stato costruito finora, repliche,
+          Servizi, sonde di disponibilità ed entrambi sono l'espressione Kubernetes degli argomenti del capitolo sulla scalabilità.</p>
+
+        <h3>Ridimensionamento orizzontale e ridimensionamento automatico</h3>
+        <p>Scalare in orizzontale significa correre di più <em>repliche di baccelli</em> (preferito piuttosto che realizzare un pod più grande, il
+          tema orizzontale/verticale dal capitolo sul ridimensionamento). Puoi impostare il conteggio manualmente o passarlo al
+          <strong>Scalabilità automatica pod orizzontale (HPA)</strong>, che controlla una metrica (in genere la CPU) e regola le repliche
+          per trattenere un bersaglio, ridimensionandosi sotto carico e rientrando quando si abbassa. Poiché i pod dell'app sono senza stato
+          (sec 9), qualsiasi replica può soddisfare qualsiasi richiesta, quindi l'aggiunta di pod funziona.</p>
+
+        <div class="codeblock single">
+          <div class="code-bar"><div class="dots"><i></i><i></i><i></i></div><span class="filename">hpa.yaml / scalabilità automatica sulla CPU</span></div>
+          <pre><code class="language-yaml">apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata: { name: api }
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: api
+  minReplicas: 3
+  maxReplicas: 20
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target: { type: Utilization, averageUtilization: 70 }  # keep avg CPU ~70%
+# Requires resource requests (sec 17), utilization is measured against the request.</code></pre>
+        </div>
+
+        <h3>Aggiornamenti continui e rollback</h3>
+        <p>Quando modifichi il tag immagine e lo riapplica, una distribuzione esegue a <strong>aggiornamento continuo</strong> per impostazione predefinita:
+          visualizza i pod della nuova versione alcuni alla volta, attende che ciascuno passi il proprio <em>prontezza</em> sonda (sez 17)
+          prima di inviargli traffico e solo allora ritira i vecchi pod. In ogni momento vengono serviti abbastanza baccelli sani, quindi
+          gli utenti non vedono tempi di inattività. Se i nuovi pod non riescono a essere pronti, l'implementazione si blocca invece di disattivare l'app e un comando ripristina l'ultima versione valida.</p>
+
+        <div class="viz">
+          <div class="viz-cap">Aggiornamento continuo</div>
+          <div class="viz-title">Sostituisci gradualmente le repliche e mantieni sempre un set di porzioni sano</div>
+          <svg viewBox="0 0 720 170" xmlns="http://www.w3.org/2000/svg" role="img"
+            aria-label="Un aggiornamento progressivo in tre passaggi, i pod della vecchia versione vengono sostituiti uno alla volta dai pod della nuova versione mentre la capacità rimane attiva">
+            <g font-family="JetBrains Mono" font-size="9">
+              <text x="60" y="24" fill="#5b5347" text-anchor="middle">iniziare</text>
+              <rect x="20" y="32" width="26" height="40" rx="4" fill="#b8402e"/><rect x="50" y="32" width="26" height="40" rx="4" fill="#b8402e"/><rect x="80" y="32" width="26" height="40" rx="4" fill="#b8402e"/>
+              <text x="63" y="92" fill="#8f2f20" text-anchor="middle">v1 v1 v1</text>
+
+              <text x="280" y="24" fill="#5b5347" text-anchor="middle">a metà lancio</text>
+              <rect x="220" y="32" width="26" height="40" rx="4" fill="#3f6f4e"/><rect x="250" y="32" width="26" height="40" rx="4" fill="#b8402e"/><rect x="280" y="32" width="26" height="40" rx="4" fill="#b8402e"/><rect x="310" y="32" width="26" height="40" rx="4" fill="#3f6f4e" opacity="0.5"/>
+              <text x="278" y="92" fill="#5b5347" text-anchor="middle">v2 v1 v1 (+v2 riscaldamento)</text>
+
+              <text x="560" y="24" fill="#5b5347" text-anchor="middle">fatto</text>
+              <rect x="520" y="32" width="26" height="40" rx="4" fill="#3f6f4e"/><rect x="550" y="32" width="26" height="40" rx="4" fill="#3f6f4e"/><rect x="580" y="32" width="26" height="40" rx="4" fill="#3f6f4e"/>
+              <text x="563" y="92" fill="#3f6f4e" text-anchor="middle">v2 v2 v2</text>
+            </g>
+            <defs><marker id="ru" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0 0 L7 3 L0 6 Z" fill="#8f2f20"/></marker></defs>
+            <path d="M120 52 H214" stroke="#8f2f20" stroke-width="1.6" marker-end="url(#ru)"/>
+            <path d="M350 52 H514" stroke="#8f2f20" stroke-width="1.6" marker-end="url(#ru)"/>
+            <text x="360" y="128" class="serif" font-size="12.5" font-style="italic" fill="#5b5347" text-anchor="middle">Un nuovo pod accetta il traffico solo dopo aver superato la disponibilità; i vecchi baccelli si scolano con grazia (sez. 17).</text>
+            <text x="360" y="150" class="serif" font-size="12.5" font-style="italic" fill="#5b5347" text-anchor="middle">Se la v2 non diventa mai pronta, l'implementazione si interrompe e la capacità non viene mai sacrificata.</text>
+          </svg>
+        </div>
+
+        <div class="box key"><span class="tag">Tutto si riunisce qui</span>
+          <p>Le distribuzioni con tempi di inattività pari a zero non sono una caratteristica, sono <em>composizione</em> di repliche (sez 14),
+            sonde di disponibilità (sec. 17), arresto regolare e astrazione del servizio (sec. 15) che mantengono stabile
+            indirizzo su un set di pod spostabili. Ogni pezzo ha guadagnato il suo posto; il lancio è il luogo in cui danno i loro frutti.</p>
+        </div>
+      </section>
+
+      <div class="part-label">Parte V / CI/CD e produzione</div>
+
+      <!-- 19 -->
+      <section id="s19">
+        <div class="sec-head"><div class="sec-num">19</div><h2>Condutture CI/CD</h2></div>
+        <p>I contenitori rendono riproducibile l'artefatto; <strong>CI/CD</strong> rende il percorso da un codice impegnato a quello
+          artefatto in esecuzione in produzione <em>automatico</em>. <strong>CI (integrazione continua)</strong> è il
+          costruisci e verifica metà, a ogni push, crea l'immagine, esegui test, scansionala. <strong>CD (continua
+          Consegna/Distribuzione)</strong> è la metà della nave, inserisci l'immagine in un registro e distribuiscila. Il tutto
+          il punto è eliminare i passaggi manuali soggetti a errori in modo che le distribuzioni siano frequenti, piccole e noiose.</p>
+
+        <div class="viz">
+          <div class="viz-cap">Il gasdotto</div>
+          <div class="viz-title">Dal commit al pod in esecuzione, con cancelli lungo il percorso</div>
+          <svg viewBox="0 0 720 150" xmlns="http://www.w3.org/2000/svg" role="img"
+            aria-label="Una pipeline CI/CD: commit, creazione di immagini, test, scansione, push nel registro, distribuzione in Kubernetes">
+            <defs><marker id="pp" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0 0 L7 3 L0 6 Z" fill="#8f2f20"/></marker></defs>
+            <g font-family="Hanken Grotesk">
+              <rect x="14" y="50" width="92" height="48" rx="9" fill="#b8402e"/><text x="60" y="70" font-size="10.5" font-weight="700" fill="#fff" text-anchor="middle">impegnarsi</text><text x="60" y="86" class="mono" font-size="8" fill="#f4d9cf" text-anchor="middle">spingi</text>
+              <rect x="126" y="50" width="92" height="48" rx="9" fill="#ece3d4" stroke="#b8402e"/><text x="172" y="70" font-size="10.5" font-weight="700" fill="#8f2f20" text-anchor="middle">costruire</text><text x="172" y="86" class="mono" font-size="8" fill="#5b5347" text-anchor="middle">immagine sezione 6</text>
+              <rect x="238" y="50" width="92" height="48" rx="9" fill="#ece3d4" stroke="#b8402e"/><text x="284" y="70" font-size="10.5" font-weight="700" fill="#8f2f20" text-anchor="middle">prova</text><text x="284" y="86" class="mono" font-size="8" fill="#5b5347" text-anchor="middle">unità/int</text>
+              <rect x="350" y="50" width="92" height="48" rx="9" fill="#ece3d4" stroke="#b8402e"/><text x="396" y="70" font-size="10.5" font-weight="700" fill="#8f2f20" text-anchor="middle">scansione</text><text x="396" y="86" class="mono" font-size="8" fill="#5b5347" text-anchor="middle">CVE</text>
+              <rect x="462" y="50" width="100" height="48" rx="9" fill="#211e1a"/><text x="512" y="70" font-size="10.5" font-weight="700" fill="#fff" text-anchor="middle">spingere</text><text x="512" y="86" class="mono" font-size="8" fill="#e9e2d3" text-anchor="middle">registro sez 8</text>
+              <rect x="582" y="50" width="120" height="48" rx="9" fill="#3f6f4e"/><text x="642" y="70" font-size="10.5" font-weight="700" fill="#fff" text-anchor="middle">distribuire</text><text x="642" y="86" class="mono" font-size="8" fill="#dceeea" text-anchor="middle">lancio sec 18</text>
+            </g>
+            <path d="M106 74 H124" stroke="#8f2f20" stroke-width="1.6" marker-end="url(#pp)"/>
+            <path d="M218 74 H236" stroke="#8f2f20" stroke-width="1.6" marker-end="url(#pp)"/>
+            <path d="M330 74 H348" stroke="#8f2f20" stroke-width="1.6" marker-end="url(#pp)"/>
+            <path d="M442 74 H460" stroke="#8f2f20" stroke-width="1.6" marker-end="url(#pp)"/>
+            <path d="M562 74 H580" stroke="#8f2f20" stroke-width="1.6" marker-end="url(#pp)"/>
+            <text x="360" y="128" class="serif" font-size="12.5" font-style="italic" fill="#5b5347" text-anchor="middle">Ogni fase è un cancello: un test fallito o un CVE critico arresta la pipeline prima che qualcosa raggiunga la produzione.</text>
+          </svg>
+        </div>
+
+        <div class="codeblock single">
+          <div class="code-bar"><div class="dots"><i></i><i></i><i></i></div><span class="filename">.github/workflows/deploy.yaml / una pipeline rappresentativa</span></div>
+          <pre><code class="language-yaml">name: ci-cd
+on:
+  push:
+    branches: [main]
+
+jobs:
+  build-test-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run tests              # CI gate, must pass before we ship (sec testing chapter)
+        run: make test               # go test ./...  |  pytest
+
+      - name: Build image
+        run: docker build -t $REGISTRY/myapp:${{ github.sha }} .   # tag = commit SHA (sec 8)
+
+      - name: Scan image for vulnerabilities
+        run: trivy image --severity HIGH,CRITICAL --exit-code 1 $REGISTRY/myapp:${{ github.sha }}
+
+      - name: Push to registry
+        run: |
+          echo "$REGISTRY_TOKEN" | docker login $REGISTRY -u ci --password-stdin
+          docker push $REGISTRY/myapp:${{ github.sha }}
+
+      - name: Deploy to Kubernetes   # update the Deployment's image -&gt; triggers a rolling update (sec 18)
+        run: kubectl set image deployment/api api=$REGISTRY/myapp:${{ github.sha }}
+</code></pre>
+        </div>
+
+        <div class="box note"><span class="tag">Perché taggare tramite commit SHA</span>
+          <p>Taggare l'immagine con git SHA (e distribuire quel tag esatto) fornisce un collegamento preciso e immutabile da a
+            riportando il pod alla fonte che lo ha creato, l'obiettivo di riproducibilità della sez. 8, dall'inizio alla fine. Quando
+            qualcosa si rompe nel prod, lo sai <em>esattamente</em> quale commit è in esecuzione e rollback (sec 18) lo è
+            inequivocabile.</p>
+        </div>
+      </section>
+
+      <!-- 20 -->
+      <section id="s20">
+        <div class="sec-head"><div class="sec-num">20</div><h2>Strategie di distribuzione e GitOps</h2></div>
+        <p>L'aggiornamento progressivo (sez. 18) è l'impostazione predefinita, ma i rilasci più rischiosi richiedono strategie che limitino il raggio dell'esplosione,
+          e le squadre mature cambiano <em>come</em> le distribuzioni vengono attivate completamente con GitOps.</p>
+
+        <div class="tbl-wrap">
+          <table>
+            <thead><tr><th>Strategia</th><th>Come funziona</th><th>Compromesso</th></tr></thead>
+            <tbody>
+              <tr><td><strong>Rotolamento</strong></td><td>Sostituisci i pod gradualmente (impostazione predefinita)</td><td>Semplice, senza tempi di inattività; vecchio + nuovo corrono brevemente insieme</td></tr>
+              <tr><td><strong>Blu-verde</strong></td><td>Metti la nuova versione completa (verde) accanto alla vecchia (blu), quindi inverti tutto il traffico contemporaneamente</td><td>Passaggio istantaneo e rollback istantaneo; necessita del doppio della capacità durante il cutover</td></tr>
+              <tr><td><strong>Canarino</strong></td><td>Invia una piccola percentuale di traffico alla nuova versione, osserva le metriche, quindi aumenta</td><td>Più sicuro per cambiamenti rischiosi; è necessaria una maggiore orchestrazione/osservabilità</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="viz">
+          <div class="viz-cap">Blu-verde vs canarino</div>
+          <div class="viz-title">Capovolgi tutto in una volta o fai scorrere il traffico e guarda</div>
+          <svg viewBox="0 0 720 180" xmlns="http://www.w3.org/2000/svg" role="img"
+            aria-label="Blu-verde che inverte tutto il traffico da blu a verde contemporaneamente, rispetto a Canary che invia prima una piccola percentuale alla nuova versione">
+            <text x="180" y="22" class="mono" font-size="11" font-weight="700" fill="#3f6f4e" text-anchor="middle">blu-verde, capovolgi 100%</text>
+            <rect x="40" y="40" width="90" height="40" rx="8" fill="#37607f"/><text x="85" y="64" font-size="11" font-weight="700" fill="#fff" text-anchor="middle">blu v1</text>
+            <rect x="230" y="40" width="90" height="40" rx="8" fill="#3f6f4e"/><text x="275" y="64" font-size="11" font-weight="700" fill="#fff" text-anchor="middle">verde v2</text>
+            <defs><marker id="ga2" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0 0 L7 3 L0 6 Z" fill="#8f2f20"/></marker></defs>
+            <path d="M180 95 V120" stroke="#8f2f20" stroke-width="2" marker-end="url(#ga2)"/>
+            <text x="180" y="138" font-size="11" font-style="italic" fill="#5b5347" text-anchor="middle">cambia router blu-&gt;verde immediatamente</text>
+            <text x="180" y="156" font-size="10" font-style="italic" fill="#8f2f20" text-anchor="middle">problema? torna subito al blu</text>
+
+            <text x="540" y="22" class="mono" font-size="11" font-weight="700" fill="#b8402e" text-anchor="middle">canarino, gocciolare e poi rampare</text>
+            <rect x="430" y="40" width="120" height="36" rx="8" fill="#37607f"/><text x="490" y="63" font-size="10.5" font-weight="700" fill="#fff" text-anchor="middle">v1-95%</text>
+            <rect x="580" y="40" width="120" height="36" rx="8" fill="#b8402e"/><text x="640" y="63" font-size="10.5" font-weight="700" fill="#fff" text-anchor="middle">v2-5%</text>
+            <text x="565" y="100" font-size="11" font-style="italic" fill="#5b5347" text-anchor="middle">guarda il tasso di errore e la latenza della v2</text>
+            <text x="565" y="120" font-size="10.5" font-style="italic" fill="#3f6f4e" text-anchor="middle">sano -&gt; 5% -&gt; 25% -&gt; 100%</text>
+            <text x="565" y="140" font-size="10.5" font-style="italic" fill="#8f2f20" text-anchor="middle">pessimo -&gt; percorso indietro 0%, raggio dell'esplosione minuscolo</text>
+          </svg>
+        </div>
+
+        <h3>GitOps: Git come fonte di verità</h3>
+        <p>Il gasdotto nel sec. 19 <em>spinge</em> modifiche al cluster. <strong>GitOps</strong> lo inverte: il
+          lo stato desiderato del cluster risiede interamente in un repository Git (tutti quei manifest YAML) e in un cluster
+          agente (Argo CD, Flux) in modo continuo <em>tira</em> da Git e riconcilia il cluster in modo che corrisponda. Questo è il
+          ciclo di riconciliazione del sec 11 esteso alle distribuzioni stesse: Git è lo stato desiderato, il cluster è effettivo
+          stato, l'agente colma il divario. La distribuzione viene eseguita unendo una richiesta pull; torni indietro con <code>git revert</code>;
+          e il repository è una cronologia completa e controllata di ogni modifica alla produzione.</p>
+
+        <div class="box key"><span class="tag">La linea passante</span>
+          <p>Notate la stessa idea su tre scale: un contenitore conserva il <em>artefatto</em> identico, una distribuzione mantiene
+            il <em>baccelli in esecuzione</em> corrispondente a una specifica e GitOps mantiene la <em>intero grappolo</em> Git corrispondente. Dichiarare
+            stato desiderato, lascia che un ciclo riconcili la realtà, sono i contenitori e Kubernetes fino in fondo.</p>
+        </div>
+      </section>
+
+      <!-- 21 -->
+      <section id="s21">
+        <div class="sec-head"><div class="sec-num">21</div><h2>Scheda di riferimento sulla produzione</h2></div>
+        <p>L'intero manuale compresso in ciò che raggiungi sotto pressione.</p>
+        <div class="tbl-wrap">
+          <table>
+            <thead><tr><th>Concetto</th><th>Una riga</th></tr></thead>
+            <tbody>
+              <tr><td>Contenitore</td><td>Un processo isolato, spazi dei nomi (cosa vede) + cgroups (cosa usa) + un filesystem di immagine.</td></tr>
+              <tr><td>contro la VM</td><td>I contenitori condividono un kernel host; Ciascuna VM fornisce un sistema operativo completo. Isolamento più leggero, più veloce, più debole.</td></tr>
+              <tr><td>Immagine vs contenitore</td><td>Immagine = modello immutabile (classe); contenitore = istanza in esecuzione (oggetto).</td></tr>
+              <tr><td>Strati</td><td>Le immagini sono livelli impilati di sola lettura, condivisi e memorizzati nella cache; la parte superiore scrivibile del contenitore è effimera.</td></tr>
+              <tr><td>Dockerfile</td><td>Ricetta; ogni istruzione = un livello. <code>RUN</code> in fase di costruzione, <code>CMD</code> in fase di esecuzione.</td></tr>
+              <tr><td>Multistadio</td><td>Costruisci in una fase pesante, copia solo l'artefatto in una piccola immagine finale.</td></tr>
+              <tr><td>Ordine della cache</td><td>A seconda del codice, un livello modificato ricostruisce tutto ciò che si trova sotto di esso.</td></tr>
+              <tr><td>Registro e tag</td><td>Spingi/tira immagini per nome:tag; aggiungi una versione o SHA, mai <code>:latest</code>.</td></tr>
+              <tr><td>Volumi</td><td>I dati che devono sopravvivere risiedono in un volume, non nel livello scrivibile del contenitore.</td></tr>
+              <tr><td>Comporre</td><td>Stack dichiarativo multi-contenitore attivo <em>uno</em> host, sviluppatore locale.</td></tr>
+              <tr><td>Orchestrazione</td><td>Pianificazione, autoriparazione, scalabilità, scoperta, implementazioni su più nodi.</td></tr>
+              <tr><td>dichiarativo</td><td>Dichiarare lo stato desiderato; un ciclo di controllo riconcilia l'effettivo con esso. L'intero modello.</td></tr>
+              <tr><td>Baccello</td><td>Unità più piccola; one+ contenitori che condividono rete e spazio di archiviazione. Mortale, ottiene un nuovo IP quando viene sostituito.</td></tr>
+              <tr><td>Distribuzione</td><td>Mantiene N repliche di un pod in esecuzione; autoguarigione; esegue aggiornamenti continui.</td></tr>
+              <tr><td>Servizio</td><td>Bilanciamento del carico IP/DNS stabile tra pod corrispondenti, rilevamento dei servizi.</td></tr>
+              <tr><td>Ingresso</td><td>Un punto di ingresso L7: routing host/percorso + TLS verso molti servizi.</td></tr>
+              <tr><td>API del gateway</td><td>API di rete più recente e orientata ai ruoli: GatewayClass seleziona un controller; Il gateway ascolta; HTTPRoute instrada ai servizi.</td></tr>
+              <tr><td>Configurazione/Segreti</td><td>Iniezione in fase di esecuzione (ConfigMap/Secret); stessa immagine ovunque. Per impostazione predefinita, i segreti non sono crittografati.</td></tr>
+              <tr><td>Sonde</td><td>Vitalità -&gt; riavvio; disponibilità -&gt; dentro/fuori rotazione; avvio -&gt; guardia stivali lenti.</td></tr>
+              <tr><td>Richieste/limiti</td><td>Richiesta = riservata (programmazione); limite = soffitto del cgroup. Memoria eccessiva -&gt; OOMKilled.</td></tr>
+              <tr><td>Ridimensionamento</td><td>Esegui più repliche; HPA scala automaticamente in base a una metrica (richiede il set di richieste).</td></tr>
+              <tr><td>Lancio/ritorno</td><td>Sostituzione graduale, determinata dalla disponibilità; <code>kubectl rollout undo</code> ripristina.</td></tr>
+              <tr><td>CI/CD</td><td>Commit -&gt; build -&gt; test -&gt; scan -&gt; push -&gt; deploy, automaticamente; etichetta di SHA.</td></tr>
+              <tr><td>Strategie</td><td>Rolling (predefinito), blu-verde (capovolgimento istantaneo), canarino (trickle &amp; watch).</td></tr>
+              <tr><td>GitOps</td><td>Git è lo stato desiderato; un agente tira e riconcilia. Distribuisci tramite PR, ripristina tramite ripristino.</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="foot">
+          <p><strong>Tutto l'argomento in un fiato:</strong> un contenitore racchiude la tua app con il suo intero ambiente in questo modo
+            &quot;ciò che viene eseguito in prod&quot; equivale a &quot;ciò che hai testato&quot; (sez 1), ottenuto con spazi dei nomi e cgroup Linux, non
+            un VM pesante (sez. 2-3). Costruisci un'immagine come livelli condivisibili memorizzati nella cache (sec 4) da un Dockerfile
+            (sec. 5), rimpicciolirlo e rafforzarlo con build a più fasi e un buon ordinamento della cache (sec. 6-7), quindi spingere
+            un'immagine con tag SHA in un registro (sez. 8). Localmente colleghi diversi contenitori con reti, volumi e
+            Comporre (sez. 9-10). Su scala di flotta, Kubernetes riconcilia lo stato desiderato dichiarato sui nodi
+            (sez. 11-12): le distribuzioni mantengono in vita le repliche dei pod e si autoriparano (sez. 13-14), Servizi
+            e l'API Gateway o Ingress forniscono indirizzamento e routing stabili (sez. 15), ConfigMaps/Secrets iniettano la configurazione per ambiente
+            (sez. 16), sonde e richieste/limiti di risorse determinano l'integrità e la pianificazione (sez. 17) e HPA più rolling
+            gli aggiornamenti forniscono versioni scalabili e con tempi di inattività pari a zero (sez. 18). CI/CD automatizza commit-&gt;build-&gt;test-&gt;
+            scan-&gt;push-&gt;deploy (sez. 19) e blue-green/canary/GitOps rendono i rilasci sicuri e verificabili (sez. 20).
+            Un'idea ricorre a ogni livello: dichiarare lo stato desiderato e lasciare che un ciclo mantenga la realtà corrispondente ad esso.</p>
+          <p style="margin-top:14px;font-family:'JetBrains Mono', ui-monospace, monospace;font-size:12px;letter-spacing:.05em;">
+            Basato sui documenti Docker e Kubernetes / sulle specifiche dell'immagine OCI / sull'app Twelve-Factor /
+            Go 1.22+ / Esempi di applicazioni Python 3.11+.</p>
+        </div>
+      </section>
+
+    
+      <footer class="bfp-footer">Backend dai Primi Principi / Capitolo 21 / Contenitori. Il codice è destinato a Go 1.22+ e Python 3.11+.</footer>
+</main>
+</div>
+<button class="toc-toggle" onclick="document.querySelector('.toc').classList.toggle('open')"> Contenuto</button>
+
+  
+
+  <script>
+    hljs.highlightAll();
+    document.querySelectorAll('[data-cb]').forEach(block => {
+      const btns = block.querySelectorAll('.code-tabs button');
+      const panels = block.querySelectorAll('.code-panel');
+      btns.forEach(btn => btn.addEventListener('click', () => {
+        const lang = btn.dataset.lang;
+        btns.forEach(b => b.classList.toggle('on', b === btn));
+        panels.forEach(p => p.classList.toggle('on', p.dataset.panel === lang));
+      }));
+    });
+</script>
+<!-- CHAPTER NAVIGATION -->
+<nav class="chapter-nav" id="chapterNav">
+  <a href="../../20.Concurrency & Parallelism - IO Bound vs CPU Bound/html_notes/notes.html" class="nav-chapter-link"><span class="nav-arrow"><svg class="ico-arrow" width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="13.5" y1="8" x2="3.5" y2="8"/><polyline points="7.5,4 3.5,8 7.5,12"/></svg></span><span class="nav-label"><span class="nav-small">Capitolo 20</span>Concorrenza e parallelismo</span></a>
+  <a href="../../index.html" class="nav-indicator"><span class="nav-dot"></span> Capitolo 21 <span class="nav-sep">/</span> 24</a>
+  <a href="../../22.Automated-Testing-Unit-Integration-and-E2E/html_notes/notes.html" class="nav-chapter-link nav-next"><span class="nav-label"><span class="nav-small">Capitolo 22</span>Test automatizzati</span><span class="nav-arrow"><svg class="ico-arrow" width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="2.5" y1="8" x2="12.5" y2="8"/><polyline points="8.5,4 12.5,8 8.5,12"/></svg></span></a>
+</nav>
+  <script src="../../assets/copy-button.js"></script>
+  <script src="../../assets/enhancements.js"></script>
+<script src="../../assets/shell.js"></script>
+</body>
+
+</html>

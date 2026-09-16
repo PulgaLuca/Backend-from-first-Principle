@@ -1,0 +1,525 @@
+---
+order: 23
+title: "Broker di messaggi e Kafka"
+navTitle: "Broker di messaggi e Kafka"
+summary: "Una panoramica dei principi primi della piattaforma distribuita di streaming di eventi che sostiene i sistemi nervosi di LinkedIn, Uber, Netflix e della più moderna fintech, dall'idea su cui tutto si basa (un log di commit di sola aggiunta), attraverso partizioni, gruppi di consumatori, offset e semantica di consegna, fino alla conservazione, agli schemi, ai modelli guidati dagli eventi, al trucco outbox/CDC e all'elaborazione del flusso. Scritto per spiegare non solo cosa fa ogni pezzo, ma perché esiste e come funziona al di sotto. Codice produttore/consumatore sia in Go che in Python."
+readingTime: "2-3 ore"
+keywords:
+  - "kafka"
+  - "message"
+  - "brokers"
+  - "event"
+  - "streaming"
+  - "pub-sub"
+  - "consumers"
+  - "producers"
+  - "topics"
+---
+Parte I / Il modello logaritmico
+
+## Che cosa è realmente Kafka
+
+Eliminando il marketing, Kafka sarà una cosa: **un registro di eventi distribuito, di sola aggiunta e duraturo che molti consumatori indipendenti possono leggere al proprio ritmo.** Non una coda, non un database, non un bus di messaggi nel senso classico del termine, un _log_. I produttori aggiungono i record alla fine; i consumatori leggono in avanti da una posizione che seguono; e i record _rimangono_ dopo essere stati letti, per una conservazione configurata. Una volta che quella singola immagine è nella tua testa, ogni caratteristica di questo manuale ne è una conseguenza.
+
+La descrizione ufficiale è "una piattaforma di streaming di eventi distribuiti" e ogni parola merita il suo posto. **Distribuito**: funziona come un cluster di broker, replicando i dati per la tolleranza agli errori e scalando orizzontalmente. **Streaming di eventi**: è costruito attorno a un flusso illimitato e continuo di _eventi_ immutabili (è successo qualcosa: è stato effettuato un ordine, un pagamento è stato cancellato, un sensore è stato letto), non chiamate di richiesta/risposta. **Piattaforma**: produttori, consumatori, un ecosistema di connettori e l'elaborazione del flusso si trovano tutti sullo stesso registro.
+
+Una coda di messaggi tradizionale è un elenco di cose da fare: prendi un elemento, lo fai e non c'è più. Kafka è il _giornale di bordo_ di una nave: ogni evento viene scritto con ordine e resta nel libro. Dieci agenti diversi possono leggere il registro dal punto in cui lo avevano interrotto, rileggere le voci di ieri o iniziare dall'inizio, e la lettura non cancella mai una riga.
+
+<Diagram caption="The shape of Kafka">
+<svg viewBox="0 0 720 230" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="I produttori scrivono eventi in un registro di sola aggiunta, che viene conservato, mentre diversi gruppi di consumatori indipendenti leggono dalle proprie posizioni"><rect x="20" y="40" width="120" height="40" rx="9" fill="var(--dg-accent)"></rect><text x="80" y="65" font-size="11" font-weight="700" fill="var(--dg-on-accent)" text-anchor="middle">produttori</text><defs><marker id="k1" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0 0 L7 3 L0 6 Z" fill="var(--dg-accent-2)"></path></marker><marker id="k2" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0 0 L7 3 L0 6 Z" fill="var(--dg-ok)"></path></marker></defs><path d="M142 75 C180 90 200 100 230 104" stroke="var(--dg-accent-2)" stroke-width="1.8" marker-end="url(#k1)"></path><text x="180" y="98" class="mono" font-size="9" fill="var(--dg-accent-2)">aggiungere -&gt;</text><text x="235" y="100" class="mono" font-size="10" font-weight="700" fill="var(--dg-warn)">THE LOG (solo aggiunta, conservato)</text><g><rect x="232" y="108" width="44" height="34" rx="4" fill="var(--dg-warn-surface)" stroke="var(--dg-warn)"></rect><text x="254" y="129" class="mono" font-size="10" fill="var(--dg-warn-2)">e0</text><rect x="278" y="108" width="44" height="34" rx="4" fill="var(--dg-warn-surface)" stroke="var(--dg-warn)"></rect><text x="300" y="129" class="mono" font-size="10" fill="var(--dg-warn-2)">e1</text><rect x="324" y="108" width="44" height="34" rx="4" fill="var(--dg-warn-surface)" stroke="var(--dg-warn)"></rect><text x="346" y="129" class="mono" font-size="10" fill="var(--dg-warn-2)">e2</text><rect x="370" y="108" width="44" height="34" rx="4" fill="var(--dg-warn-surface)" stroke="var(--dg-warn)"></rect><text x="392" y="129" class="mono" font-size="10" fill="var(--dg-warn-2)">e3</text><rect x="416" y="108" width="44" height="34" rx="4" fill="var(--dg-warn-surface)" stroke="var(--dg-warn)"></rect><text x="438" y="129" class="mono" font-size="10" fill="var(--dg-warn-2)">e4</text><rect x="462" y="108" width="44" height="34" rx="4" fill="var(--dg-accent-surface)" stroke="var(--dg-warn)" stroke-dasharray="3 2"></rect><text x="484" y="129" class="mono" font-size="10" fill="var(--dg-ink-3)">...</text></g><text x="232" y="160" class="mono" font-size="8.5" fill="var(--dg-ink-3)">offset 0    1     2     3     4 -&gt; le nuove scritture vanno alla coda</text><rect x="540" y="40" width="160" height="34" rx="8" fill="var(--dg-ok-surface)" stroke="var(--dg-ok)"></rect><text x="620" y="62" font-size="10" font-weight="700" fill="var(--dg-ok)" text-anchor="middle">consumatore A @ offset 4</text><rect x="540" y="100" width="160" height="34" rx="8" fill="var(--dg-ok-surface)" stroke="var(--dg-ok)"></rect><text x="620" y="122" font-size="10" font-weight="700" fill="var(--dg-ok)" text-anchor="middle">consumatore B @ compensazione 1</text><rect x="540" y="160" width="160" height="34" rx="8" fill="var(--dg-ok-surface)" stroke="var(--dg-ok)"></rect><text x="620" y="182" font-size="10" font-weight="700" fill="var(--dg-ok)" text-anchor="middle">consumatore C @ offset 0</text><path d="M460 120 C500 100 510 70 538 60" stroke="var(--dg-ok)" stroke-width="1.4" fill="none" marker-end="url(#k2)"></path><path d="M300 130 C420 150 470 130 538 120" stroke="var(--dg-ok)" stroke-width="1.4" fill="none" marker-end="url(#k2)"></path><path d="M254 142 C360 200 460 195 538 182" stroke="var(--dg-ok)" stroke-width="1.4" fill="none" marker-end="url(#k2)"></path><text x="360" y="220" class="serif" font-size="12.5" font-style="italic" fill="var(--dg-ink-2)" text-anchor="middle">Ogni consumatore traccia la propria posizione; leggere e1 non lo rimuove, un altro consumatore può ancora leggerlo.</text></svg>
+</Diagram>
+
+L'unica definizione
+
+Kafka è un **registro di commit distribuito, durevole, di sola aggiunta** di eventi immutabili, partizionati per scala e replicati per tolleranza agli errori, che **più consumatori indipendenti leggono con il proprio offset**: con eventi _mantenuti_ dopo la lettura. Tutto il resto è dettaglio.
+
+## Coda vs registro: perché Kafka è diverso
+
+Questa è la sezione più importante del manuale, perché confondere Kafka con una coda di messaggi tradizionale è la radice della maggior parte della confusione. Il capitolo sulle code di attività ha trattato in modo approfondito il modello di coda, produttori, lavoratori, broker come RabbitMQ e SQS, nuovi tentativi, timeout di visibilità. Kafka è una _diversa forma di cosa_, e la differenza non è un dettaglio; cambia i problemi che risolve.
+
+<Diagram caption="The fundamental contrast">
+<svg viewBox="0 0 720 250" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="A sinistra: una coda in cui ogni messaggio viene consegnato a un consumatore e rimosso. A destra: un log in cui ogni consumatore legge tutti i messaggi in modo indipendente e nulla viene rimosso durante la lettura"><text x="180" y="22" class="mono" font-size="11" font-weight="700" fill="var(--dg-accent-2)" text-anchor="middle">CODA (RabbitMQ, SQS), consumatori concorrenti</text><rect x="30" y="40" width="120" height="30" rx="6" fill="var(--dg-accent-border)" stroke="var(--dg-accent-2)"></rect><text x="90" y="60" font-size="10" fill="var(--dg-accent-2)" text-anchor="middle">messaggio in entrata</text><g class="mono" font-size="10" fill="var(--dg-accent)"><rect x="40" y="86" width="34" height="26" rx="4" fill="var(--dg-accent-border)" stroke="var(--dg-accent-2)"></rect><text x="57" y="104" text-anchor="middle" fill="var(--dg-ink)">m3</text><rect x="78" y="86" width="34" height="26" rx="4" fill="var(--dg-accent-border)" stroke="var(--dg-accent-2)"></rect><text x="95" y="104" text-anchor="middle" fill="var(--dg-ink)">m2</text><rect x="116" y="86" width="34" height="26" rx="4" fill="var(--dg-accent-border)" stroke="var(--dg-accent-2)"></rect><text x="133" y="104" text-anchor="middle" fill="var(--dg-ink)">m1</text></g><defs><marker id="qa" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0 0 L6 3 L0 6 Z" fill="var(--dg-accent-2)"></path></marker></defs><path d="M160 99 H210" stroke="var(--dg-accent-2)" stroke-width="1.5" marker-end="url(#qa)"></path><rect x="212" y="78" width="60" height="24" rx="5" fill="var(--dg-accent-surface)"></rect><text x="242" y="95" font-size="9" fill="var(--dg-accent)" text-anchor="middle">lavoratore 1</text><rect x="212" y="108" width="60" height="24" rx="5" fill="var(--dg-accent-surface)"></rect><text x="242" y="125" font-size="9" fill="var(--dg-accent)" text-anchor="middle">lavoratore 2</text><text x="180" y="160" font-size="10.5" font-style="italic" fill="var(--dg-accent-2)" text-anchor="middle">ogni messaggio va a UN lavoratore</text><text x="180" y="178" font-size="10.5" font-style="italic" fill="var(--dg-accent-2)" text-anchor="middle">&amp; viene CANCELLATO una volta colpito</text><text x="180" y="200" class="mono" font-size="9.5" fill="var(--dg-accent-2)" text-anchor="middle">nessuna riproduzione/ordine tra i consumatori persi</text><line x1="360" y1="34" x2="360" y2="220" stroke="var(--dg-line)" stroke-dasharray="4 4"></line><text x="545" y="22" class="mono" font-size="11" font-weight="700" fill="var(--dg-ok)" text-anchor="middle">LOG (Kafka), consumatori indipendenti</text><g class="mono" font-size="10" fill="var(--dg-ok)"><rect x="400" y="50" width="34" height="26" rx="4" fill="var(--dg-ok-surface)" stroke="var(--dg-ok)"></rect><text x="417" y="68" text-anchor="middle" fill="var(--dg-ink)">e0</text><rect x="436" y="50" width="34" height="26" rx="4" fill="var(--dg-ok-surface)" stroke="var(--dg-ok)"></rect><text x="453" y="68" text-anchor="middle" fill="var(--dg-ink)">e1</text><rect x="472" y="50" width="34" height="26" rx="4" fill="var(--dg-ok-surface)" stroke="var(--dg-ok)"></rect><text x="489" y="68" text-anchor="middle" fill="var(--dg-ink)">e2</text><rect x="508" y="50" width="34" height="26" rx="4" fill="var(--dg-ok-surface)" stroke="var(--dg-ok)"></rect><text x="525" y="68" text-anchor="middle" fill="var(--dg-ink)">e3</text></g><text x="473" y="92" class="mono" font-size="8.5" fill="var(--dg-ink-3)">mantenuto, nulla viene eliminato durante la lettura</text><rect x="560" y="108" width="130" height="26" rx="6" fill="var(--dg-ok-surface)" stroke="var(--dg-ok)"></rect><text x="625" y="125" font-size="9" fill="var(--dg-ok)" text-anchor="middle">la fatturazione legge tutto</text><rect x="560" y="140" width="130" height="26" rx="6" fill="var(--dg-ok-surface)" stroke="var(--dg-ok)"></rect><text x="625" y="157" font-size="9" fill="var(--dg-ok)" text-anchor="middle">l'analisi legge tutto</text><rect x="560" y="172" width="130" height="26" rx="6" fill="var(--dg-ok-surface)" stroke="var(--dg-ok)"></rect><text x="625" y="189" font-size="9" fill="var(--dg-ok)" text-anchor="middle">la ricerca legge tutto</text><path d="M544 70 C552 100 552 118 558 121" stroke="var(--dg-ok)" stroke-width="1.3" fill="none" marker-end="url(#k2)"></path><text x="473" y="222" font-size="10.5" font-style="italic" fill="var(--dg-ok)" text-anchor="middle">ogni consumatore vede OGNI evento / può riprodurre da qualsiasi offset</text></svg>
+</Diagram>
+
+| Dimensione | Coda tradizionale (cap.10) | Registro di Kafka |
+| ----------------------- | ------------------------------- | ---------------------------------------------------------- |
+| Dopo la lettura di un messaggio | Eliminato (consumato una volta) | Conservati (fino alla scadenza della conservazione) |
+| Chi riceve un messaggio | Un consumatore concorrente | Ogni gruppo di consumatori, in modo indipendente |
+| Riproduci / rileggi | No, non c'è più | Sì, cerca qualsiasi compensazione |
+| Posizione del consumatore | Il broker traccia e rimuove | Il consumatore tiene traccia del proprio offset |
+| Ordinare | Debole/nessuno tra i consumatori | Rigoroso all'interno di una partizione |
+| Modello mentale | Distribuzione del lavoro (lista delle cose da fare) | Storia degli eventi/fonte della verità (registro) |
+| Punto debole | Scarico compiti, elaborazione lavori | Streaming di eventi, molti abbonati, riproduzione, throughput elevato |
+
+<Callout type="info" title="Coesistono, questo non è né/o">
+Utilizzerai spesso entrambi: Kafka come struttura portante di eventi durevoli (ordini, pagamenti, clic trasmessi in streaming a molti sistemi) e una coda di attività (Celery/SQS, cap.10) per lavori in background discreti (invia questa email, ridimensiona l'immagine). Il confronto completo e "quale quando" è sez 17. Per ora mantieni la distinzione: **coda = distribuisci il lavoro e dimentica; log = registra gli eventi e consente a molti sistemi di consumarli e riprodurli.**
+</Callout>
+
+## Il registro dei commit
+
+Tutto ciò che fa Kafka si basa sulla struttura dati più umile nel campo dell'informatica: il **registro di sola aggiunta**: una sequenza ordinata di record che puoi aggiungere solo alla fine, mai inserire nel mezzo o modificare. Ad ogni record viene assegnato un **offset** monotonicamente crescente (0, 1, 2, ...) che è il suo indirizzo permanente. Si tratta della stessa struttura utilizzata da un database per il registro write-ahead e la durabilità; L'intuizione di Kafka fu quella di rendere il tronco stesso l'astrazione pubblica primaria piuttosto che un dettaglio interno nascosto.
+
+<Diagram caption="Append-only, offset-addressed">
+<svg viewBox="0 0 720 170" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Un registro di sola aggiunta con offset che aumentano da sinistra a destra, nuovi record aggiunti solo in coda e un puntatore del lettore che avanza in avanti"><g class="mono" font-size="11"><rect x="30" y="50" width="64" height="40" rx="5" fill="var(--dg-surface)" stroke="var(--dg-warn)"></rect><text x="62" y="75" fill="var(--dg-warn-2)" text-anchor="middle">rec</text><rect x="96" y="50" width="64" height="40" rx="5" fill="var(--dg-surface)" stroke="var(--dg-warn)"></rect><text x="128" y="75" fill="var(--dg-warn-2)" text-anchor="middle">rec</text><rect x="162" y="50" width="64" height="40" rx="5" fill="var(--dg-surface)" stroke="var(--dg-warn)"></rect><text x="194" y="75" fill="var(--dg-warn-2)" text-anchor="middle">rec</text><rect x="228" y="50" width="64" height="40" rx="5" fill="var(--dg-surface)" stroke="var(--dg-warn)"></rect><text x="260" y="75" fill="var(--dg-warn-2)" text-anchor="middle">rec</text><rect x="294" y="50" width="64" height="40" rx="5" fill="var(--dg-surface)" stroke="var(--dg-warn)"></rect><text x="326" y="75" fill="var(--dg-warn-2)" text-anchor="middle">rec</text><rect x="360" y="50" width="64" height="40" rx="5" fill="var(--dg-accent-surface)" stroke="var(--dg-warn)" stroke-dasharray="4 3"></rect><text x="392" y="75" fill="var(--dg-accent-soft)" text-anchor="middle">nuovo</text></g><g class="mono" font-size="9" fill="var(--dg-ink-3)"><text x="62" y="106" text-anchor="middle" fill="var(--dg-ink)">0</text><text x="128" y="106" text-anchor="middle" fill="var(--dg-ink)">1</text><text x="194" y="106" text-anchor="middle" fill="var(--dg-ink)">2</text><text x="260" y="106" text-anchor="middle" fill="var(--dg-ink)">3</text><text x="326" y="106" text-anchor="middle" fill="var(--dg-ink)">4</text><text x="392" y="106" text-anchor="middle" fill="var(--dg-ink)">5</text></g><defs><marker id="la3" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0 0 L7 3 L0 6 Z" fill="var(--dg-accent)"></path></marker></defs><path d="M440 70 H520" stroke="var(--dg-accent)" stroke-width="1.8" marker-end="url(#la3)"></path><text x="600" y="66" class="mono" font-size="10" fill="var(--dg-accent-2)">aggiungere solo alla coda</text><path d="M62 120 H326" stroke="var(--dg-ok)" stroke-width="1.6" marker-end="url(#la3)" marker-start="url(#la3)"></path><text x="194" y="140" class="mono" font-size="9.5" fill="var(--dg-ok)" text-anchor="middle">un lettore avanza per offset; non torna mai indietro se non lo cerchi</text><text x="360" y="160" class="serif" font-size="12" font-style="italic" fill="var(--dg-ink-2)" text-anchor="middle">Nessun aggiornamento, nessuna eliminazione sul posto, nessun inserimento casuale, basta aggiungere e leggere. Questo vincolo è la superpotenza.</text></svg>
+</Diagram>
+
+#### Perché un registro di sola aggiunta è così veloce e utile
+
+- **L'I/O sequenziale è economico.** L'aggiunta alla fine di un file e la lettura in avanti sono operazioni sequenziali del disco, notevolmente più veloci dell'accesso casuale, anche su SSD. Kafka si appoggia alla cache delle pagine del sistema operativo e al trasferimento _zero-copy_ per spostare i dati dal disco alla rete senza passare attraverso la memoria dell'applicazione, ed è così che sostiene milioni di messaggi al secondo su hardware modesto.
+- **L'immutabilità è semplice e sicura.** I record non cambiano mai, quindi non ci sono blocchi per gli aggiornamenti, nessun conflitto di lettura/scrittura e i lettori simultanei non interferiscono mai. Una storia immutabile è anche banalmente memorizzabile nella cache ed è facile ragionarci sopra.
+- **Il registro _è_ la cronologia.** Poiché nulla viene sovrascritto, il registro è una registrazione completa e ordinata di tutto ciò che è accaduto, che è esattamente ciò che rende possibile la riproduzione (sez. 11), l'origine degli eventi (sez. 14) e l'alimentazione di nuovi consumatori dall'inizio.
+
+Una struttura, tutto segue
+
+Tieni saldamente il log di sola aggiunta: scrive append e ottiene un offset; legge andare avanti; i record sono immutabili e conservati. Le partizioni (sezione 4) sono semplicemente più log di questo tipo; i gruppi di consumatori (sezione 7) sono segnalibri al loro interno; la semantica di consegna (sez. 9) riguarda l'attenzione con cui tieni traccia di tali segnalibri. L'intero sistema è l'idea del registro, scalata e replicata.
+
+Parte II / Architettura
+
+## Argomenti e partizioni
+
+Un **argomento** è un flusso con nome di eventi correlati, `orders`, `payments`, `page-views`. È il canale logico su cui scrivono i produttori e da cui i consumatori leggono. Ma un argomento non è un singolo registro; è diviso in **partizioni** e la partizione è dove vivono tutti i veri meccanismi. La partizione è contemporaneamente l'unità di _parallelismo_, di _ordinamento_ e di _immagazzinamento_ di Kafka, tre delle proprietà più importanti del sistema, tutte basate su questo concetto.
+
+<Diagram caption="A topic is partitioned">
+<svg viewBox="0 0 720 240" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Un argomento suddiviso in tre partizioni, ciascuna un log di sola aggiunta, con un produttore che esegue l'hashing delle chiavi dei record per scegliere una partizione in modo che i record con la stessa chiave rimangano ordinati"><rect x="20" y="30" width="120" height="50" rx="9" fill="var(--dg-accent)"></rect><text x="80" y="52" font-size="11" font-weight="700" fill="var(--dg-on-accent)" text-anchor="middle">produttore</text><text x="80" y="69" class="mono" font-size="8.5" fill="var(--dg-on-accent)" text-anchor="middle">chiave -&gt; cancelletto</text><text x="430" y="22" class="mono" font-size="10.5" font-weight="700" fill="var(--dg-warn)">ARGOMENTO: ordini (3 partizioni)</text><defs><marker id="pa4" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0 0 L6 3 L0 6 Z" fill="var(--dg-accent-2)"></path></marker></defs><text x="180" y="55" class="mono" font-size="9" fill="var(--dg-warn-2)">P0</text><g class="mono" font-size="9"><rect x="200" y="40" width="36" height="26" rx="3" fill="var(--dg-warn-surface)" stroke="var(--dg-warn)"></rect><rect x="238" y="40" width="36" height="26" rx="3" fill="var(--dg-warn-surface)" stroke="var(--dg-warn)"></rect><rect x="276" y="40" width="36" height="26" rx="3" fill="var(--dg-warn-surface)" stroke="var(--dg-warn)"></rect><rect x="314" y="40" width="36" height="26" rx="3" fill="var(--dg-accent-surface)" stroke="var(--dg-warn)" stroke-dasharray="3 2"></rect></g><text x="180" y="115" class="mono" font-size="9" fill="var(--dg-warn-2)">P1</text><g class="mono" font-size="9"><rect x="200" y="100" width="36" height="26" rx="3" fill="var(--dg-warn-surface)" stroke="var(--dg-warn)"></rect><rect x="238" y="100" width="36" height="26" rx="3" fill="var(--dg-warn-surface)" stroke="var(--dg-warn)"></rect><rect x="276" y="100" width="36" height="26" rx="3" fill="var(--dg-accent-surface)" stroke="var(--dg-warn)" stroke-dasharray="3 2"></rect></g><text x="180" y="175" class="mono" font-size="9" fill="var(--dg-warn-2)">P2</text><g class="mono" font-size="9"><rect x="200" y="160" width="36" height="26" rx="3" fill="var(--dg-warn-surface)" stroke="var(--dg-warn)"></rect><rect x="238" y="160" width="36" height="26" rx="3" fill="var(--dg-warn-surface)" stroke="var(--dg-warn)"></rect><rect x="276" y="160" width="36" height="26" rx="3" fill="var(--dg-warn-surface)" stroke="var(--dg-warn)"></rect><rect x="314" y="160" width="36" height="26" rx="3" fill="var(--dg-warn-surface)" stroke="var(--dg-warn)"></rect><rect x="352" y="160" width="36" height="26" rx="3" fill="var(--dg-accent-surface)" stroke="var(--dg-warn)" stroke-dasharray="3 2"></rect></g><path d="M142 50 C165 50 175 52 198 53" stroke="var(--dg-accent-2)" stroke-width="1.4" fill="none" marker-end="url(#pa4)"></path><path d="M142 58 C165 90 175 110 198 113" stroke="var(--dg-accent-2)" stroke-width="1.4" fill="none" marker-end="url(#pa4)"></path><path d="M142 66 C165 130 175 170 198 173" stroke="var(--dg-accent-2)" stroke-width="1.4" fill="none" marker-end="url(#pa4)"></path><text x="430" y="120" class="serif" font-size="12" font-style="italic" fill="var(--dg-ink-2)">L'ordine è garantito ALL'INTERNO di una partizione, non attraverso di esse.</text><text x="430" y="142" class="serif" font-size="12" font-style="italic" fill="var(--dg-ink-2)">I record con la stessa chiave finiscono sempre nella stessa partizione,</text><text x="430" y="164" class="serif" font-size="12" font-style="italic" fill="var(--dg-ink-2)">quindi tutti gli eventi per un ordine rimangono in ordine.</text><text x="430" y="200" class="mono" font-size="9.5" fill="var(--dg-accent-2)">partizione = hash(chiave) % numPartizioni</text></svg>
+</Diagram>
+
+#### I tre ruoli di una partizione
+
+- **Parallelismo.** Le partizioni possono risiedere su broker diversi ed essere utilizzate da consumatori diversi contemporaneamente, quindi il throughput di un argomento varia in base al numero di partizioni. Più partizioni -&gt; più consumi paralleli (fino al limite del gruppo di consumatori, sez. 7).
+- **Ordinamento.** Kafka garantisce l'ordine _all'interno_ di una singola partizione e non fa alcuna promessa _attraverso_ le partizioni. Questo è il compromesso principale (sez. 10): per mantenere ordinati gli eventi correlati, li instrada alla stessa partizione tramite una **chiave** condivisa (tutti gli eventi per `order-42` utilizzare la chiave `"order-42"`, quindi sono rigorosamente ordinati l'uno rispetto all'altro).
+- **Archiviazione.** Ogni partizione è fisicamente un insieme di file di segmento sul disco di un broker, l'effettivo registro di sola aggiunta della sezione 3. La conservazione e la compattazione (sezione 11) operano per partizione.
+
+Il conteggio delle partizioni è una decisione a senso unico
+
+Puoi _aumentare_ le partizioni di un argomento in un secondo momento, ma così facendo **interrompe la stabilità chiave-partizione** (il modulo cambia, quindi le chiavi esistenti possono spostarsi) e quindi interrompe le garanzie di ordinamento per le chiavi in volo. E non puoi _diminuirli_ facilmente. Quindi scegli il conteggio delle partizioni deliberatamente in anticipo in base al throughput target e al massimo parallelismo del consumatore di cui avrai bisogno, troppo pochi limiti al ridimensionamento, troppi costi aggiuntivi (sec 19, sec 20).
+
+## Broker, replica e durabilità
+
+Un cluster Kafka è un insieme di **broker** (server); le partizioni sono distribuite su di essi ed è così che il cluster si ridimensiona e sopravvive ai guasti. La durabilità deriva dalla **replica**: ogni partizione ha una replica **leader** e alcune repliche **follower** su altri broker. Tutte le letture e le scritture vanno al leader; i follower lo copiano continuamente. Se muore il broker del leader, viene promosso un follower, nessuna perdita di dati, breve indisponibilità. Si tratta dello stesso approccio allo stato desiderato/failover del capitolo Kubernetes, applicato ai dati.
+
+<Diagram caption="Replication">
+<svg viewBox="0 0 720 220" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Tre intermediari detengono ciascuno repliche delle partizioni leader e follower, con produttori e consumatori che parlano solo con leader e follower che replicano"><g><rect x="30" y="40" width="190" height="150" rx="12" fill="var(--dg-accent-surface)" stroke="var(--dg-ok)"></rect><text x="125" y="60" class="mono" font-size="10" font-weight="700" fill="var(--dg-ok)" text-anchor="middle">Intermediario 1</text><rect x="50" y="72" width="150" height="32" rx="7" fill="var(--dg-accent)"></rect><text x="125" y="92" font-size="10" font-weight="700" fill="var(--dg-on-accent)" text-anchor="middle">P0 (leader)</text><rect x="50" y="112" width="150" height="30" rx="7" fill="var(--dg-ok-surface)" stroke="var(--dg-ok)"></rect><text x="125" y="131" font-size="9.5" fill="var(--dg-ok)" text-anchor="middle">P1 (seguace)</text><rect x="50" y="148" width="150" height="30" rx="7" fill="var(--dg-ok-surface)" stroke="var(--dg-ok)"></rect><text x="125" y="167" font-size="9.5" fill="var(--dg-ok)" text-anchor="middle">P2 (seguace)</text></g><g><rect x="265" y="40" width="190" height="150" rx="12" fill="var(--dg-accent-surface)" stroke="var(--dg-ok)"></rect><text x="360" y="60" class="mono" font-size="10" font-weight="700" fill="var(--dg-ok)" text-anchor="middle">Intermediario 2</text><rect x="285" y="72" width="150" height="30" rx="7" fill="var(--dg-ok-surface)" stroke="var(--dg-ok)"></rect><text x="360" y="91" font-size="9.5" fill="var(--dg-ok)" text-anchor="middle">P0 (seguace)</text><rect x="285" y="110" width="150" height="32" rx="7" fill="var(--dg-accent)"></rect><text x="360" y="130" font-size="10" font-weight="700" fill="var(--dg-on-accent)" text-anchor="middle">P1 (leader)</text><rect x="285" y="148" width="150" height="30" rx="7" fill="var(--dg-ok-surface)" stroke="var(--dg-ok)"></rect><text x="360" y="167" font-size="9.5" fill="var(--dg-ok)" text-anchor="middle">P2 (seguace)</text></g><g><rect x="500" y="40" width="190" height="150" rx="12" fill="var(--dg-accent-surface)" stroke="var(--dg-ok)"></rect><text x="595" y="60" class="mono" font-size="10" font-weight="700" fill="var(--dg-ok)" text-anchor="middle">Intermediario 3</text><rect x="520" y="72" width="150" height="30" rx="7" fill="var(--dg-ok-surface)" stroke="var(--dg-ok)"></rect><text x="595" y="91" font-size="9.5" fill="var(--dg-ok)" text-anchor="middle">P0 (seguace)</text><rect x="520" y="110" width="150" height="30" rx="7" fill="var(--dg-ok-surface)" stroke="var(--dg-ok)"></rect><text x="595" y="129" font-size="9.5" fill="var(--dg-ok)" text-anchor="middle">P1 (seguace)</text><rect x="520" y="146" width="150" height="32" rx="7" fill="var(--dg-accent)"></rect><text x="595" y="166" font-size="10" font-weight="700" fill="var(--dg-on-accent)" text-anchor="middle">P2 (leader)</text></g><text x="360" y="208" class="serif" font-size="12" font-style="italic" fill="var(--dg-ink-2)" text-anchor="middle">I leader sono distribuiti tra i broker per garantire equilibrio; ogni seguace replica il suo leader. Perdere un broker -&gt; i seguaci dei suoi leader prendono il sopravvento.</text></svg>
+</Diagram>
+
+#### I quadranti della durabilità: acks e ISR
+
+La sicurezza di una scrittura dipende da due impostazioni. Il produttore **`acks`** indica quante repliche devono essere confermate prima che la scrittura venga considerata completata: `acks=0` (spara e dimentica, potrebbe perdere dati), `acks=1` (solo leader, perso se il leader muore prima che i seguaci lo copino), oppure `acks=all` (il leader più tutte le **repliche sincronizzate**: la scelta sicura). L'**ISR** (set di repliche in-sync) rappresenta i follower attualmente raggiunti dal leader; abbinamento `acks=all` con `min.insync.replicas=2` significa che una scrittura ha esito positivo solo se ce l'hanno almeno due repliche, sopravvivendo alla perdita di un singolo broker con zero perdite di dati.
+
+| Impostazione | Garanzia | Scambio |
+| ------------------------------------ | ----------------------------------- | ---------------------------------------------------------------- |
+| `acks=0`                             | Nessuno, spara e dimentica | Il più veloce; può perdere silenziosamente i dati |
+| `acks=1`                             | Il leader ce l'ha | Veloce; perso se il leader fallisce la pre-replica |
+| `acks=all` + `min.insync.replicas=2` | &gt;=2 repliche ce l'hanno prima del successo | Più sicuro; latenza leggermente superiore, lo standard per dati importanti |
+
+<Callout type="info" title="ZooKeeper non c'è più, KRaft">
+Il vecchio Kafka si affidava a un cluster **ZooKeeper** separato per archiviare i metadati ed eleggere i leader. Il moderno Kafka utilizza **KRaft** (Kafka Raft), affidando questo ruolo agli stessi broker tramite un quorum del controller basato su Raft, meno parti mobili, failover più rapido e operazioni più semplici. Se leggi documenti più vecchi che menzionano ZooKeeper, KRaft è il suo sostituto.
+</Callout>
+
+## Produttori
+
+Un **produttore** pubblica record su un argomento. Tre produttori riguardano la correttezza della forma e le prestazioni: la **chiave** (che decide la partizione e quindi l'ordinamento, sezione 4), gli **acks** (durabilità, sezione 5) e il **batching** (il produttore raggruppa i dati e li comprime per il throughput). Un record è una coppia chiave/valore più intestazioni facoltative e un timestamp; il valore è il payload dell'evento (spesso Avro/Protobuf, sezione 12).
+
+______
+
+● Vai ● Python
+
+```go
+// Using confluent-kafka-go (librdkafka). kafka-go (segmentio) is a pure-Go alternative.
+p, _ := kafka.NewProducer(&kafka.ConfigMap{
+    "bootstrap.servers": "localhost:9092",
+    "acks":              "all",   // durability: leader + in-sync replicas (sec 5)
+    "enable.idempotence": true,   // no duplicates on producer retry (sec 9)
+    "linger.ms":         5,       // wait up to 5ms to batch records (throughput)
+    "compression.type":  "zstd",
+})
+defer p.Close()
+
+topic := "orders"
+// The KEY decides the partition -> all events for one order stay ordered (sec 4, sec 10).
+err := p.Produce(&kafka.Message{
+    TopicPartition: kafka.TopicPartition{Topic: &topic, Partition: kafka.PartitionAny},
+    Key:            []byte("order-42"),
+    Value:          []byte(`{"event":"placed","amount":1999}`),
+}, nil)
+if err != nil { log.Fatal(err) }
+
+// Producing is async + batched; Flush blocks until queued messages are delivered.
+p.Flush(5000)
+
+// Delivery reports tell you the final partition/offset (or an error) per message:
+//   for e := range p.Events() { if m, ok := e.(*kafka.Message); ok { ... } }
+```
+
+```python
+# Using confluent-kafka (librdkafka). kafka-python / aiokafka are alternatives.
+from confluent_kafka import Producer
+
+p = Producer({
+    "bootstrap.servers": "localhost:9092",
+    "acks": "all",                 # durability: leader + in-sync replicas (sec 5)
+    "enable.idempotence": True,    # no duplicates on producer retry (sec 9)
+    "linger.ms": 5,                # batch window for throughput
+    "compression.type": "zstd",
+})
+
+def on_delivery(err, msg):         # async callback: final partition/offset or error
+    if err:
+        print("delivery failed:", err)
+    else:
+        print(f"delivered to {msg.topic()}[{msg.partition()}]@{msg.offset()}")
+
+# The KEY decides the partition -> all events for one order stay ordered (sec 4, sec 10).
+p.produce(
+    "orders",
+    key=b"order-42",
+    value=b'{"event":"placed","amount":1999}',
+    on_delivery=on_delivery,
+)
+p.flush()                          # block until queued messages are delivered
+```
+
+Nessuna chiave = round robin = nessun ordinamento
+
+Se non si imposta una chiave, i record vengono distribuiti su partizioni (round-robin/sticky), massimizzando il parallelismo ma rinunciando a qualsiasi relazione di ordinamento tra di loro. Va bene per eventi indipendenti; è un bug se quegli eventi dovevano rimanere ordinati (tutti gli aggiornamenti su un account, diciamo). **Chiave in base al tuo ordinamento/limite di entità**: solitamente l'ID dell'entità, ogni volta che l'ordine è importante (sez. 10).
+
+## Consumatori e gruppi di consumatori
+
+Un **consumatore** legge i record dalle partizioni. L'astrazione potente è il **gruppo di consumatori**: un insieme di consumatori che condividono un ID di gruppo che dividono in modo cooperativo le partizioni di un argomento tra loro in modo che _ciascuna partizione venga letta esattamente da un consumatore nel gruppo_. Aggiungi consumatori al gruppo e Kafka **ribilancia**, riassegnando le partizioni per distribuire il carico. Questo è il modo in cui si ridimensiona il consumo orizzontalmente, ed è il meccanismo alla base sia della condivisione del lavoro che della trasmissione.
+
+<Diagram caption="Consumer groups">
+<svg viewBox="0 0 720 250" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Un argomento con quattro partizioni; il gruppo A con due consumatori li divide in due ciascuno, mentre il gruppo B li legge tutti e quattro in modo indipendente"><text x="90" y="22" class="mono" font-size="10" font-weight="700" fill="var(--dg-warn)">argomento: 4 partizioni</text><g><rect x="20" y="34" width="120" height="28" rx="6" fill="var(--dg-warn-surface)" stroke="var(--dg-warn)"></rect><text x="80" y="53" font-size="10" fill="var(--dg-warn-2)" text-anchor="middle">P0</text><rect x="20" y="70" width="120" height="28" rx="6" fill="var(--dg-warn-surface)" stroke="var(--dg-warn)"></rect><text x="80" y="89" font-size="10" fill="var(--dg-warn-2)" text-anchor="middle">P1</text><rect x="20" y="106" width="120" height="28" rx="6" fill="var(--dg-warn-surface)" stroke="var(--dg-warn)"></rect><text x="80" y="125" font-size="10" fill="var(--dg-warn-2)" text-anchor="middle">P2</text><rect x="20" y="142" width="120" height="28" rx="6" fill="var(--dg-warn-surface)" stroke="var(--dg-warn)"></rect><text x="80" y="161" font-size="10" fill="var(--dg-warn-2)" text-anchor="middle">P3</text></g><defs><marker id="ca7" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0 0 L6 3 L0 6 Z" fill="var(--dg-ok)"></path></marker><marker id="cb7" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0 0 L6 3 L0 6 Z" fill="var(--dg-accent)"></path></marker></defs><rect x="300" y="34" width="180" height="64" rx="10" fill="var(--dg-ok-surface)" stroke="var(--dg-ok)" stroke-dasharray="5 3"></rect><text x="390" y="50" class="mono" font-size="9.5" font-weight="700" fill="var(--dg-ok)" text-anchor="middle">gruppo A (2 utenze)</text><rect x="312" y="58" width="74" height="30" rx="6" fill="var(--dg-ok-surface)" stroke="var(--dg-ok)"></rect><text x="349" y="77" font-size="9" fill="var(--dg-ok)" text-anchor="middle">c1 &amp;#x3C;- P0,P1</text><rect x="394" y="58" width="74" height="30" rx="6" fill="var(--dg-ok-surface)" stroke="var(--dg-ok)"></rect><text x="431" y="77" font-size="9" fill="var(--dg-ok)" text-anchor="middle">c2 &amp;#x3C;- P2,P3</text><path d="M140 48 C220 48 240 66 300 66" stroke="var(--dg-ok)" stroke-width="1.2" fill="none" marker-end="url(#ca7)"></path><path d="M140 120 C220 120 240 80 300 76" stroke="var(--dg-ok)" stroke-width="1.2" fill="none" marker-end="url(#ca7)"></path><rect x="300" y="120" width="180" height="64" rx="10" fill="var(--dg-accent-surface)" stroke="var(--dg-accent)" stroke-dasharray="5 3"></rect><text x="390" y="136" class="mono" font-size="9.5" font-weight="700" fill="var(--dg-accent-2)" text-anchor="middle">gruppo B (1 consumatore)</text><rect x="330" y="144" width="120" height="30" rx="6" fill="var(--dg-accent-surface)" stroke="var(--dg-accent)"></rect><text x="390" y="163" font-size="9" fill="var(--dg-accent-2)" text-anchor="middle">c1 &amp;#x3C;- P0,P1,P2,P3</text><path d="M140 156 C220 156 240 156 298 156" stroke="var(--dg-accent)" stroke-width="1.2" fill="none" marker-end="url(#cb7)"></path><text x="585" y="80" class="serif" font-size="11.5" font-style="italic" fill="var(--dg-ok)" text-anchor="middle">il gruppo A suddivide il carico</text><text x="585" y="98" class="serif" font-size="11.5" font-style="italic" fill="var(--dg-ok)" text-anchor="middle">(scala all'interno di un gruppo)</text><text x="585" y="150" class="serif" font-size="11.5" font-style="italic" fill="var(--dg-accent-2)" text-anchor="middle">il gruppo B è indipendente</text><text x="585" y="168" class="serif" font-size="11.5" font-style="italic" fill="var(--dg-accent-2)" text-anchor="middle">vede anche TUTTI gli eventi</text><text x="360" y="218" class="serif" font-size="12" font-style="italic" fill="var(--dg-ink-2)" text-anchor="middle">Stesso gruppo = condivisione del lavoro (ogni evento una volta). Gruppi diversi = trasmissione (ogni gruppo riceve tutto).</text><text x="360" y="240" class="mono" font-size="9.5" fill="var(--dg-accent-2)" text-anchor="middle">massimo consumatori utili in un gruppo = numero di partizioni (i consumatori extra restano inattivi)</text></svg>
+</Diagram>
+
+______
+
+● Vai ● Python
+
+```go
+c, _ := kafka.NewConsumer(&kafka.ConfigMap{
+    "bootstrap.servers": "localhost:9092",
+    "group.id":          "billing",        // the consumer GROUP, scale by adding instances
+    "auto.offset.reset": "earliest",       // where to start if no committed offset (sec 8)
+    "enable.auto.commit": false,           // we'll commit manually for at-least-once (sec 9)
+})
+defer c.Close()
+c.Subscribe("orders", nil)                 // Kafka assigns this instance some partitions
+
+for {
+    msg, err := c.ReadMessage(-1)          // blocks for the next record
+    if err != nil { continue }
+
+    process(msg.Value)                     // do the work FIRST...
+    c.CommitMessage(msg)                   // ...THEN commit the offset (at-least-once, sec 9)
+}
+```
+
+```python
+from confluent_kafka import Consumer
+
+c = Consumer({
+    "bootstrap.servers": "localhost:9092",
+    "group.id": "billing",                 # the consumer GROUP, scale by adding instances
+    "auto.offset.reset": "earliest",       # where to start if no committed offset (sec 8)
+    "enable.auto.commit": False,           # commit manually for at-least-once (sec 9)
+})
+c.subscribe(["orders"])                    # Kafka assigns this instance some partitions
+
+try:
+    while True:
+        msg = c.poll(1.0)                  # wait up to 1s for the next record
+        if msg is None:
+            continue
+        if msg.error():
+            print("error:", msg.error()); continue
+
+        process(msg.value())               # do the work FIRST...
+        c.commit(msg)                      # ...THEN commit the offset (at-least-once, sec 9)
+finally:
+    c.close()                              # leave the group cleanly -> triggers a rebalance
+```
+
+Le partizioni limitano il tuo parallelismo
+
+Poiché una partizione viene utilizzata al massimo da un consumatore _per gruppo_, un gruppo può avere al massimo tanti consumatori attivi quante sono le partizioni dell'argomento. Un argomento con 4 partizioni e 6 membri del gruppo lascia 2 consumatori inattivi. Quindi il tuo _parallelismo di consumo massimo è impostato dal conteggio delle partizioni_ (secondo 4), un altro motivo per dimensionare le partizioni in base al picco di throughput iniziale (secondo 20).
+
+Parte III/Garanzie
+
+## Offset e gestione degli offset
+
+Un **offset** è la posizione di un record nella sua partizione (sez. 3). Il compito del consumatore è quello di tenere traccia dell'offset elaborato fino al suo **offset impegnato**: in modo che al riavvio o al ribilanciamento riprenda dal posto giusto invece di rileggere tutto o saltare i record. Kafka memorizza questi offset impegnati in un argomento interno (`__consumer_offsets`), codificato per gruppo + partizione. Il divario tra l'ultimo offset in una partizione e l'offset impegnato di un gruppo è il **lag del consumatore**: il singolo parametro di salute più importante per un consumatore (sez. 19).
+
+<Diagram caption="Position &amp; lag">
+<svg viewBox="0 0 720 170" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Un log della partizione con un offset confermato rispetto alla posizione di lettura corrente e un ritardo misurato dalla posizione di lettura all'ultimo offset in coda"><g class="mono" font-size="9"><rect x="30" y="60" width="40" height="30" rx="4" fill="var(--dg-ok-surface)" stroke="var(--dg-ok)"></rect><rect x="70" y="60" width="40" height="30" rx="4" fill="var(--dg-ok-surface)" stroke="var(--dg-ok)"></rect><rect x="110" y="60" width="40" height="30" rx="4" fill="var(--dg-ok-surface)" stroke="var(--dg-ok)"></rect><rect x="150" y="60" width="40" height="30" rx="4" fill="var(--dg-warn-surface)" stroke="var(--dg-warn)"></rect><rect x="190" y="60" width="40" height="30" rx="4" fill="var(--dg-warn-surface)" stroke="var(--dg-warn)"></rect><rect x="230" y="60" width="40" height="30" rx="4" fill="var(--dg-accent-surface)" stroke="var(--dg-accent)"></rect><rect x="270" y="60" width="40" height="30" rx="4" fill="var(--dg-accent-surface)" stroke="var(--dg-accent)"></rect><rect x="310" y="60" width="40" height="30" rx="4" fill="var(--dg-accent-surface)" stroke="var(--dg-accent)"></rect></g><text x="90" y="50" font-size="9.5" fill="var(--dg-ok)" text-anchor="middle">elaborato e impegnato</text><text x="170" y="50" font-size="9.5" fill="var(--dg-warn)" text-anchor="middle">letto, non ancora impegnato</text><text x="290" y="50" font-size="9.5" fill="var(--dg-accent)" text-anchor="middle">non letto (ritardo)</text><defs><marker id="oa8" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0 0 L6 3 L0 6 Z" fill="var(--dg-inverse)"></path></marker></defs><line x1="150" y1="100" x2="150" y2="120" stroke="var(--dg-ok)" stroke-width="1.5"></line><text x="150" y="135" font-size="9" fill="var(--dg-ok)" text-anchor="middle">compensazione impegnata</text><line x1="230" y1="100" x2="230" y2="120" stroke="var(--dg-warn)" stroke-width="1.5"></line><text x="230" y="135" font-size="9" fill="var(--dg-warn)" text-anchor="middle">posizione attuale</text><line x1="350" y1="100" x2="350" y2="120" stroke="var(--dg-accent)" stroke-width="1.5"></line><text x="350" y="135" font-size="9" fill="var(--dg-accent)" text-anchor="middle">fine del tronco (coda)</text><path d="M232 150 H348" stroke="var(--dg-ink)" stroke-width="1.4" marker-start="url(#oa8)" marker-end="url(#oa8)"></path><text x="430" y="154" class="mono" font-size="10" font-weight="700" fill="var(--dg-accent-2)">LAG = coda - posizione</text><text x="540" y="80" class="serif" font-size="11.5" font-style="italic" fill="var(--dg-ink-2)" text-anchor="middle">Il ritardo crescente significa il</text><text x="540" y="98" class="serif" font-size="11.5" font-style="italic" fill="var(--dg-ink-2)" text-anchor="middle">il consumatore resta indietro</text></svg>
+</Diagram>
+
+#### Quando ti impegni decide la tua garanzia
+
+La scelta tra **auto-commit** (Kafka esegue periodicamente il commit in background) e **commit manuale** (si impegna esplicitamente) è in realtà una scelta sulla semantica di consegna (sez. 9). L'ordine di "elaborare il messaggio" rispetto a "confermare l'offset" è tutto: eseguire il commit _dopo_ l'elaborazione e un arresto anomalo nel mezzo significa che verrà rielaborato (almeno una volta); eseguire il commit _prima_ dell'elaborazione e un arresto anomalo significa che salterai (al massimo una volta). Il commit automatico su un timer può fare _entrambi_ a seconda dei tempi, motivo per cui i consumatori sensibili alla correttezza si impegnano manualmente dopo che il lavoro è stato completato (come nel codice della sezione 7).
+
+<Callout type="info" title="Gli offset sono per gruppo e puoi cercare">
+Poiché ogni _gruppo_ ha i propri offset impegnati, è possibile iniziare da un gruppo completamente nuovo `earliest` e riprodurre l'intera cronologia conservata, la base per avviare un nuovo consumatore o ricostruire una visione (sez. 14). Puoi anche esplicitamente `seek` un consumatore a qualsiasi offset o timestamp per rielaborare un intervallo. L'immutabilità mantenuta del registro (sez. 3) è ciò che rende ciò possibile; una coda non può farlo.
+</Callout>
+
+## Semantica della consegna
+
+La domanda a cui ogni sistema di messaggistica distribuito deve rispondere: se le cose falliscono e si riprova, quante volte potrebbe essere recapitato un messaggio? Esistono tre possibili garanzie e Kafka può dartene qualcuna a seconda della configurazione, quindi devi scegliere consapevolmente in base a ciò che la tua elaborazione può tollerare.
+
+<Diagram caption="Three semantics">
+<svg viewBox="0 0 720 200" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Tre scatole: al massimo una volta può perdere, al minimo una volta può duplicarsi, esattamente una volta nessuno dei due ma è più costoso"><rect x="20" y="40" width="210" height="120" rx="12" fill="var(--dg-warn-surface)" stroke="var(--dg-warn)"></rect><text x="125" y="64" font-size="13" font-weight="700" fill="var(--dg-warn)" text-anchor="middle">Al massimo una volta</text><text x="125" y="88" class="mono" font-size="9" fill="var(--dg-ink-2)" text-anchor="middle">commit PRIMA dell'elaborazione</text><text x="125" y="110" font-size="11" fill="var(--dg-accent-2)" text-anchor="middle">potrebbe PERDERE messaggi</text><text x="125" y="128" font-size="11" fill="var(--dg-ok)" text-anchor="middle">non duplica mai</text><text x="125" y="148" font-size="9.5" font-style="italic" fill="var(--dg-ink-2)" text-anchor="middle">ok per le metriche con perdita</text><rect x="255" y="40" width="210" height="120" rx="12" fill="var(--dg-ok-surface)" stroke="var(--dg-ok)"></rect><text x="360" y="64" font-size="13" font-weight="700" fill="var(--dg-ok)" text-anchor="middle">Almeno una volta</text><text x="360" y="88" class="mono" font-size="9" fill="var(--dg-ink-2)" text-anchor="middle">commit DOPO l'elaborazione</text><text x="360" y="110" font-size="11" fill="var(--dg-ok)" text-anchor="middle">non perde mai</text><text x="360" y="128" font-size="11" fill="var(--dg-accent-2)" text-anchor="middle">potrebbe DUPLICARE</text><text x="360" y="148" font-size="9.5" font-style="italic" fill="var(--dg-ink-2)" text-anchor="middle">il default comune + idempotenza</text><rect x="490" y="40" width="210" height="120" rx="12" fill="var(--dg-accent-surface)" stroke="var(--dg-accent)"></rect><text x="595" y="64" font-size="13" font-weight="700" fill="var(--dg-accent-2)" text-anchor="middle">Esattamente una volta</text><text x="595" y="88" class="mono" font-size="9" fill="var(--dg-ink-2)" text-anchor="middle">produttore idempotente + txns</text><text x="595" y="110" font-size="11" fill="var(--dg-ok)" text-anchor="middle">nessuna perdita, nessun ingannato</text><text x="595" y="128" font-size="11" fill="var(--dg-warn)" text-anchor="middle">più costoso / Kafka-a-Kafka</text><text x="595" y="148" font-size="9.5" font-style="italic" fill="var(--dg-ink-2)" text-anchor="middle">pipeline di lettura-processo-scrittura</text><text x="360" y="186" class="serif" font-size="12" font-style="italic" fill="var(--dg-ink-2)" text-anchor="middle">La maggior parte dei sistemi sceglie almeno una volta e rende l'elaborazione idempotente, il punto debole pragmatico.</text></svg>
+</Diagram>
+
+Almeno una volta + consumatori idempotenti = la risposta pratica
+
+Il vero end-to-end-exact-once è ristretto: quello di Kafka `enable.idempotence` interrompe _producer_ duplicati e le **transazioni** forniscono esattamente una volta per l'elaborazione del flusso Kafka-_to_-Kafka (consumare, trasformare, produrre e impegnare gli offset in modo atomico). Ma nel momento in cui il tuo consumatore scrive a un sistema _esterno_ (un database, un'API di pagamento), esattamente una volta oltre quel confine non è gratuito. L'approccio testato sul campo: scegli **almeno una volta** e rendi la tua elaborazione **idempotente**: sicuro di applicare lo stesso evento due volte (deduplica per ID evento, upsert invece di insert). Questa è la stessa disciplina di idempotenza del capitolo sulle code di attività (sez. 14 lì) e delle chiavi di idempotenza REST, ed è il motivo per cui i duplicati diventano innocui anziché catastrofici.
+
+```sql title="making at-least-once safe: idempotent processing (pseudocode, both languages)"
+-- The consumer may see the same event twice on retry/rebalance.
+-- Make the write idempotent so a duplicate is a no-op:
+
+-- (a) dedupe by a unique event id
+INSERT INTO processed_events (event_id) VALUES ($1)
+ON CONFLICT (event_id) DO NOTHING;        -- second delivery inserts nothing
+-- ...only do the side effect if the insert affected a row.
+
+-- (b) or make the effect itself idempotent, upsert the end state, don't increment
+INSERT INTO account_balance (account_id, balance) VALUES ($1, $2)
+ON CONFLICT (account_id) DO UPDATE SET balance = EXCLUDED.balance;
+-- applying the same "balance = 100" twice lands on the same state.
+```
+
+## Garanzie sugli ordini
+
+Una frase da memorizzare: **Kafka garantisce l'ordine all'interno di una partizione e da nessun'altra parte.** I record nella partizione P vengono consegnati al consumatore nell'esatto ordine di compensazione in cui sono stati scritti. Attraverso le partizioni dello stesso argomento, non esiste _nessun_ ordinamento globale, i record si intercalano arbitrariamente. Questa non è una limitazione su cui aggirare tanto quanto il prezzo diretto del parallelismo a livello di partizione (sez 4): puoi avere un ordinamento totale, oppure puoi avere una scala orizzontale, ma non entrambi contemporaneamente per lo stesso flusso.
+
+<Diagram caption="Ordering vs parallelism">
+<svg viewBox="0 0 720 200" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Gli eventi per l'ordine 42 vengono tutti instradati su una partizione in ordine rigoroso, mentre ordini diversi si diffondono tra le partizioni per parallelismo"><text x="20" y="24" class="mono" font-size="10" font-weight="700" fill="var(--dg-accent-2)">chiave = ID ordine -&gt; gli eventi dello stesso ordine rimangono insieme e ordinati</text><rect x="30" y="38" width="120" height="40" rx="8" fill="var(--dg-accent)"></rect><text x="90" y="62" font-size="10.5" font-weight="700" fill="var(--dg-on-accent)" text-anchor="middle">produttore</text><defs><marker id="oa10" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0 0 L6 3 L0 6 Z" fill="var(--dg-accent-2)"></path></marker></defs><text x="200" y="56" class="mono" font-size="9" fill="var(--dg-warn-2)">P0</text><g class="mono" font-size="8.5"><rect x="220" y="42" width="84" height="22" rx="3" fill="var(--dg-warn-surface)" stroke="var(--dg-warn)"></rect><text x="262" y="57" text-anchor="middle" fill="var(--dg-ink)">o42:posto</text><rect x="306" y="42" width="92" height="22" rx="3" fill="var(--dg-warn-surface)" stroke="var(--dg-warn)"></rect><text x="352" y="57" text-anchor="middle" fill="var(--dg-ink)">o42:pagato</text><rect x="400" y="42" width="104" height="22" rx="3" fill="var(--dg-warn-surface)" stroke="var(--dg-warn)"></rect><text x="452" y="57" text-anchor="middle" fill="var(--dg-ink)">o42: spedito</text></g><text x="200" y="100" class="mono" font-size="9" fill="var(--dg-warn-2)">P1</text><g class="mono" font-size="8.5"><rect x="220" y="86" width="84" height="22" rx="3" fill="var(--dg-warn-surface)" stroke="var(--dg-warn)"></rect><text x="262" y="101" text-anchor="middle" fill="var(--dg-ink)">o88:posto</text><rect x="306" y="86" width="92" height="22" rx="3" fill="var(--dg-warn-surface)" stroke="var(--dg-warn)"></rect><text x="352" y="101" text-anchor="middle" fill="var(--dg-ink)">o88:pagato</text></g><path d="M150 52 C175 52 185 52 218 52" stroke="var(--dg-accent-2)" stroke-width="1.3" fill="none" marker-end="url(#oa10)"></path><path d="M150 60 C175 90 185 96 218 96" stroke="var(--dg-accent-2)" stroke-width="1.3" fill="none" marker-end="url(#oa10)"></path><text x="540" y="56" class="serif" font-size="11" font-style="italic" fill="var(--dg-ok)" text-anchor="middle">o42 rigorosamente ordinato in P0;</text><text x="540" y="74" class="serif" font-size="11" font-style="italic" fill="var(--dg-ok)" text-anchor="middle">o88 rigorosamente ordinato in P1;</text><text x="540" y="92" class="serif" font-size="11" font-style="italic" fill="var(--dg-ink-2)" text-anchor="middle">Ordine P0 vs P1 = indefinito</text><text x="360" y="150" class="serif" font-size="12" font-style="italic" fill="var(--dg-accent-2)" text-anchor="middle">Rischio: un tasto &quot;di scelta rapida&quot; (un cliente enorme) sovraccarica la sua singola partizione, inclinazione della partizione (sez. 18).</text><text x="360" y="176" class="serif" font-size="12" font-style="italic" fill="var(--dg-ink-2)" text-anchor="middle">Scegli la chiave al livello di granularità in cui l'ordine è importante ma il carico si diffonde comunque.</text></svg>
+</Diagram>
+
+Due pistole a piedi che ordinano
+
+Innanzitutto, **distorsione della chiave**: se l'ordine richiede la digitazione di un valore approssimativo (ad esempio un mega-tenant), tutto il traffico di quel tenant viene convogliato in una partizione, limitandone il throughput indipendentemente dal numero di partizioni esistenti (sez. 18). In secondo luogo, **i tentativi possono essere riordinati**: con un produttore non idempotente e più richieste in volo, un messaggio riprovato può arrivare dopo uno successivo. Abilitazione `enable.idempotence` (sec 6) preserva l'ordine per partizione anche tra i tentativi, un altro motivo per cui è un'impostazione predefinita sensata.
+
+## Conservazione e compattazione dei tronchi
+
+Poiché i record vengono conservati dopo la lettura (sec 2), Kafka ha bisogno di regole su quando _rimuoverli_, altrimenti il registro cresce per sempre. Esistono due politiche di pulizia e rispondono a esigenze diverse. **Conservazione di tempo/dimensione** (impostazione predefinita) conserva i record per una finestra, ad esempio 7 giorni o 50 GB per partizione, quindi elimina quelli più vecchi. La **compattazione del log** è più intelligente: mantiene il record _più recente_ per ogni chiave e raccoglie le versioni precedenti di quella chiave, trasformando il log in un'istantanea continuamente aggiornata del "valore corrente per chiave".
+
+<Diagram caption="Retention vs compaction">
+<svg viewBox="0 0 720 210" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="In alto: conservazione del tempo eliminando i vecchi record. In basso: compattazione mantenendo solo l'ultimo record per chiave"><text x="20" y="22" class="mono" font-size="10.5" font-weight="700" fill="var(--dg-warn)">elimina la policy (ora/dimensione), elimina la più vecchia</text><g class="mono" font-size="9"><rect x="30" y="32" width="50" height="28" rx="4" fill="var(--dg-accent-surface)" stroke="var(--dg-line)" stroke-dasharray="3 2"></rect><text x="55" y="50" fill="var(--dg-ink-3)" text-anchor="middle">vecchio</text><rect x="84" y="32" width="50" height="28" rx="4" fill="var(--dg-accent-surface)" stroke="var(--dg-line)" stroke-dasharray="3 2"></rect><text x="109" y="50" fill="var(--dg-ink-3)" text-anchor="middle">vecchio</text><rect x="138" y="32" width="50" height="28" rx="4" fill="var(--dg-warn-surface)" stroke="var(--dg-warn)"></rect><text x="163" y="50" fill="var(--dg-warn-2)" text-anchor="middle">mantenere</text><rect x="192" y="32" width="50" height="28" rx="4" fill="var(--dg-warn-surface)" stroke="var(--dg-warn)"></rect><text x="217" y="50" fill="var(--dg-warn-2)" text-anchor="middle">mantenere</text><rect x="246" y="32" width="50" height="28" rx="4" fill="var(--dg-warn-surface)" stroke="var(--dg-warn)"></rect><text x="271" y="50" fill="var(--dg-warn-2)" text-anchor="middle">mantenere</text></g><text x="430" y="50" font-size="10.5" font-style="italic" fill="var(--dg-ink-2)">i record oltre la finestra vengono eliminati indipendentemente dalla chiave</text><text x="20" y="100" class="mono" font-size="10.5" font-weight="700" fill="var(--dg-ok)">politica compatta, mantieni l'ultimo per CHIAVE</text><text x="30" y="118" class="mono" font-size="8.5" fill="var(--dg-ink-2)">prima:</text><g class="mono" font-size="8"><rect x="80" y="106" width="64" height="22" rx="3" fill="var(--dg-accent-surface)" stroke="var(--dg-line)"></rect><text x="112" y="121" fill="var(--dg-ink-3)" text-anchor="middle">k=A v=1</text><rect x="148" y="106" width="64" height="22" rx="3" fill="var(--dg-accent-surface)" stroke="var(--dg-line)"></rect><text x="180" y="121" fill="var(--dg-ink-3)" text-anchor="middle">k=B v=1</text><rect x="216" y="106" width="64" height="22" rx="3" fill="var(--dg-accent-surface)" stroke="var(--dg-line)"></rect><text x="248" y="121" fill="var(--dg-ink-3)" text-anchor="middle">k=A v=2</text><rect x="284" y="106" width="64" height="22" rx="3" fill="var(--dg-accent-surface)" stroke="var(--dg-line)"></rect><text x="316" y="121" fill="var(--dg-ink-3)" text-anchor="middle">k=A v=3</text></g><defs><marker id="ra11" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0 0 L7 3 L0 6 Z" fill="var(--dg-ok)"></path></marker></defs><path d="M360 117 H410" stroke="var(--dg-ok)" stroke-width="1.6" marker-end="url(#ra11)"></path><text x="30" y="160" class="mono" font-size="8.5" fill="var(--dg-ink-2)">dopo:</text><g class="mono" font-size="8"><rect x="80" y="148" width="64" height="22" rx="3" fill="var(--dg-ok-surface)" stroke="var(--dg-ok)"></rect><text x="112" y="163" fill="var(--dg-ok)" text-anchor="middle">k=B v=1</text><rect x="148" y="148" width="64" height="22" rx="3" fill="var(--dg-ok-surface)" stroke="var(--dg-ok)"></rect><text x="180" y="163" fill="var(--dg-ok)" text-anchor="middle">k=A v=3</text></g><text x="430" y="160" font-size="10.5" font-style="italic" fill="var(--dg-ok)">sopravvive solo il valore più recente di ciascuna chiave, un'istantanea dal vivo</text><text x="360" y="196" class="serif" font-size="12" font-style="italic" fill="var(--dg-ink-2)" text-anchor="middle">La compattazione rende un argomento utilizzabile come archivio chiave/valore durevole e riproducibile dello stato corrente.</text></svg>
+</Diagram>
+
+<Callout type="info" title="Stato dei poteri di compattazione e storia del replay">
+Un argomento più compatto riguarda il modo in cui Kafka mantiene lo stato _attuale_ per sempre senza una crescita illimitata, la base per gli snapshot di sourcing degli eventi (sez. 14), gli archivi di stato di Kafka Streams e le KTables (sez. 16) e i dati di configurazione/ricerca che un nuovo consumatore può riprodurre da zero per ricostruire un quadro completo. Gli argomenti sulla conservazione del tempo rispondono a "cosa è successo di recente"; gli argomenti compatti rispondono "qual è lo stato più recente di tutto". Scegli la politica in base alla quale la domanda a cui il tuo argomento deve rispondere.
+</Callout>
+
+Parte IV / Schemi e modelli
+
+## Schemi e registro degli schemi
+
+Kafka stesso tratta i valori dei record come byte opachi, non sa né gli interessa cosa c'è dentro. Questa libertà è una trappola su larga scala: se produttori e consumatori non sono d'accordo sulla forma del carico utile, un produttore che cambia un campo rompe silenziosamente ogni consumatore a valle (lo stesso pericolo di deriva contrattuale da cui avevano messo in guardia i capitoli gRPC e serializzazione, ora diffuso in molti team indipendenti). La correzione è uno **schema** per ogni argomento più un **registro degli schemi** che archivia gli schemi, assegna loro gli ID e _implica la compatibilità_ man mano che si evolvono.
+
+<Diagram caption="Schema Registry">
+<svg viewBox="0 0 720 200" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Un produttore che registra e serializza con uno schema, il registro che memorizza gli schemi con versione e impone la compatibilità e un consumatore che recupera lo schema per deserializzare"><rect x="20" y="80" width="130" height="44" rx="9" fill="var(--dg-accent)"></rect><text x="85" y="100" font-size="11" font-weight="700" fill="var(--dg-on-accent)" text-anchor="middle">produttore</text><text x="85" y="116" class="mono" font-size="8" fill="var(--dg-on-accent)" text-anchor="middle">serializza + ID schema</text><rect x="295" y="30" width="170" height="56" rx="10" fill="var(--dg-inverse)"></rect><text x="380" y="54" font-size="11" font-weight="700" fill="var(--dg-on-inverse)" text-anchor="middle">Registro degli schemi</text><text x="380" y="72" class="mono" font-size="8" fill="var(--dg-on-inverse)" text-anchor="middle">versione / verifica compat</text><rect x="295" y="110" width="170" height="44" rx="10" fill="var(--dg-warn-surface)" stroke="var(--dg-warn)"></rect><text x="380" y="130" font-size="10.5" font-weight="700" fill="var(--dg-warn)" text-anchor="middle">argomento (byte + id)</text><text x="380" y="146" class="mono" font-size="8" fill="var(--dg-ink-2)" text-anchor="middle">Kafka memorizza solo byte</text><rect x="570" y="80" width="130" height="44" rx="9" fill="var(--dg-ok-surface)" stroke="var(--dg-ok)"></rect><text x="635" y="100" font-size="11" font-weight="700" fill="var(--dg-ok)" text-anchor="middle">consumatore</text><text x="635" y="116" class="mono" font-size="8" fill="var(--dg-ink-2)" text-anchor="middle">recuperare lo schema, decodificare</text><defs><marker id="sa12" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0 0 L6 3 L0 6 Z" fill="var(--dg-accent-2)"></path></marker></defs><path d="M120 88 C200 60 240 56 293 54" stroke="var(--dg-accent-2)" stroke-width="1.4" fill="none" marker-end="url(#sa12)"></path><text x="205" y="50" class="mono" font-size="8" fill="var(--dg-accent-2)">registrarsi</text><path d="M150 110 C200 122 240 128 293 130" stroke="var(--dg-accent-2)" stroke-width="1.4" fill="none" marker-end="url(#sa12)"></path><text x="210" y="124" class="mono" font-size="8" fill="var(--dg-accent-2)">produrre</text><path d="M465 130 C510 128 540 122 568 112" stroke="var(--dg-accent-2)" stroke-width="1.4" fill="none" marker-end="url(#sa12)"></path><path d="M568 96 C540 70 510 56 467 54" stroke="var(--dg-accent-2)" stroke-width="1.4" fill="none" marker-end="url(#sa12)"></path><text x="520" y="50" class="mono" font-size="8" fill="var(--dg-accent-2)">recuperare per ID</text><text x="360" y="184" class="serif" font-size="12" font-style="italic" fill="var(--dg-ink-2)" text-anchor="middle">Il registro rifiuta una modifica dello schema incompatibile, le modifiche importanti non riescono in fase di distribuzione, non in produzione.</text></svg>
+</Diagram>
+
+#### Formati e compatibilità
+
+I formati di serializzazione comuni sono **Avro** (il tradizionale abbinamento Kafka, compatto con una ricca storia di evoluzione dello schema), **Protobuf** (lo stesso IDL del capitolo gRPC, sempre più popolare) e **JSON Schema** (leggibile, più grande). Il registro applica una **modalità di compatibilità**: tipicamente compatibilità _all'indietro_, il che significa che i nuovi consumatori possono leggere i vecchi dati: puoi aggiungere campi facoltativi e rimuovere quelli con valori predefiniti, ma non puoi rinominare o digitare nuovamente un campo. Questa è precisamente la disciplina del cambiamento additivo del capitolo gRPC (sez 04 lì: numeri di campo, mai riutilizzare) e del controllo delle versioni REST, applicato automaticamente da un server.
+
+Uno schema è un contratto tra team
+
+In un parco istanze di microservizi, lo schema di un argomento è un'API pubblica da cui dipendono molti team indipendenti. Lo Schema Registry trasforma "per favore, non rompere il carico utile" da una convenzione tribale in un cancello controllato dalla macchina, lo stesso ruolo che buf gioca per gRPC `.proto` file. Tratta le modifiche allo schema con la stessa cura di qualsiasi modifica API: additiva e compatibile per impostazione predefinita.
+
+## Modelli guidati dagli eventi
+
+Kafka è il substrato per l'**architettura basata sugli eventi (EDA)**, in cui i servizi comunicano emettendo e reagendo agli eventi anziché chiamarsi a vicenda direttamente. Invece di _comandare_ i servizi di posta elettronica, inventario e analisi (accoppiamento stretto, il servizio di ordinazione deve conoscerli tutti), il servizio di ordinazione _annuncia_ semplicemente "OrderPlaced" a un argomento e qualsiasi servizio interessato si iscrive. Il produttore non sa, né si preoccupa, chi consuma. Questo è il profondo vantaggio del disaccoppiamento del log (sez. 1): aggiungi un nuovo consumatore senza toccare il produttore.
+
+<Diagram caption="Choreography">
+<svg viewBox="0 0 720 200" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Un servizio di ordine che emette un evento OrderPlaced su un argomento, che i servizi di posta elettronica, inventario e analisi consumano ciascuno in modo indipendente"><rect x="20" y="80" width="130" height="48" rx="9" fill="var(--dg-accent)"></rect><text x="85" y="100" font-size="11" font-weight="700" fill="var(--dg-on-accent)" text-anchor="middle">servizio d'ordine</text><text x="85" y="117" class="mono" font-size="8" fill="var(--dg-on-accent)" text-anchor="middle">emette OrderPlaced</text><defs><marker id="ea13" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0 0 L6 3 L0 6 Z" fill="var(--dg-accent-2)"></path></marker></defs><path d="M152 104 H243" stroke="var(--dg-accent-2)" stroke-width="1.8" marker-end="url(#ea13)"></path><rect x="245" y="84" width="150" height="40" rx="9" fill="var(--dg-warn-surface)" stroke="var(--dg-warn)"></rect><text x="320" y="108" font-size="10.5" font-weight="700" fill="var(--dg-warn)" text-anchor="middle">argomento: ordini</text><g stroke="var(--dg-ok)" stroke-width="1.4" fill="none"><path d="M396 96 C450 64 480 56 530 52" marker-end="url(#k2)"></path><path d="M396 104 H530" marker-end="url(#k2)"></path><path d="M396 112 C450 152 480 158 530 162" marker-end="url(#k2)"></path></g><rect x="532" y="32" width="168" height="40" rx="9" fill="var(--dg-ok-surface)" stroke="var(--dg-ok)"></rect><text x="616" y="56" font-size="10" font-weight="700" fill="var(--dg-ok)" text-anchor="middle">servizio di posta elettronica</text><rect x="532" y="84" width="168" height="40" rx="9" fill="var(--dg-ok-surface)" stroke="var(--dg-ok)"></rect><text x="616" y="108" font-size="10" font-weight="700" fill="var(--dg-ok)" text-anchor="middle">servizio di inventario</text><rect x="532" y="136" width="168" height="40" rx="9" fill="var(--dg-ok-surface)" stroke="var(--dg-ok)"></rect><text x="616" y="160" font-size="10" font-weight="700" fill="var(--dg-ok)" text-anchor="middle">servizio di analisi</text><text x="360" y="192" class="serif" font-size="12" font-style="italic" fill="var(--dg-ink-2)" text-anchor="middle">Aggiungi un consumatore &quot;punti fedeltà&quot; domani, zero modifiche al servizio ordini.</text></svg>
+</Diagram>
+
+| Modello | Cosa porta l'evento | Scambio |
+| -------------------------------- | --------------------------------------- | ----------------------------------------------------------------------------------- |
+| **Notifica evento** | Solo "X è successo" + un ID | Piccoli messaggi; i consumatori devono richiamare per i dettagli (accoppiamento, carico) |
+| **Trasferimento di stato per evento** | Lo stato completo pertinente nell'evento | I consumatori sono autosufficienti (nessun callback); messaggi più grandi, possibile duplicazione |
+| **Coreografia** | I servizi reagiscono autonomamente agli eventi | Accoppiamento allentato, facile da estendere; il flusso è più difficile da vedere end-to-end |
+| **Orchestrazioni** | Un coordinatore guida i passi (una saga) | Flusso esplicito e visibile; reintroduce un coordinatore centrale |
+
+Il disaccoppiamento non è gratuito
+
+L’EDA scambia la chiarezza di una richiesta diretta di flessibilità. Lo svantaggio è che nessun singolo luogo descrive l'intero flusso di lavoro, "cosa succede quando viene effettuato un ordine?" è ora distribuito su molti abbonati, il che rende più difficile il debug e il ragionamento. Mitigare con una buona osservabilità (ID di traccia/correlazione tramite intestazioni di eventi, la stessa idea della sezione 13/15 dei livelli e dei capitoli di registrazione), schemi di eventi chiari (sezione 12) e scelta dell'orchestrazione (una saga esplicita) quando un flusso necessita veramente di una sequenza visibile e coordinata.
+
+## Origine eventi e CQRS
+
+Due modelli avanzati abilitati dal registro, spesso confusi, spesso accoppiati. **Origine di eventi** memorizza lo stato come _sequenza di eventi che lo hanno prodotto_ anziché solo come istantanea corrente: invece di una riga `balance = 100`, continui `Deposited 60`, `Deposited 50`, `Withdrew 10`e ricavare il saldo riproducendoli. Il registro immutabile, ordinato e conservato di Kafka (sez. 3) è un deposito di eventi naturali. **CQRS** (Command Query Responsibility Segregation) separa il modello di scrittura da uno o più modelli di lettura ottimizzati per l'esecuzione di query.
+
+<Diagram caption="Event sourcing + CQRS">
+<svg viewBox="0 0 720 210" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="I comandi aggiungono gli eventi a un registro che è la fonte della verità; i consumatori proiettano tali eventi in modelli di lettura specializzati come un indice di ricerca e una visualizzazione SQL"><rect x="20" y="84" width="110" height="44" rx="9" fill="var(--dg-accent)"></rect><text x="75" y="104" font-size="10.5" font-weight="700" fill="var(--dg-on-accent)" text-anchor="middle">comando</text><text x="75" y="120" class="mono" font-size="8" fill="var(--dg-on-accent)" text-anchor="middle">&quot;deposito 60&quot;</text><defs><marker id="es14" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0 0 L6 3 L0 6 Z" fill="var(--dg-accent-2)"></path></marker></defs><path d="M132 106 H193" stroke="var(--dg-accent-2)" stroke-width="1.6" marker-end="url(#es14)"></path><rect x="195" y="78" width="170" height="56" rx="10" fill="var(--dg-warn-surface)" stroke="var(--dg-warn)"></rect><text x="280" y="100" font-size="10.5" font-weight="700" fill="var(--dg-warn)" text-anchor="middle">registro eventi</text><text x="280" y="118" class="mono" font-size="8" fill="var(--dg-ink-2)" text-anchor="middle">FONTE DELLA VERITÀ (solo aggiunta)</text><g stroke="var(--dg-ok)" stroke-width="1.4" fill="none"><path d="M366 96 C420 70 450 60 500 56" marker-end="url(#k2)"></path><path d="M366 116 C420 142 450 152 500 156" marker-end="url(#k2)"></path></g><rect x="502" y="34" width="196" height="44" rx="9" fill="var(--dg-ok-surface)" stroke="var(--dg-ok)"></rect><text x="600" y="54" font-size="10" font-weight="700" fill="var(--dg-ok)" text-anchor="middle">modello di lettura: indice di ricerca</text><text x="600" y="70" class="mono" font-size="8" fill="var(--dg-ink-2)" text-anchor="middle">proiezione per query veloci</text><rect x="502" y="134" width="196" height="44" rx="9" fill="var(--dg-ok-surface)" stroke="var(--dg-ok)"></rect><text x="600" y="154" font-size="10" font-weight="700" fill="var(--dg-ok)" text-anchor="middle">modello di lettura: vista SQL</text><text x="600" y="170" class="mono" font-size="8" fill="var(--dg-ink-2)" text-anchor="middle">proiezione per il reporting</text><text x="360" y="200" class="serif" font-size="12" font-style="italic" fill="var(--dg-ink-2)" text-anchor="middle">Hai perso un modello letto? Ricostruiscilo riproducendo il registro dall'offset 0. Gli eventi sono la verità; le visualizzazioni sono usa e getta.</text></svg>
+</Diagram>
+
+I vantaggi sono reali: un **traccia di controllo completo** (ogni modifica è un fatto registrato, prezioso per la finanza e la conformità), la capacità di **ricostruire lo stato in qualsiasi momento passato** riproducendo un offset e **più modelli di lettura specializzati** ciascuno ricostruibile dallo stesso registro (la compattazione, sezione 11, fornisce l'istantanea per evitare la ripetizione dall'alba dei tempi).
+
+Potente e non gratuito, non raggiungerlo per impostazione predefinita
+
+L'origine degli eventi aggiunge una reale complessità: l'evoluzione dello schema degli eventi _storici_ è difficile (non puoi mai cambiare il passato, solo come lo interpreti), ricostruire lo stato ha un costo e "qual è il valore attuale?" ora richiede una proiezione anziché una lettura di riga. Brilla per ambiti complessi e ricchi di controlli (pagamenti, registri, esattamente fintech) in cui la storia _è_ il valore. Per il CRUD ordinario, un database normale è più semplice e corretto, utilizza il modello in cui la traccia di controllo e la riproduzione pagano realmente la complessità, non come un'architettura predefinita.
+
+## Il modello della posta in uscita e l'acquisizione dei dati di modifica
+
+Un problema sottile e importante nei sistemi guidati dagli eventi: quando un servizio deve sia **aggiornare il proprio database che pubblicare un evento**, eseguirli come due operazioni separate non è sicuro. Se il commit del DB ha esito positivo ma la pubblicazione di Kafka fallisce (o viceversa), i tuoi sistemi divergono, l'ordine esiste ma non viene attivato alcun evento "OrderPlaced" o viene attivato un evento per un ordine sottoposto a rollback. Questo è il **problema della doppia scrittura** e non puoi risolverlo riordinando le due scritture, c'è sempre una finestra di arresto anomalo tra di loro.
+
+<Diagram caption="The dual-write problem &amp; the outbox fix">
+<svg viewBox="0 0 720 230" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="In alto: scrivendo su DB poi Kafka separatamente rischia la divergenza in caso di incidente tra di loro. In basso: scrittura dei dati aziendali e di una riga di posta in uscita in un'unica transazione, quindi un inoltro che pubblica la posta in uscita su Kafka"><text x="20" y="22" class="mono" font-size="10" font-weight="700" fill="var(--dg-accent-2)">la doppia scrittura ingenua può divergere</text><rect x="30" y="34" width="100" height="34" rx="7" fill="var(--dg-accent-border)" stroke="var(--dg-accent-2)"></rect><text x="80" y="55" font-size="9.5" fill="var(--dg-accent-2)" text-anchor="middle">commit DB</text><text x="140" y="55" font-size="13" fill="var(--dg-accent-2)">→</text><text x="160" y="50" font-size="9" font-style="italic" fill="var(--dg-accent-2)">⚡ schiantati qui</text><rect x="250" y="34" width="110" height="34" rx="7" fill="var(--dg-accent-border)" stroke="var(--dg-accent-2)"></rect><text x="305" y="55" font-size="9.5" fill="var(--dg-accent-2)" text-anchor="middle">pubblicare Kafka</text><text x="380" y="55" font-size="10.5" font-style="italic" fill="var(--dg-accent-2)">DB aggiornato ma evento mai inviato</text><text x="20" y="104" class="mono" font-size="10" font-weight="700" fill="var(--dg-ok)">modello di posta in uscita, atomico</text><rect x="30" y="118" width="220" height="72" rx="10" fill="var(--dg-ok-surface)" stroke="var(--dg-ok)"></rect><text x="140" y="138" font-size="10" font-weight="700" fill="var(--dg-ok)" text-anchor="middle">UNA transazione DB</text><rect x="46" y="148" width="92" height="32" rx="6" fill="var(--dg-ok-surface)" stroke="var(--dg-ok)"></rect><text x="92" y="168" font-size="8.5" fill="var(--dg-ok)" text-anchor="middle">riga degli ordini</text><rect x="144" y="148" width="92" height="32" rx="6" fill="var(--dg-ok-surface)" stroke="var(--dg-ok)"></rect><text x="190" y="168" font-size="8.5" fill="var(--dg-ok)" text-anchor="middle">riga della posta in uscita</text><defs><marker id="ob15" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0 0 L6 3 L0 6 Z" fill="var(--dg-accent-2)"></path></marker></defs><path d="M252 154 H300" stroke="var(--dg-accent-2)" stroke-width="1.6" marker-end="url(#ob15)"></path><rect x="302" y="138" width="120" height="34" rx="8" fill="var(--dg-inverse)"></rect><text x="362" y="159" font-size="9.5" font-weight="700" fill="var(--dg-on-inverse)" text-anchor="middle">relè/CDC</text><path d="M424 154 H472" stroke="var(--dg-accent-2)" stroke-width="1.6" marker-end="url(#ob15)"></path><rect x="474" y="138" width="120" height="34" rx="8" fill="var(--dg-warn-surface)" stroke="var(--dg-warn)"></rect><text x="534" y="159" font-size="9.5" font-weight="700" fill="var(--dg-warn)" text-anchor="middle">Argomento Kafkiano</text><text x="360" y="212" class="serif" font-size="12" font-style="italic" fill="var(--dg-ink-2)" text-anchor="middle">Entrambe le righe si impegnano insieme o non si impegnano affatto; un relè separato inoltra in modo affidabile la posta in uscita, senza eventi persi o fantasma.</text></svg>
+</Diagram>
+
+Il **modello outbox** lo risolve con una singola transazione locale: scrivi la modifica aziendale _e_ una riga "outbox" che descrive l'evento nella _stessa_ transazione del database, in modo che si impegnino atomicamente. Un processo **inoltro** separato legge quindi le nuove righe della posta in uscita e le pubblica su Kafka (riprovando fino al successo, almeno una volta, quindi i consumatori rimangono idempotenti, sezione 9). Il modo moderno e semplice per eseguire tale inoltro è **Change Data Capture (CDC)**: uno strumento come **Debezium** segue il registro delle transazioni del database e trasmette le modifiche apportate direttamente in Kafka, senza bisogno di polling dell'applicazione.
+
+```sql title="outbox: business write + event in one transaction"
+BEGIN;
+
+-- 1) the actual business change
+INSERT INTO orders (id, customer_id, amount, status)
+VALUES ('order-42', 'cust-7', 1999, 'PLACED');
+
+-- 2) the event to publish, written in the SAME transaction -> atomic with (1)
+INSERT INTO outbox (id, aggregate, event_type, payload, created_at)
+VALUES (gen_random_uuid(), 'order-42', 'OrderPlaced',
+        '{"id":"order-42","amount":1999}', now());
+
+COMMIT;   -- both succeed together, or neither does, no dual-write gap
+
+-- A relay (or Debezium CDC on the transaction log) then reads new `outbox`
+-- rows and produces them to Kafka, marking each published. Retries are safe
+-- because downstream consumers are idempotent (sec 9).
+```
+
+La risposta standard a "DB + Kafka insieme"
+
+Ogni volta che una scrittura deve produrre atomicamente un evento, onnipresente nei pagamenti e nei sistemi di ordine, raggiungi la casella di posta in uscita (spesso tramite Debezium CDC). Converte un impossibile problema di transazione distribuita in una transazione locale ordinaria più un relè affidabile e idempotente. Questo è uno dei modelli più preziosi dal punto di vista pratico nell'intero toolkit basato sugli eventi.
+
+Parte V / Elaborazione, operazioni e pratica
+
+## Elaborazione del flusso
+
+Finora i consumatori leggono gli eventi uno alla volta. **L'elaborazione del flusso** è la disciplina del calcolo _continuo_ sul flusso, filtraggio, trasformazione, aggregazione, unione, produzione di nuovi flussi derivati. Invece di "leggi l'evento, fai una cosa", esprimi una query permanente come "un conteggio progressivo di 5 minuti di pagamenti non riusciti per commerciante" che si aggiorna per sempre all'arrivo degli eventi. La libreria di Kafka per questo è **Kafka Streams** (JVM); **ksqlDB** offre un livello simile a SQL e **Apache Flink** è il peso massimo per lavori grandi e complessi.
+
+| Concetto | Significato |
+| ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| **KStream** | Un flusso illimitato di eventi indipendenti (una visualizzazione del registro di accodamento), ogni record è importante.                                               |
+| **KTabella** | Un registro delle modifiche interpretato come stato corrente per chiave, la vista ad argomento compatto (sez. 11); vince l'ultimo valore.                             |
+| **Operazioni con stato** | Aggregazioni/join che ricordano gli eventi, supportati da un archivio statale locale (a sua volta un argomento Kafka compatto per la tolleranza agli errori). |
+| **Finestra** | Dividere gli eventi in base al tempo (ribaltamento, salto, sessione) per aggregarli "per 5 minuti" ecc. |
+| **Evento rispetto al tempo di elaborazione** | Quando l'evento _è accaduto_ rispetto a quando lo _elabori_, differiscono e i dati in ritardo/fuori ordine devono essere gestiti.                        |
+
+<Callout type="info" title="La dualità flusso/tabella">
+L'elegante idea di base: un **stream** e una **tabella** sono due visualizzazioni degli stessi dati. Un flusso di modifiche _aggregate_ per chiave fornisce una tabella (stato corrente); il _changelog_ di una tabella è un flusso di aggiornamenti. Questa è esattamente la distinzione tra conservazione e compattazione (sez. 11) elevata a modello di programmazione, ed è il motivo per cui un argomento compatto _è_ una tabella e un argomento normale _è_ un flusso. La maggior parte degli ingegneri di backend consumano flussi con il consumatore semplice (sez. 7); ricorrere a un framework di elaborazione del flusso quando sono necessari aggregazioni con stato, join o finestre che sarebbero difficili da eseguire manualmente.
+</Callout>
+
+## Kafka contro le code tradizionali
+
+Ritornando alla distinzione della seconda sezione con un contesto sufficiente per decidere bene. Questa è la domanda che rimanda le persone al capitolo sulle code di attività e ritorno: **voglio Kafka o una coda di messaggi (RabbitMQ, SQS, il mondo Celery/Sidekiq)?** Si sovrappongono abbastanza da confondere e differiscono abbastanza da avere importanza.
+
+| Dimensione | Kafka (registro) | RabbitMQ/SQS (coda) |
+| -------------------------------- | -------------------------------------------------------------------- | ------------------------------------------------------------------- |
+| Modello principale | Registro eventi durevole e riproducibile | Coda di lavoro transitoria |
+| Dopo il consumo | Mantenuto; rigiocabile da qualsiasi gruppo | Cancellato una volta attaccato |
+| Fan-out su molti sistemi | Nativo, ogni gruppo legge tutto | Necessita di configurazione di scambi/fan-out; non è l'impostazione predefinita |
+| Produttività | Molto elevato (milioni/sec) | Elevato, ma generalmente inferiore |
+| Ordinare | Forte per partizione | Debole; Le modalità FIFO sono limitate/più lente |
+| Routing/priorità/TTL per messaggio | Limitato, non il suo modello | Ricco (chiavi di instradamento, priorità, ritardo, DLQ) |
+| Replay / viaggio nel tempo | Sì, cerca qualsiasi compensazione | No |
+| Ideale per | Streaming di eventi, molti abbonati, riproduzione, analisi, approvvigionamento di eventi | Offload delle attività, lavori tipo RPC, routing complesso, controllo per messaggio |
+
+L'euristica della decisione
+
+Raggiungi **Kafka** quando gli eventi sono fatti che interessano a molti sistemi, quando hai bisogno di un throughput elevato, di un ordinamento o della capacità di riprodurre la cronologia, la dorsale dello streaming. Raggiungere una **coda** (cap.10) quando si consegnano unità discrete di lavoro da svolgere una volta, in particolare con il routing per messaggio, le priorità, i ritardi o la gestione dei messaggi non recapitabili. Sono complementari: moltissimi sistemi reali eseguono Kafka come colonna vertebrale degli eventi _e_ come coda di attività per i lavori in background. Non forzare la semantica della coda di attività su Kafka (TTL per messaggio, priorità, riconoscimento selettivo), ciò va contro il suo design.
+
+## Le insidie del consumatore
+
+La maggior parte del dolore Kafka della produzione si manifesta dal lato del consumatore. Queste sono le modalità di fallimento che mordono le squadre vere, che vale la pena riconoscere prima che ti chiami alle 2 del mattino.
+
+| Trappola | Cosa succede | Mitigazione |
+| -------------------------------- | --------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| **Tempeste riequilibranti** | Frequenti riequilibri di gruppo (elaborazione lenta interrompe il timeout del sondaggio, membro dichiarato morto) bloccano ripetutamente il consumo | Mantieni il lavoro per sondaggio limitato, sintonizzati `max.poll.records` / `max.poll.interval.ms`; scaricare il lavoro lento; utilizzare il riequilibrio cooperativo/incrementale |
+| **Pillola di veleno** | Un messaggio non elaborabile (schema errato, dati errati) provoca l'arresto anomalo del consumer e riprova all'infinito, la partizione è bloccata | Cattura errori per record; indirizza il record errato a un _argomento lettera morta_ e vai avanti |
+| **Ritardo dei consumatori** | I produttori superano i consumatori; il ritardo diventa illimitato; i dati diventano obsoleti | Aggiungi partizioni + consumatori (sec 7), accelera l'elaborazione, batch; avviso di ritardo (sec 19) |
+| **Partizione/disallineamento chiave** | Un tasto di scelta rapida (un tenant gigante) sovraccarica la sua singola partizione mentre gli altri sono inattivi (sec 10) | Scegli una chiave con cardinalità più alta o una chiave composta; isolare gli inquilini caldi |
+| **L'elaborazione lenta dell'ordine dei blocchi** | Per mantenere l'ordine si elabora una partizione in modo seriale, quindi un record lento ritarda il resto | Parallelizza tra partizioni, non all'interno; considerare i modelli di parallelismo per chiave |
+| **Rielaborazione in caso di lacune di commit** | Un arresto anomalo tra l'elaborazione e il commit dell'offset riconsegna i record | Previsto in at-almeno-once, rende l'elaborazione idempotente (sec 9) |
+
+Avere sempre una strategia lettera morta
+
+Un singolo messaggio non valido non deve mai essere in grado di fermare un'intera partizione per un tempo indefinito, questa è una pillola avvelenata ed è una causa comune di interruzione. Integra l'elaborazione per record nella gestione degli errori: in caso di errore persistente, pubblica il record incriminato (più l'errore e i metadati) in un **argomento lettera non recapitabile**, confermalo e mantieni il flusso del flusso. Investigherai l'argomento della lettera non recapitata in un secondo momento invece di lasciare che un record errato blocchi tutti, la stessa disciplina DLQ che il capitolo sulle code di attività applica ai lavori non riusciti.
+
+## Operazioni e monitoraggio
+
+Gestire bene Kafka significa osservare alcuni segnali e valutare correttamente alcune cose. Non è necessario memorizzare tutti i parametri, ma è necessario conoscere quelli che prevedono i problemi.
+
+| Guarda | Perché è importante |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| **Ritardo dei consumatori** | La metrica principale sulla salute (sezione 8): un ritardo crescente significa che i consumatori non riescono a tenere il passo, i dati stanno diventando obsoleti. Avvertimento su di esso. |
+| **Partizioni sottoreplicate** | Repliche che escono dall'ISR (sez. 5), la durabilità è a rischio; un broker potrebbe essere in difficoltà.                        |
+| **Disco broker e velocità effettiva** | Conservazione (sez. 11) significa che gli argomenti consumano disco reale; il disco o la rete saturi limitano il cluster.                |
+| **Frequenza di ribilanciamento** | Ribilanciamenti frequenti (sez. 18) indicano consumatori instabili e causano stalli.                                         |
+| **Richiedi latenza ed errori** | La latenza di produzione/recupero e i tassi di errore fanno emergere tempestivamente i problemi del broker o del client.                                     |
+
+#### Decisioni di dimensionamento che prendi effettivamente
+
+- **Conteggio partizioni**: imposta il parallelismo massimo del consumatore e il throughput (sec 4, sec 7). Stima dal throughput target e dal conteggio dei picchi di consumo; sbaglia leggermente, ma non eccessivamente (ogni partizione ha un sovraccarico e migliaia per broker danneggiano). Difficile cambiare in seguito, quindi pensa al futuro (sez. 20).
+- **Fattore di replica**: solitamente 3 in produzione: tollera la perdita di un broker con spazio libero. Accoppia con `min.insync.replicas=2` e `acks=all` (sez. 5).
+- **Conservazione**: quanto durano gli eventi (e quindi l'utilizzo del disco e la finestra di riproduzione). Imposta per argomento in base a quanto indietro i consumatori potrebbero aver bisogno di leggere.
+
+<Callout type="info" title="Utensileria">
+Osservabilità standard: esporta le metriche JMX del broker e del client in Prometheus + Grafana (lo stesso stack utilizzato dalle code di attività e dai capitoli di registrazione) e osserva il ritardo del consumatore in modo specifico con un esportatore di ritardo o un'interfaccia utente come Kafka UI/Conduktor/AKHQ. `kafka-consumer-groups.sh --describe` fornisce una rapida lettura CLI del ritardo di un gruppo per partizione durante il debug in tempo reale.
+</Callout>
+
+## Progettare con Kafka
+
+Trasformare il manuale nel giudizio progettuale. Kafka è uno strumento potente e acuto; usato dove si adatta è trasformativo, usato come bus di messaggi generico è una responsabilità. Alcuni principi separano i buoni progetti di Kafka da quelli dolorosi.
+
+#### Principi di progettazione
+
+- **Modella gli argomenti in base a eventi/fatti, non a comandi o RPC.** Un argomento è un flusso di "cose che sono accadute" (`PaymentSettled`), consumato da chi se ne frega, non un modo per dire a un servizio specifico cosa fare. Se ti ritrovi a desiderare una richiesta/risposta, vuoi gRPC/REST, non Kafka.
+- **Scegli la chiave di partizione in base al limite di ordinamento.** Chiave in base all'entità i cui eventi devono rimanere ordinati (account, ordine, utente), ma con una granularità che distribuisce comunque il carico, per evitare partizioni attive (sez. 10, sec. 18). La chiave è la singola decisione più consequenziale per argomento.
+- **Presupporre almeno una volta; creare consumatori idempotenti.** Non inseguire end-to-end esattamente una volta attraverso sistemi esterni (sez. 9). Deduplica in base all'ID evento o utilizza gli upserts in modo che i duplicati siano innocui, più economici e più robusti.
+- **Gestisci gli schemi fin dal primo giorno.** Utilizza il registro degli schemi con compatibilità con le versioni precedenti (sezione 12) in modo che i team indipendenti possano evolversi in sicurezza. Lo schema di un argomento è un contratto.
+- **Utilizzare la posta in uscita per le scritture DB ed eventi.** Non eseguire mai la doppia scrittura; rendere atomico l'evento con i dati e trasmetterlo (sez. 15).
+- **Ridimensiona le partizioni per ottenere il picco in anticipo.** Il ripartizionamento interrompe l'ordine delle chiavi (sezione 4), quindi pianifica la crescita anziché reagire ad essa.
+
+Quando Kafka e quando no
+
+**Rivolgiti a Kafka** quando disponi di un flusso di eventi che molti sistemi consumano, hai bisogno di throughput o riproduzione elevati, stai eseguendo un'architettura basata sugli eventi, il sourcing di eventi, pipeline di analisi o l'inserimento di log/metriche. **Non** cercarlo per richieste/risposte semplici (usa gRPC/REST, il capitolo gRPC), per lavori in background discreti con routing o priorità per messaggio (usa una coda di attività, cap.10) o come unico archivio dati per ricerche di punti (usa un database). Abbinare lo strumento alla forma del problema è l'intera abilità.
+
+## Cheat-Sheet
+
+L'intero manuale compresso in ciò che raggiungi sotto pressione.
+
+| Concetto | Una riga |
+| --------------------- | ------------------------------------------------------------------------------------------------------ |
+| Kafka | Un registro di eventi di commit distribuito, durevole e di sola aggiunta che molti consumatori leggono con il proprio offset. |
+| Coda vs registro | Coda: consumata una volta ed eliminata. Registro: conservato, riproducibile, ogni gruppo legge tutto.                      |
+| Registro commit | I/O sequenziale di sola aggiunta, immutabile, indirizzato in offset, la base di tutto.                     |
+| Argomento | Un flusso con nome, suddiviso in partizioni.                                                                 |
+| Partizione | Unità di parallelismo, ordinamento e memorizzazione. Stessa chiave -&gt; stessa partizione.                                |
+| Broker / replica | Cluster di server; ogni partizione ha una replica leader + follower (ISR).                             |
+| acks/ISR | `acks=all` + `min.insync.replicas=2` = nessuna perdita di dati in caso di guasto di un broker.                             |
+| Produttore | Aggiunge record con chiave; partizione dei set di chiavi; l'idempotenza evita il dup al nuovo tentativo.                            |
+| Gruppo consumatori | Divide le partizioni tra i membri. Stesso gruppo = condivisione del lavoro; gruppi diversi = trasmissione.                |
+| Tappo di parallelismo | Consumatori utili massimi per gruppo = conteggio delle partizioni.                                                      |
+| Offset/ritardo | La tua posizione per partizione; ritardo = coda - posizione = la metrica chiave della salute.                            |
+| Tempi di impegno | Impegno dopo l'elaborazione = almeno una volta; prima = al massimo una volta.                                        |
+| Consegna | Al massimo/almeno/esattamente una volta. Scegli almeno una volta + consumatori idempotenti.                          |
+| Ordinare | Garantito solo all'interno di una partizione. Chiave in base al limite dell'ordine.                                     |
+| Conservazione | Elimina per ora/dimensione o compatta per mantenere il valore più recente per chiave.                                          |
+| Compattazione | Latest-per-key -&gt; un'istantanea durevole e riproducibile dello stato corrente (una tabella).                           |
+| Registro degli schemi | Schemi con versione (Avro/Protobuf) con compatibilità con le versioni precedenti applicata.                                |
+| EDA | Emettere eventi; i consumatori reagiscono in modo indipendente, accoppiamento lento, facile da estendere.                            |
+| Origine eventi/CQRS | Log è la fonte della verità; i modelli di lettura sono proiezioni ricostruibili.                                   |
+| Posta in uscita/CDC | Scrivi dati + evento in un DB txn; relè (Debezium) a Kafka, nessun gap di doppia scrittura.                        |
+| Elaborazione del flusso | Calcolo continuo (filtro/aggregazione/unione/finestra); Dualità tra KStream e KTable.                          |
+| Insidie ​​| Riequilibrare tempeste, pillole avvelenate (usa un DLQ), lag, distorsione dei tasti.                                             |
+| vs code | Kafka = streaming/replay/throughput dell'evento; code = lavoro + instradamento/priorità. Usali entrambi.                 |
+
+**L'intero argomento in un fiato:** Kafka è un registro di commit distribuito, durevole, di sola aggiunta (sec 1-3), a differenza di una coda, gli eventi vengono conservati e ogni gruppo di consumatori li legge tutti e può riprodurli (sec 2). Un argomento è suddiviso in partizioni, l'unità di parallelismo, ordinamento e archiviazione (sez. 4), distribuite tra i broker e replicate per durabilità tramite leader, follower e ISR (sez. 5). I produttori allegano record con chiave (sez. 6); i gruppi di consumatori dividono le partizioni per aumentare la scalabilità, con il parallelismo limitato dal conteggio delle partizioni (sez. 7). Ogni consumatore tiene traccia del proprio offset e il ritardo rispetto alla coda è il segnale chiave della salute (sez. 8); quando ti impegni decidi la semantica di consegna e la scelta pragmatica è almeno una volta con consumatori idempotenti (sez. 9). L'ordinamento vale solo all'interno di una partizione, quindi si digita in base al limite di ordinamento e si osserva l'inclinazione (sez. 10); la conservazione elimina in base all'età mentre la compattazione mantiene il valore più recente per chiave (sec 11). Un registro degli schemi governa i carichi utili tra i team (sez. 12); il log è alla base dell'architettura basata sugli eventi (sez. 13), del sourcing degli eventi e di CQRS (sez. 14) e del modello di posta in uscita/CDC per le scritture atomiche di DB ed eventi (sez. 15). L'elaborazione del flusso viene calcolata continuamente su di esso (sec. 16); scegli Kafka invece di una coda per streaming, riproduzione e throughput (sez. 17), proteggiti da tempeste di ribilanciamento, pillole avvelenate, ritardi e distorsioni (sez. 18), monitora ritardi e ISR (sez. 19) e progetta argomenti attorno a eventi programmati in modo sensato, con consumatori idempotenti e schemi governati (sez. 20).
+
+Basato sui documenti Apache Kafka e Confluent / sulla letteratura log/stream-table (Kreps) / Debezium per CDC / Go 1.22+ (confluent-kafka-go) / Python 3.11+ (confluent-kafka) esempi.
+
+Backend da Primi Principi / Capitolo 23 / Kafka. Il codice è destinato a Go 1.22+ e Python 3.11+.

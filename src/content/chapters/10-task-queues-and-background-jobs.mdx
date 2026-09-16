@@ -1,0 +1,2993 @@
+---
+order: 10
+title: "Code di attività e lavori in background"
+navTitle: "Code di attività e lavori in background"
+summary: "Perché il lavoro lento appartiene all'esterno della richiesta e in che modo una coda di attività lo sposta lì: broker, produttori e consumatori, nuovi tentativi e backoff, timeout di visibilità, idempotenza, limitazione della velocità dei lavoratori, monitoraggio e motori del flusso di lavoro. Implementazioni funzionate in Go, Python, JavaScript, TypeScript e Java."
+readingTime: "3-4 ore"
+keywords:
+  - "task"
+  - "queues"
+  - "background"
+  - "jobs"
+  - "workers"
+  - "async"
+  - "redis"
+  - "sidekiq"
+  - "celery"
+---
+Un riferimento dettagliato al backend
+
+Lavori in background\
+e code di attività
+=============
+
+Qualsiasi codice eseguito al di fuori del ciclo di richiesta-risposta, differito, riprovabile e non bloccante, è un processo in background. Capire come progettarli e gestirli è ciò che distingue un backend giocattolo da uno di produzione.
+
+---
+
+01
+
+## Cos'è un'attività in background?
+
+Un'**attività in background** (chiamata anche lavoro in background) è qualsiasi parte di codice, logica o flusso di lavoro che viene eseguito _all'esterno_ del ciclo di vita richiesta-risposta. Pensa alla tua tipica interazione HTTP: un client invia una richiesta, il tuo server la elabora e invia una risposta. Tutto ciò che non è necessario che accada _entro_ quel breve lasso di tempo è candidato per un'attività in background.
+
+La caratteristica chiave: **non è necessario che sia sincrono**. Non è mission-critical, nel senso che il cliente lo sta aspettando proprio adesso. Per questo motivo possiamo tranquillamente scaricarlo in un processo separato che termina a suo tempo, a seconda di come è stato programmato.
+
+<Diagram>
+<svg viewBox="0 0 700 200" xmlns="http://www.w3.org/2000/svg" width="640"><rect x="20" y="70" width="110" height="60" rx="6" fill="var(--dg-inverse)" stroke="var(--dg-accent)" stroke-width="1.5"></rect><text x="75" y="104" text-anchor="middle" fill="var(--dg-on-inverse)" font-family="var(--font-diagram-mono)" font-size="12">CLIENTE</text><line x1="132" y1="90" x2="238" y2="90" stroke="var(--dg-accent)" stroke-width="1.5" marker-end="url(#arr)"></line><text x="185" y="82" text-anchor="middle" fill="var(--dg-ink-2)" font-family="var(--font-diagram-mono)" font-size="10">RICHIESTA</text><line x1="238" y1="110" x2="132" y2="110" stroke="var(--dg-info-soft)" stroke-width="1.5" marker-end="url(#arr2)"></line><text x="185" y="130" text-anchor="middle" fill="var(--dg-ink-2)" font-family="var(--font-diagram-mono)" font-size="10">RISPOSTA</text><rect x="240" y="60" width="160" height="80" rx="6" fill="var(--dg-inverse)" stroke="var(--dg-warn-soft)" stroke-width="1.5"></rect><text x="320" y="95" text-anchor="middle" fill="var(--dg-on-inverse)" font-family="var(--font-diagram-mono)" font-size="12">SERVER</text><text x="320" y="113" text-anchor="middle" fill="var(--dg-on-inverse-2)" font-family="var(--font-diagram-mono)" font-size="10">(processo principale)</text><line x1="400" y1="100" x2="460" y2="100" stroke="var(--dg-ink-3)" stroke-width="1.5" stroke-dasharray="6 4" marker-end="url(#arr3)"></line><text x="430" y="88" text-anchor="middle" fill="var(--dg-ink-3)" font-family="var(--font-diagram-mono)" font-size="9">scaricare</text><rect x="462" y="60" width="200" height="80" rx="6" fill="var(--dg-inverse)" stroke="var(--dg-ink-3)" stroke-width="1.5" stroke-dasharray="5 3"></rect><text x="562" y="90" text-anchor="middle" fill="var(--dg-on-inverse-2)" font-family="var(--font-diagram-mono)" font-size="12">SFONDO</text><text x="562" y="108" text-anchor="middle" fill="var(--dg-on-inverse-2)" font-family="var(--font-diagram-mono)" font-size="12">COMPITO</text><text x="562" y="124" text-anchor="middle" fill="var(--dg-on-inverse)" font-family="var(--font-diagram-mono)" font-size="9">(processo separato)</text><text x="185" y="168" text-anchor="middle" fill="var(--dg-accent)" font-family="var(--font-diagram-mono)" font-size="10">&lt;- ciclo di vita richiesta-risposta -&gt;</text><text x="562" y="168" text-anchor="middle" fill="var(--dg-ink-3)" font-family="var(--font-diagram-mono)" font-size="10">al di fuori del ciclo di vita</text><defs><marker id="arr" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L0,6 L8,3 z" fill="var(--dg-accent)"></path></marker><marker id="arr2" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L0,6 L8,3 z" fill="var(--dg-info-soft)"></path></marker><marker id="arr3" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L0,6 L8,3 z" fill="var(--dg-ink-3)"></path></marker></defs></svg>
+</Diagram>
+
+<Callout type="info" title="Riferimento MDN">
+Il concetto si associa direttamente al modello [ciclo di eventi e coda di attività del browser](https://developer.mozilla.org/en-US/docs/Web/API/queueMicrotask), macroattività vs microattività. Sul server si applica lo stesso principio: parte del lavoro non appartiene allo stack di chiamate sincrono.
+</Callout>
+
+02
+
+## Perché abbiamo bisogno di attività in background
+
+Il classico esempio motivante è **registrazione utente + verifica email**. Ecco il quadro completo di ciò che accade:
+
+- 1
+
+  **L'utente compila il modulo di registrazione**
+
+  Forniscono e-mail, nome utente, password. Il frontend convalida i vincoli di base ed effettua una chiamata API al tuo backend.
+
+- 2
+
+  **Il backend convalida e memorizza i dati**
+
+  Sicurezza della password, unicità dell'e-mail, hashing, scrittura del record utente nel database, generazione di un token di verifica una tantum (OTP a 6 cifre o un URL firmato).
+
+- 3
+
+  **Invia un'email di verifica**
+
+  Ciò richiede la chiamata a un _provider di posta elettronica di terze parti_ (Resend, Mailgun, Brevo). Il tuo backend sta ora effettuando una richiesta HTTP in uscita a un servizio esterno.
+
+- 4
+
+  **Il provider di posta elettronica elabora e consegna**
+
+  Il provider controlla la tua chiave API, convalida l'e-mail, la instrada tramite SMTP e la consegna. Viene restituito il successo/fallimento.
+
+### Il problema: l'invio sincrono di e-mail
+
+Se i passaggi 3-4 si verificano in modo sincrono nel tuo gestore delle richieste, hai introdotto una **dipendenza rigida** su un servizio esterno all'interno del tuo percorso critico. Due scenari di fallimento:
+
+Nessuna gestione degli errori
+
+La chiamata API esterna non riesce -&gt; l'intera API di registrazione restituisce 500. L'utente visualizza un errore durante il tentativo di registrazione. Esperienza utente terribile.
+
+Con gestione degli errori
+
+Ingoi l'errore email e restituisci 200 "Controlla la tua email!", ma l'email non è mai stata inviata. L'utente attende per sempre un collegamento di verifica che non arriva mai. Anche UX terribile.
+
+In entrambi i casi, il problema fondamentale è lo stesso: **stai associando l'affidabilità della tua API al tempo di attività di un servizio di terze parti**. Lo scaricamento dell'e-mail in un'attività in background li disaccoppia completamente.
+
+03
+
+## Flusso di lavoro sincrono e asincrono
+
+### Flusso sincrono (bloccante).
+
+<Diagram>
+<svg viewBox="0 0 680 160" xmlns="http://www.w3.org/2000/svg" width="640"><defs><marker id="a1" markerWidth="7" markerHeight="7" refX="5" refY="3" orient="auto"><path d="M0,0 L0,6 L7,3 z" fill="var(--dg-accent)"></path></marker><marker id="a2" markerWidth="7" markerHeight="7" refX="5" refY="3" orient="auto"><path d="M0,0 L0,6 L7,3 z" fill="var(--dg-warn-soft)"></path></marker><marker id="a3" markerWidth="7" markerHeight="7" refX="5" refY="3" orient="auto"><path d="M0,0 L0,6 L7,3 z" fill="var(--dg-accent-soft)"></path></marker></defs><rect x="10" y="50" width="90" height="50" rx="5" fill="var(--dg-inverse)" stroke="var(--dg-accent)" stroke-width="1.2"></rect><text x="55" y="80" text-anchor="middle" fill="var(--dg-on-inverse)" font-family="var(--font-diagram-mono)" font-size="11">CLIENTE</text><rect x="170" y="50" width="100" height="50" rx="5" fill="var(--dg-inverse)" stroke="var(--dg-warn-soft)" stroke-width="1.2"></rect><text x="220" y="75" text-anchor="middle" fill="var(--dg-on-inverse)" font-family="var(--font-diagram-mono)" font-size="11">TUO</text><text x="220" y="91" text-anchor="middle" fill="var(--dg-on-inverse)" font-family="var(--font-diagram-mono)" font-size="11">SERVER</text><rect x="400" y="50" width="120" height="50" rx="5" fill="var(--dg-inverse)" stroke="var(--dg-accent-soft)" stroke-width="1.2"></rect><text x="460" y="75" text-anchor="middle" fill="var(--dg-on-inverse)" font-family="var(--font-diagram-mono)" font-size="11">E-MAIL</text><text x="460" y="91" text-anchor="middle" fill="var(--dg-on-inverse)" font-family="var(--font-diagram-mono)" font-size="11">FORNITORE</text><line x1="102" y1="68" x2="168" y2="68" stroke="var(--dg-accent)" stroke-width="1.2" marker-end="url(#a1)"></line><text x="135" y="62" text-anchor="middle" fill="var(--dg-ink-2)" font-family="var(--font-diagram-mono)" font-size="9">POST /signup</text><line x1="272" y1="68" x2="398" y2="68" stroke="var(--dg-warn-soft)" stroke-width="1.2" marker-end="url(#a2)"></line><text x="335" y="62" text-anchor="middle" fill="var(--dg-ink-2)" font-family="var(--font-diagram-mono)" font-size="9">invia email (BLOCCHI)</text><line x1="398" y1="84" x2="272" y2="84" stroke="var(--dg-accent-soft)" stroke-width="1.2" marker-end="url(#a3)"></line><text x="335" y="100" text-anchor="middle" fill="var(--dg-accent-soft)" font-family="var(--font-diagram-mono)" font-size="9">fallisce / lento</text><line x1="168" y1="84" x2="102" y2="84" stroke="var(--dg-accent-soft)" stroke-width="1.2" marker-end="url(#a3)"></line><text x="135" y="100" text-anchor="middle" fill="var(--dg-accent-soft)" font-family="var(--font-diagram-mono)" font-size="9">Errore 500</text><text x="340" y="140" text-anchor="middle" fill="var(--dg-accent-soft)" font-family="var(--font-diagram-mono)" font-size="10">^ un errore esterno uccide la risposta API</text></svg>
+</Diagram>
+
+### Flusso asincrono (in background).
+
+<Diagram>
+<svg viewBox="0 0 720 230" xmlns="http://www.w3.org/2000/svg" width="680"><defs><marker id="b1" markerWidth="7" markerHeight="7" refX="5" refY="3" orient="auto"><path d="M0,0 L0,6 L7,3 z" fill="var(--dg-accent)"></path></marker><marker id="b2" markerWidth="7" markerHeight="7" refX="5" refY="3" orient="auto"><path d="M0,0 L0,6 L7,3 z" fill="var(--dg-ok-soft)"></path></marker><marker id="b3" markerWidth="7" markerHeight="7" refX="5" refY="3" orient="auto"><path d="M0,0 L0,6 L7,3 z" fill="var(--dg-info-soft)"></path></marker><marker id="b4" markerWidth="7" markerHeight="7" refX="5" refY="3" orient="auto"><path d="M0,0 L0,6 L7,3 z" fill="var(--dg-warn-soft)"></path></marker></defs><rect x="10" y="20" width="90" height="50" rx="5" fill="var(--dg-inverse)" stroke="var(--dg-accent)" stroke-width="1.2"></rect><text x="55" y="50" text-anchor="middle" fill="var(--dg-on-inverse)" font-family="var(--font-diagram-mono)" font-size="11">CLIENTE</text><rect x="170" y="20" width="100" height="50" rx="5" fill="var(--dg-inverse)" stroke="var(--dg-warn-soft)" stroke-width="1.2"></rect><text x="220" y="45" text-anchor="middle" fill="var(--dg-on-inverse)" font-family="var(--font-diagram-mono)" font-size="11">SERVER</text><text x="220" y="61" text-anchor="middle" fill="var(--dg-on-inverse-2)" font-family="var(--font-diagram-mono)" font-size="9">(produttore)</text><rect x="350" y="20" width="100" height="50" rx="5" fill="var(--dg-inverse)" stroke="var(--dg-info-soft)" stroke-width="1.2"></rect><text x="400" y="45" text-anchor="middle" fill="var(--dg-on-inverse)" font-family="var(--font-diagram-mono)" font-size="11">CODA</text><text x="400" y="61" text-anchor="middle" fill="var(--dg-on-inverse-2)" font-family="var(--font-diagram-mono)" font-size="9">(intermediario)</text><rect x="350" y="145" width="100" height="50" rx="5" fill="var(--dg-inverse)" stroke="var(--dg-plum)" stroke-width="1.2"></rect><text x="400" y="170" text-anchor="middle" fill="var(--dg-on-inverse)" font-family="var(--font-diagram-mono)" font-size="11">LAVORATORE</text><text x="400" y="186" text-anchor="middle" fill="var(--dg-on-inverse-2)" font-family="var(--font-diagram-mono)" font-size="9">(consumatore)</text><rect x="530" y="145" width="120" height="50" rx="5" fill="var(--dg-inverse)" stroke="var(--dg-ok-soft)" stroke-width="1.2"></rect><text x="590" y="170" text-anchor="middle" fill="var(--dg-on-inverse)" font-family="var(--font-diagram-mono)" font-size="11">E-MAIL</text><text x="590" y="186" text-anchor="middle" fill="var(--dg-on-inverse)" font-family="var(--font-diagram-mono)" font-size="11">FORNITORE</text><line x1="102" y1="40" x2="168" y2="40" stroke="var(--dg-accent)" stroke-width="1.2" marker-end="url(#b1)"></line><text x="135" y="34" text-anchor="middle" fill="var(--dg-ink-2)" font-family="var(--font-diagram-mono)" font-size="9">POST /signup</text><line x1="272" y1="40" x2="348" y2="40" stroke="var(--dg-info-soft)" stroke-width="1.2" marker-end="url(#b3)"></line><text x="310" y="34" text-anchor="middle" fill="var(--dg-ink-2)" font-family="var(--font-diagram-mono)" font-size="9">attività di accodamento</text><line x1="168" y1="56" x2="102" y2="56" stroke="var(--dg-ok-soft)" stroke-width="1.2" marker-end="url(#b2)"></line><text x="135" y="72" text-anchor="middle" fill="var(--dg-ok-soft)" font-family="var(--font-diagram-mono)" font-size="9">201 Creato</text><line x1="400" y1="72" x2="400" y2="143" stroke="var(--dg-plum)" stroke-width="1.2" stroke-dasharray="4 3" marker-end="url(#b4)"></line><text x="418" y="112" fill="var(--dg-plum)" font-family="var(--font-diagram-mono)" font-size="9">de-coda</text><line x1="452" y1="170" x2="528" y2="170" stroke="var(--dg-ok-soft)" stroke-width="1.2" marker-end="url(#b2)"></line><text x="490" y="164" text-anchor="middle" fill="var(--dg-ink-2)" font-family="var(--font-diagram-mono)" font-size="9">inviare e-mail</text><text x="230" y="120" text-anchor="middle" fill="var(--dg-ok-soft)" font-family="var(--font-diagram-mono)" font-size="10">API sbloccata immediatamente </text><text x="490" y="218" text-anchor="middle" fill="var(--dg-plum)" font-family="var(--font-diagram-mono)" font-size="10">background: tentativi gestiti automaticamente</text></svg>
+</Diagram>
+
+<Callout type="info" title="Intuizione chiave">
+Il server **accoda l'attività e restituisce immediatamente**. Il cliente riceve una risposta senza attendere l'invio dell'e-mail. Se il provider di posta elettronica non funziona, il meccanismo di ripetizione lo gestisce, la risposta dell'API non viene mai influenzata.
+</Callout>
+
+04
+
+## Come funzionano le code di attività
+
+Una **coda di attività** è un sistema per la gestione e la distribuzione dei lavori in background. È il motore dietro le quinte che consente un'elaborazione in background affidabile e disaccoppiata. Consideralo come un _elenco di cose da fare per il tuo backend_, la tua applicazione aggiunge elementi all'elenco e i lavoratori li selezionano uno per uno.
+
+Produttore
+
+Il codice della tua applicazione (qualsiasi linguaggio/framework). Crea un'attività, la serializza (solitamente JSON) e la inserisce nella coda. Questo si chiama **accodamento** (ENQ).
+
+Coda/Broker
+
+Il middleware che archivia le attività finché un lavoratore non è pronto. Esempi: Redis, RabbitMQ, Amazon SQS. Fornisce garanzie di durata, ordinazione e consegna.
+
+Consumatore/lavoratore
+
+Un processo (o thread) separato che esegue costantemente il polling della coda, preleva le attività (questo è **dequeuing**: DEQ), le deserializza ed esegue la funzione del gestore registrata.
+
+Gestore
+
+La funzione/metodo effettivo registrato per un tipo di attività. Contiene la logica applicativa reale (ad esempio, la chiamata all'API di posta elettronica). Lo stesso codice che eseguiresti in modo sincrono, ma che ora vive all'interno di un lavoratore.
+
+### Serializzazione e deserializzazione
+
+Poiché le attività oltrepassano i confini del processo, tutti i dati devono essere serializzati. JSON è il formato più comune. Il lavoratore deserializza i tipi nativi:
+
+```text
+// Task payload (JSON in the queue)
+{
+  "type": "send_verification_email",
+  "user_id": "usr_01J2K...",
+  "email": "alice@example.com",
+  "token": "eyJhbGci...",
+  "created_at": "2024-01-15T10:30:00Z"
+}
+```
+
+Pitone
+
+Deserializza in a `dict`
+
+JavaScript
+
+Deserializza in un file `object`
+
+TypeScript
+
+Deserializza in un file `object`, digitato dall'interfaccia condivisa dal produttore e dal lavoratore
+
+Vai
+
+Deserializza in a `struct` (via `json.Unmarshal`)
+
+Giava
+
+Deserializza in a `record` o POJO (tramite Jackson's `readValue`)
+
+05
+
+## Approfondimento su produttori e consumatori
+
+### Il lato del produttore
+
+La responsabilità del produttore è minima e veloce, non dovrebbe mai svolgere lavori pesanti. Il suo unico lavoro:
+
+1. Raccogli tutti i dati necessari al consumatore per eseguire l'attività.
+2. Serializza i dati in un formato portatile (JSON).
+3. Inserisci il payload serializzato nella coda.
+4. Ritorna, immediatamente. Non aspettare.
+
+### Il lato consumatore/lavoratore
+
+Il consumatore viene eseguito come un **processo separato**: nella stessa base di codice (un punto di ingresso/binario diverso) o in un servizio completamente separato. Esso:
+
+1. **Configura su quale coda ascoltare**: code diverse per diversi tipi di attività (coda di posta elettronica, coda di notifiche, coda di elaborazione immagini, ecc.).
+2. **Registri gestori**: per ogni tipo di attività, viene registrata una funzione. Quando l'attività viene rimossa dalla coda, viene chiamata quella funzione.
+3. **Sondaggi o attività inviate**: a seconda del broker (Redis/RabbitMQ utilizza il polling lungo; SQS utilizza gli intervalli di polling).
+4. **Deserializza il payload**: JSON -&gt; struct/dict/object nativo.
+5. **Esegue il gestore**: il lavoro vero e proprio: chiamata all'API di posta elettronica, ridimensionamento dell'immagine, ecc.
+6. **Riconosce (ACK) il successo**: comunica alla coda che l'attività è stata completata e può essere rimossa.
+7. **Segnala errore (NACK)**: in caso di errore, la coda sa di dover riprovare.
+
+<Callout type="info" title="Più istanze del consumatore">
+Puoi eseguire _N_ processi consumer in parallelo. Ognuno assume i compiti in modo indipendente. È così che si scala orizzontalmente, più utenti -&gt; più lavoratori, non server più grandi.
+</Callout>
+
+06
+
+## Broker e tecnologie
+
+La "coda" è supportata da una vera e propria infrastruttura, un **broker di messaggi**. Ecco le opzioni principali:
+
+| Intermediario | Digitare | Ideale per | Note |
+| --------------------------- | ------------------- | ------------------------------------------------- | ------------------------------------------------------------------ |
+| **Redis** (Pub/Sub + Liste) | Archivio in memoria | Attività veloci e a bassa latenza. Sedano + BullMQ predefinito. | I dati possono andare persi in caso di arresto anomalo a meno che la persistenza non sia abilitata (AOF/RDB). |
+| **ConiglioMQ** | Broker di messaggi AMQP | Routing complesso, fanout, scambi di argomenti.         | Regole di routing molto affidabili e ricche, richiedono un sovraccarico operativo.          |
+| **Amazon SQS** | Coda cloud gestita | Scalabile, multiregione, serverless-friendly.      | Nativo AWS, nessuna gestione del server. Code standard + FIFO.          |
+| **Stream Redis** | Registro persistente | Gruppi di consumatori, replay, auditing.                | Più durevole degli elenchi Redis di base. Buono per Asynq (Vai).          |
+
+<Callout type="info" title="Framework &lt;-&gt; Accoppiamenti broker">
+**Celery (Python)** -&gt; Redis o RabbitMQ  |  **BullMQ (Node.js)** -&gt; Redis  |  **Asynq (Vai)** -&gt; Flussi Redis  |  **Sidekiq (Rubino)** -&gt; Redis
+</Callout>
+
+### Componenti interni di Redis: come archivia le attività
+
+Redis offre **due diverse strutture dati** utilizzate dalle librerie delle code delle attività dietro le quinte. Capire quale utilizza il tuo framework e perché ti aiuta a utilizzarlo correttamente in produzione.
+
+#### Elenchi Redis (utilizzati da: Celery, BullMQ, Sidekiq)
+
+Un elenco Redis è un elenco di stringhe doppiamente collegato. Le code di attività utilizzano due comandi: `LPUSH` (il produttore spinge a sinistra/testa) e `BRPOP` (blocchi lavoratore in attesa di apparire da destra/coda). Questo ti dà il classico comportamento FIFO.
+
+```text
+# What Celery does under the hood in Redis:
+
+# Producer (your API), pushes serialized task to left of list
+LPUSH celery '{"task":"send_email","args":["alice@example.com","token123"]}'
+
+# Worker, blocks waiting for item, pops from right (FIFO)
+# BRPOP blocks for up to 5 seconds, then re-polls
+BRPOP celery 5
+
+# To see queue depth at any time:
+LLEN celery   # -> 42 (42 pending tasks)
+Redis CLI
+```
+
+Problema con le liste
+
+Una volta che un lavoratore apre l'attività (`BRPOP`), è **scomparso dall'elenco**. Se il lavoratore si arresta in modo anomalo prima di effettuare l'ACK, l'attività viene persa definitivamente. BullMQ risolve questo problema spostando le attività in un set ordinato "attivo" separato ed eliminandole solo su ACK.
+
+Nessuna riproduzione
+
+Le liste sono distruttive. Non è possibile rileggere le vecchie attività per il debug o il controllo.
+
+Nessun gruppo di consumatori
+
+Un singolo messaggio può arrivare solo a un consumatore. Non è possibile avere più gruppi di consumatori indipendenti che leggono la stessa coda (come Kafka).
+
+#### Redis Streams (utilizzato da: Asynq, architetture più recenti)
+
+Redis Streams (aggiunto in Redis 5.0) è un log di sola aggiunta, concettualmente simile ad Apache Kafka ma in Redis. È stato progettato appositamente per risolvere i problemi degli elenchi Redis per l'accodamento dei messaggi.
+
+```text
+# Producer adds entry to stream
+# * means auto-generate ID (timestamp-sequence: 1705312200000-0)
+XADD myapp:email_queue * user_id usr_01J2K email alice@example.com token eyJ...
+
+# Create a consumer group (workers belong to a group)
+XGROUP CREATE myapp:email_queue email_workers $ MKSTREAM
+
+# Worker reads next undelivered message (> means "new")
+XREADGROUP GROUP email_workers worker-1 COUNT 1 BLOCK 5000 STREAMS myapp:email_queue >
+
+# After successful processing, ACK the message by ID
+XACK myapp:email_queue email_workers 1705312200000-0
+
+# Check pending (delivered but not ACKed), these are in-flight tasks
+XPENDING myapp:email_queue email_workers - + 10
+Redis CLI
+```
+
+| Caratteristica | Elenchi Redis | Flussi Redis |
+| -------------------- | ------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| **Modello di archiviazione** | Pop distruttivo, attività scomparsa dopo la rimozione dalla coda | Log di sola aggiunta, le attività persistono dopo la consegna |
+| **Sicurezza in caso di incidente** | Attività persa se il lavoratore si arresta in modo anomalo dopo il pop ma prima dell'ACK (a meno che la libreria non aggiunga una soluzione alternativa) | PEL (elenco voci in sospeso) integrato, le attività non confermate vengono tracciate, riconsegnate automaticamente |
+| **Gruppi di consumatori** | Non supportato nativamente | Gruppi di consumatori nativi, più gruppi indipendenti possono leggere lo stesso flusso |
+| **Riproduzione del messaggio** | No, una volta scoppiato, sparito | Sì, leggi qualsiasi intervallo ID storico |
+| **Ordinamento dei messaggi** | FIFO all'interno della lista | Ordine cronologico rigoroso per ID generato automaticamente |
+| **Osservabilità** | Solo la lunghezza della coda (`LLEN`) | Introspezione completa: conteggi in sospeso, consegnati, riconosciuti |
+| **Memoria** | Inferiore (voci cancellate su pop) | Più alto (le voci persistono finché non vengono tagliate con `MAXLEN`)                           |
+| **Usato da** | Sedano, BullMQ, Sidekiq | Asynq (Go), implementazioni personalizzate |
+
+<Callout type="info" title="Quale utilizzare?">
+Per la maggior parte dei carichi di lavoro SaaS, gli **Elenchi Redis** (tramite Celery/BullMQ) vanno perfettamente bene, le librerie gestiscono la sicurezza in caso di crash nel proprio livello. Scegli **Redis Streams** quando hai bisogno di audit trail, riproduzione di messaggi o più gruppi di consumatori indipendenti che utilizzano gli stessi eventi.
+</Callout>
+
+16
+
+## Amazon SQS: code standard e code FIFO
+
+Amazon SQS è il servizio di accodamento dei messaggi completamente gestito di AWS. Nessun server da gestire, scalabilità automatica e replica su più zone di disponibilità. Ha due modalità con garanzie fondamentalmente diverse.
+
+| Immobile | Coda standard | Coda FIFO |
+| ----------------- | --------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| **Produttività** | Quasi illimitato (migliaia di TPS) | 300 TPS (3.000 con dosaggio) |
+| **Ordinazione** | Miglior sforzo, NON garantito | FIFO rigoroso, garantito all'interno di un gruppo di messaggi |
+| **Consegna** | Almeno una volta, un messaggio può essere consegnato _più di una volta_ | Esattamente una volta, l'ID di deduplicazione previene i duplicati |
+| **Deduplicazione** | Nessuno integrato | Finestra di deduplicazione integrata di 5 minuti utilizzando l'hash del contenuto o l'ID esplicito |
+| **Caso d'uso** | Attività ad alto volume, in cui l'ordine non ha importanza (e-mail, notifiche) | Transazioni finanziarie, aggiornamenti dell'inventario, qualsiasi cosa richieda un ordine rigoroso |
+| **Nominazione** | `my-queue`                                                      | Deve finire in `.fifo` -&gt; `my-queue.fifo`                                     |
+| **Costo** | $ 0,40 per milione di richieste | $ 0,50 per milione di richieste |
+
+### Come funziona il timeout della visibilità SQS (specifico per AWS)
+
+SQS implementa il timeout di visibilità in modo nativo. Quando un lavoratore chiama `ReceiveMessage`, il messaggio diventa invisibile a tutti gli altri consumatori per il timeout configurato (30 secondi predefiniti, massimo 12 ore). Il lavoratore deve chiamare `DeleteMessage` in caso di successo o non fare nulla per renderlo nuovamente visibile per riprovare.
+
+```go title="sqs.go / Go + AWS SDK v2"
+// Go, SQS producer + consumer using AWS SDK v2
+package main
+
+import (
+    "context"
+    "encoding/json"
+    "github.com/aws/aws-sdk-go-v2/aws"
+    "github.com/aws/aws-sdk-go-v2/service/sqs"
+)
+
+// -- PRODUCER ------------------------------------------
+func EnqueueEmailTask(ctx context.Context, client *sqs.Client, queueURL string, payload EmailPayload) error {
+    body, _ := json.Marshal(payload)
+    _, err := client.SendMessage(ctx, &sqs.SendMessageInput{
+        QueueUrl:    aws.String(queueURL),
+        MessageBody: aws.String(string(body)),
+        // For FIFO queue: add MessageGroupId + MessageDeduplicationId
+        // MessageGroupId:         aws.String("email-group"),
+        // MessageDeduplicationId: aws.String(payload.UserID),
+    })
+    return err
+}
+
+// -- CONSUMER ------------------------------------------
+func PollQueue(ctx context.Context, client *sqs.Client, queueURL string) {
+    for {
+        result, _ := client.ReceiveMessage(ctx, &sqs.ReceiveMessageInput{
+            QueueUrl:            aws.String(queueURL),
+            MaxNumberOfMessages: 10,          // batch up to 10
+            WaitTimeSeconds:     20,          // long-polling reduces empty receives
+            VisibilityTimeout:   60,          // 60s to process before redelivery
+        })
+
+        for _, msg := range result.Messages {
+            if err := processMessage(ctx, msg); err == nil {
+                // ACK: delete from queue on success
+                client.DeleteMessage(ctx, &sqs.DeleteMessageInput{
+                    QueueUrl:      aws.String(queueURL),
+                    ReceiptHandle: msg.ReceiptHandle, // unique handle per receive
+                })
+            }
+            // On error: do nothing, visibility timeout expires, SQS redelivers
+        }
+    }
+}
+```
+
+<Callout type="info" title="Coda standard + Idempotenza">
+Poiché SQS standard esegue la consegna almeno una volta, i tuoi gestori **devono essere idempotenti**. In rari casi un messaggio può essere recapitato due volte (singhiozzo della rete, failover sulla zona di disponibilità). Progettare sempre i gestori in modo che siano sicuri da eseguire nuovamente. Vedere la Sezione 17 per i modelli di idempotenza.
+</Callout>
+
+07
+
+## Nuovi tentativi e backoff esponenziale
+
+Quando un'attività fallisce (il gestore genera un'eccezione, l'API esterna restituisce 5xx, timeout di rete), il framework **riaggiunge nuovamente l'attività** per riprovare. Riprovare ingenuamente immediatamente avrebbe martellato un servizio già in difficoltà. La soluzione: **backoff esponenziale**.
+
+### Algoritmo di backoff esponenziale
+
+Dopo ogni errore, il tempo di attesa prima del tentativo successivo raddoppia. Una formula comune:
+
+```text
+// Retry delay formula
+delay = base_delay * (2 ^ attempt_number) + jitter
+
+// Example with base_delay=1min, max_retries=5:
+Attempt 1 -> wait 1 min   -> retry
+Attempt 2 -> wait 2 min   -> retry
+Attempt 3 -> wait 4 min   -> retry
+Attempt 4 -> wait 8 min   -> retry
+Attempt 5 -> wait 16 min  -> DEAD LETTER QUEUE
+PSEUDOCODE
+```
+
+Viene visualizzato il ritardo tra i tentativi
+
+1 minuto
+
+2 minuti
+
+4 minuti
+
+8 minuti
+
+16 minuti
+
+#### Perché il jitter è importante
+
+Senza jitter (rumore casuale aggiunto al ritardo), tutti i consumatori riprovano esattamente nello stesso momento dopo un errore, creando un **gregge tonante** che colpisce il servizio esterno con un picco. L'aggiunta di un piccolo offset casuale distribuisce il carico.
+
+#### Coda di lettere non recapitate (DLQ)
+
+Dopo aver esaurito tutti i tentativi, l'attività viene spostata in una **Coda di lettere non consegnate**. Questa è una coda separata per le attività con errori persistenti. Gli ingegneri possono ispezionare i messaggi DLQ, diagnosticare la causa principale e riprodurli manualmente una volta risolto il problema.
+
+<Callout type="info" title="Nota del mondo reale">
+I principali provider di posta elettronica (Resend, Mailgun) hanno SLA del 99,9% + uptime. In pratica, il tempo di inattività si misura in secondi. Con il backoff esponenziale, un'attività che fallisce una volta avrà generalmente successo nel tentativo 2 o 3, ben entro la finestra di scadenza di 15-20 minuti dell'e-mail di verifica.
+</Callout>
+
+08
+
+## Timeout visibilità e riconoscimenti
+
+Quando un consumatore preleva un'attività (la rimuove dalla coda), l'attività non viene eliminata immediatamente. Diventa invece **invisibile** agli altri consumatori per una durata configurabile, il **timeout di visibilità**. Questo è il periodo in cui l'attività viene considerata "in corso".
+
+<Diagram>
+<svg viewBox="0 0 680 180" xmlns="http://www.w3.org/2000/svg" width="640"><defs><marker id="c1" markerWidth="7" markerHeight="7" refX="5" refY="3" orient="auto"><path d="M0,0 L0,6 L7,3 z" fill="var(--dg-ok-soft)"></path></marker><marker id="c2" markerWidth="7" markerHeight="7" refX="5" refY="3" orient="auto"><path d="M0,0 L0,6 L7,3 z" fill="var(--dg-accent-soft)"></path></marker><marker id="c3" markerWidth="7" markerHeight="7" refX="5" refY="3" orient="auto"><path d="M0,0 L0,6 L7,3 z" fill="var(--dg-warn-soft)"></path></marker></defs><rect x="80" y="80" width="520" height="20" rx="3" fill="var(--dg-inverse)" stroke="var(--dg-line-2)" stroke-width="1"></rect><rect x="80" y="80" width="120" height="20" rx="3" fill="var(--dg-info-tint)"></rect><text x="140" y="73" text-anchor="middle" fill="var(--dg-info-soft)" font-family="var(--font-diagram-mono)" font-size="9">ASPETTANDO IN CODA</text><rect x="200" y="80" width="200" height="20" fill="var(--dg-warn-tint)"></rect><text x="300" y="73" text-anchor="middle" fill="var(--dg-warn-soft)" font-family="var(--font-diagram-mono)" font-size="9">TIMEOUT VISIBILITÀ (in corso)</text><rect x="400" y="80" width="80" height="20" fill="var(--dg-ok-surface)" rx="0"></rect><text x="440" y="73" text-anchor="middle" fill="var(--dg-ok-soft)" font-family="var(--font-diagram-mono)" font-size="9">ACK -&gt; fatto</text><rect x="400" y="110" width="80" height="20" fill="var(--dg-accent-surface)" rx="0"></rect><text x="440" y="145" text-anchor="middle" fill="var(--dg-accent-soft)" font-family="var(--font-diagram-mono)" font-size="9">nessun ACK -&gt; rivisibile</text><line x1="200" y1="60" x2="200" y2="78" stroke="var(--dg-warn-soft)" stroke-width="1.2" marker-end="url(#c3)"></line><text x="200" y="52" text-anchor="middle" fill="var(--dg-warn-soft)" font-family="var(--font-diagram-mono)" font-size="9">decode dei consumatori</text><line x1="400" y1="60" x2="400" y2="78" stroke="var(--dg-ok-soft)" stroke-width="1" stroke-dasharray="3 2" marker-end="url(#c1)"></line><line x1="600" y1="60" x2="600" y2="78" stroke="var(--dg-accent-soft)" stroke-width="1" stroke-dasharray="3 2" marker-end="url(#c2)"></line><text x="600" y="52" text-anchor="middle" fill="var(--dg-accent-soft)" font-family="var(--font-diagram-mono)" font-size="9">il timeout scade</text><rect x="540" y="80" width="120" height="20" fill="var(--dg-accent-tint)" rx="0"></rect><text x="600" y="110" text-anchor="middle" fill="var(--dg-accent-soft)" font-family="var(--font-diagram-mono)" font-size="9">-&gt; a disposizione di altri lavoratori</text></svg>
+</Diagram>
+
+#### Perché esiste questo?
+
+Senza il timeout di visibilità, se un consumatore si arresta in modo anomalo nel corso di un'attività, l'attività andrebbe persa in modo permanente, poiché era già rimossa dalla coda quando il consumatore l'ha presa. Il timeout della visibilità garantisce che se il lavoratore _non riconosce_ all'interno della finestra (si è bloccato, si è bloccato o il servizio esterno è scaduto), l'attività diventa nuovamente visibile e un altro lavoratore può riprenderla. **Le attività non vanno mai perse.**
+
+ACK (successo)
+
+Il consumatore invia la conferma -&gt; la coda elimina definitivamente l'attività.
+
+NACK (fallimento)
+
+Il consumatore segnala un errore -&gt; programma la coda di riprovare (con backoff).
+
+Nessun segnale
+
+Il consumer si è bloccato o si è bloccato -&gt; scade il timeout di visibilità -&gt; attività riaccodata per un altro lavoratore.
+
+09
+
+## Tipi di attività in background
+
+Compiti una tantum
+
+Attivato una volta da un evento specifico. Invia e-mail di verifica, e-mail di benvenuto, collegamento per la reimpostazione della password, notifica in-app. Tipo più comune.
+
+Compiti ricorrenti
+
+Programmato a intervalli fissi. Report settimanali, e-mail digest giornaliere, lavori di pulizia del database, eliminazione delle sessioni orfane. Implementato tramite scheduler simili a cron.
+
+Compiti a catena
+
+Dipendenze genitore-figlio. L'attività B può essere eseguita solo dopo che l'attività A ha avuto esito positivo. Le attività allo stesso livello possono essere eseguite in parallelo. Classico: pipeline di caricamento video.
+
+Attività batch
+
+Un trigger si espande in molte attività parallele. Elimina le attività secondarie che generano account per tipo di risorsa. Invia report da 10.000 a mezzanotte.
+
+### Attività a catena: esempio di caricamento video
+
+<Diagram>
+<svg viewBox="0 0 660 260" xmlns="http://www.w3.org/2000/svg" width="640"><defs><marker id="d1" markerWidth="7" markerHeight="7" refX="5" refY="3" orient="auto"><path d="M0,0 L0,6 L7,3 z" fill="var(--dg-warn-soft)"></path></marker><marker id="d2" markerWidth="7" markerHeight="7" refX="5" refY="3" orient="auto"><path d="M0,0 L0,6 L7,3 z" fill="var(--dg-info-soft)"></path></marker><marker id="d3" markerWidth="7" markerHeight="7" refX="5" refY="3" orient="auto"><path d="M0,0 L0,6 L7,3 z" fill="var(--dg-plum)"></path></marker></defs><rect x="240" y="10" width="160" height="44" rx="5" fill="var(--dg-inverse)" stroke="var(--dg-warn-soft)" stroke-width="1.5"></rect><text x="320" y="30" text-anchor="middle" fill="var(--dg-on-inverse-warn)" font-family="var(--font-diagram-mono)" font-size="11">CARICAMENTO VIDEO</text><text x="320" y="46" text-anchor="middle" fill="var(--dg-on-inverse-2)" font-family="var(--font-diagram-mono)" font-size="9">memorizzato su S3</text><rect x="240" y="90" width="160" height="44" rx="5" fill="var(--dg-inverse)" stroke="var(--dg-warn-soft)" stroke-width="1.5"></rect><text x="320" y="110" text-anchor="middle" fill="var(--dg-on-inverse-warn)" font-family="var(--font-diagram-mono)" font-size="11">CODIFICA VIDEO</text><text x="320" y="126" text-anchor="middle" fill="var(--dg-on-inverse-2)" font-family="var(--font-diagram-mono)" font-size="9">360p/720p/1080p</text><line x1="320" y1="54" x2="320" y2="88" stroke="var(--dg-warn-soft)" stroke-width="1.5" marker-end="url(#d1)"></line><text x="340" y="74" fill="var(--dg-ink-2)" font-family="var(--font-diagram-mono)" font-size="9">dipende da</text><rect x="80" y="180" width="160" height="44" rx="5" fill="var(--dg-inverse)" stroke="var(--dg-info-soft)" stroke-width="1.5"></rect><text x="160" y="200" text-anchor="middle" fill="var(--dg-on-inverse-info)" font-family="var(--font-diagram-mono)" font-size="11">GEN. MINIATURA</text><text x="160" y="216" text-anchor="middle" fill="var(--dg-on-inverse-2)" font-family="var(--font-diagram-mono)" font-size="9">dal video codificato</text><rect x="390" y="180" width="175" height="44" rx="5" fill="var(--dg-inverse)" stroke="var(--dg-plum)" stroke-width="1.5"></rect><text x="477" y="200" text-anchor="middle" fill="var(--dg-on-inverse-accent)" font-family="var(--font-diagram-mono)" font-size="11">TRASCRIZIONE</text><text x="477" y="216" text-anchor="middle" fill="var(--dg-on-inverse-2)" font-family="var(--font-diagram-mono)" font-size="9">audio -&gt; sottotitoli</text><line x1="280" y1="134" x2="190" y2="178" stroke="var(--dg-info-soft)" stroke-width="1.2" marker-end="url(#d2)"></line><line x1="360" y1="134" x2="450" y2="178" stroke="var(--dg-plum)" stroke-width="1.2" marker-end="url(#d3)"></line><text x="200" y="165" fill="var(--dg-info-soft)" font-family="var(--font-diagram-mono)" font-size="8">parallelo</text><text x="380" y="165" fill="var(--dg-plum)" font-family="var(--font-diagram-mono)" font-size="8">parallelo</text><text x="320" y="250" text-anchor="middle" fill="var(--dg-ink-3)" font-family="var(--font-diagram-mono)" font-size="9">la generazione di miniature e la trascrizione dipendono entrambe dalla codifica, ma non l'una dall'altra</text></svg>
+</Diagram>
+
+10
+
+## Casi d'uso nel mondo reale
+
+| Caso d'uso | Tipo di attività | Perché lo sfondo?                                                                   |
+| -------------------------------- | ---------------- | --------------------------------------------------------------------------------- |
+| **Verifica email/benvenuto** | Una tantum | Dipende dal provider di posta elettronica esterno. Il fallimento non deve interrompere la registrazione.                |
+| **Ridimensionamento immagini/video** | Catena | Ad uso intensivo della CPU. Bloccherebbe il thread di richiesta per secondi.                        |
+| **Rapporti settimanali/mensili** | Ricorrente (cron) | Deve essere eseguito a un orario specifico, non attivato da una richiesta dell'utente.                     |
+| **Notifiche push** | Lotto / Una tantum | Chiama APN Apple/Google FCM, servizi esterni. Può fallire, sono necessari nuovi tentativi.         |
+| **Cancellazione account** | Lotto + Catena | Attraversa l'intero grafico utente (progetti, risorse, sessioni), troppo lento per una richiesta. |
+| **Pulizia della sessione orfana** | Ricorrente | Lavoro di manutenzione, eseguito mensilmente per liberare spazio di archiviazione DB.                                  |
+| **Generazione di report PDF** | Una tantum / Lotto | La costruzione di HTML-&gt;PDF di grandi dimensioni richiede un utilizzo intensivo di CPU e memoria.                             |
+
+### Notifiche push: come funzionano realmente
+
+Il tuo backend **non può** inviare una notifica push direttamente a un telefono. Ecco il flusso completo:
+
+1. L'utente installa l'app -&gt; il sistema operativo genera un token del dispositivo univoco (token APN Apple/token FCM di Google).
+2. L'app invia quel token al tuo backend al primo avvio, lo memorizzi per utente nel tuo DB.
+3. Quando vuoi inviare una notifica all'utente: accoda un'attività "invia notifica push" con il token del dispositivo dell'utente + il payload del messaggio.
+4. Il lavoratore rimuove le code -&gt; chiama gli APN Apple o l'API FCM di Google con il token e il payload.
+5. Apple/Google inviano la notifica al dispositivo tramite il canale push a livello di sistema operativo.
+
+<Callout type="info" title="Perché lo sfondo?">
+Stesso motivo dell'e-mail, dipende dai servizi esterni Apple/Google. Tariffa limitata. Sono necessari nuovi tentativi. Potenzialmente milioni di gettoni per evento (app sportiva: goal segnato -&gt; avvisa tutti i tifosi).
+</Callout>
+
+11
+
+## Esempi di codici
+
+Le librerie seguenti sono la scelta di fatto in ciascun ecosistema e tutte e cinque si trovano su Redis: [Celery](https://docs.celeryq.dev/) in Python, [Asynq](https://github.com/hibiken/asynq) in Vai, [BullMQ](https://docs.bullmq.io/) in Node e Spring Data Redis Streams in Java. Sembrano diversi in superficie e sotto stanno facendo le stesse tre cose: inserire un payload JSON in Redis, estrarlo in un processo di lavoro, riconoscerlo quando il lavoro è terminato.
+
+### Il consumatore: definire e gestire il compito
+
+Questo è il codice che viene eseguito nel processo **worker**, non nella tua API. Nota cosa fa ogni versione con gli errori, perché è l'intera storia dei nuovi tentativi: un payload che non verrà mai analizzato è un errore permanente e non deve essere riprovato, mentre un provider in timeout dovrebbe esserlo.
+
+Vai a Python JavaScript TypeScript Java
+
+il carico utile dell'attività e la funzione che lo elabora
+
+```go title="tasks/email.go + handlers/email_handler.go / Go + Asynq"
+// tasks/email.go, Task definitions (producer + payload)
+package tasks
+
+import (
+    "context"
+    "encoding/json"
+    "fmt"
+    "github.com/hibiken/asynq"
+)
+
+const TypeSendVerificationEmail = "email:send_verification"
+
+// Payload struct, serialized to JSON in queue
+type EmailPayload struct {
+    UserID string `json:"user_id"`
+    Email  string `json:"email"`
+    Token  string `json:"token"`
+}
+
+// NewSendVerificationEmailTask creates the Asynq task
+func NewSendVerificationEmailTask(userID, email, token string) (*asynq.Task, error) {
+    payload, err := json.Marshal(EmailPayload{UserID: userID, Email: email, Token: token})
+    if err != nil {
+        return nil, fmt.Errorf("json.Marshal: %w", err)
+    }
+    // asynq.MaxRetry, after 5 failures, moves to dead letter
+    return asynq.NewTask(TypeSendVerificationEmail, payload, asynq.MaxRetry(5)), nil
+}
+
+// handlers/email_handler.go, Consumer handler
+package handlers
+
+type EmailHandler struct {
+    emailSvc EmailService // injected dependency
+}
+
+// HandleSendVerificationEmail, registered with the Asynq server
+func (h *EmailHandler) HandleSendVerificationEmail(
+    ctx context.Context,
+    t *asynq.Task,
+) error {
+    // 1. Deserialize JSON -> Go struct
+    var p tasks.EmailPayload
+    if err := json.Unmarshal(t.Payload(), &p); err != nil {
+        // Non-retryable error: mark as failed immediately
+        return fmt.Errorf("json.Unmarshal: %w: %w", err, asynq.SkipRetry)
+    }
+
+    // 2. Execute: call email provider API
+    slog.Info("sending verification email", "user_id", p.UserID, "email", p.Email)
+    if err := h.emailSvc.SendVerification(ctx, p.Email, p.Token); err != nil {
+        // Returning error triggers retry with exponential backoff
+        return fmt.Errorf("emailSvc.SendVerification: %w", err)
+    }
+
+    // 3. Returning nil -> ACK to queue (task done)
+    return nil
+}
+```
+
+```python title="tasks.py / Python + Celery"
+# tasks.py, Define the task (consumer side)
+from celery import Celery
+import resend
+
+# Connect Celery to Redis broker
+app = Celery('tasks', broker='redis://localhost:6379/0')
+
+# Decorate the function as a Celery task
+@app.task(bind=True, max_retries=5, default_retry_delay=60)
+def send_verification_email(self, user_id: str, email: str, token: str):
+    """
+    Called by the worker process.
+    self.retry() implements exponential backoff automatically.
+    """
+    try:
+        params = {
+            "from": "noreply@myapp.com",
+            "to": [email],
+            "subject": "Verify your email",
+            "html": build_email_template(token),
+        }
+        resend.Emails.send(params)
+    except Exception as exc:
+        # Exponential backoff: 60s, 120s, 240s, 480s, 960s
+        countdown = 60 * (2 ** self.request.retries)
+        raise self.retry(exc=exc, countdown=countdown)
+```
+
+```js title="worker.js / Node 20+ + BullMQ"
+// worker.js, Consumer, BullMQ calls this for each job
+import { Worker } from 'bullmq'
+import { Resend } from 'resend'
+
+const connection = { host: 'localhost', port: 6379 }
+const resend = new Resend(process.env.RESEND_API_KEY)
+
+// The queue NAME is the contract between producer and consumer; both
+// sides must spell it the same way. That is BullMQ's version of Asynq's
+// task type constant.
+export const worker = new Worker(
+  'email',
+  async (job) => {
+    // 1. The payload is already a JS object; BullMQ serialized it for us
+    const { userId, email, token } = job.data
+
+    // 2. Execute: call email provider API
+    console.log('sending verification email', userId, email)
+    await resend.emails.send({
+      from: 'noreply@myapp.com',
+      to: [email],
+      subject: 'Verify your email',
+      html: buildEmailTemplate(token),
+    })
+
+    // 3. Returning normally ACKs the job (task done). THROWING is what
+    //    triggers a retry, so never swallow an error in here: a caught
+    //    exception looks exactly like success to the queue.
+  },
+  { connection, concurrency: 10 },
+)
+
+worker.on('failed', (job, err) => {
+  console.error(`job ${job?.id} failed (attempt ${job?.attemptsMade})`, err)
+})
+```
+
+```ts title="worker.ts / TypeScript 5+ + BullMQ"
+import { Worker, UnrecoverableError, type Job } from 'bullmq'
+
+// One exported type, imported by BOTH the producer and this worker. It is
+// the cheapest fix for the single most common task-queue bug: a producer
+// that starts sending a renamed field while the worker still reads the
+// old one. Here that mismatch is a compile error, not a 3am page.
+export interface EmailJob {
+  userId: string
+  email: string
+  token: string
+}
+
+export const worker = new Worker<EmailJob>(
+  'email',
+  async (job: Job<EmailJob>) => {
+    const { userId, email, token } = job.data
+
+    if (typeof email !== 'string') {
+      // Non-retryable: no amount of retrying fixes a malformed payload.
+      // UnrecoverableError is BullMQ's asynq.SkipRetry.
+      throw new UnrecoverableError('malformed payload: email missing')
+    }
+
+    console.log('sending verification email', userId, email)
+    await resend.emails.send({
+      from: 'noreply@myapp.com',
+      to: [email],
+      subject: 'Verify your email',
+      html: buildEmailTemplate(token),
+    })
+    // Returning normally ACKs; throwing anything else triggers a retry.
+  },
+  { connection, concurrency: 10 },
+)
+```
+
+```java title="EmailTaskHandler.java / Java 17+ + Spring Data Redis Streams"
+// Java has no single dominant task queue, so this is the mechanism itself:
+// a Redis Stream with a consumer group, which is exactly what Asynq builds
+// on. Section 6 of this chapter describes the XADD/XREADGROUP/XACK cycle
+// you are about to see in code.
+public record EmailPayload(String userId, String email, String token) {}
+
+@Component
+public class EmailTaskHandler
+        implements StreamListener<String, MapRecord<String, String, String>> {
+
+    static final String STREAM = "tasks:email";
+    static final String GROUP = "email-workers";
+    static final String DLQ = "tasks:email:dead";
+
+    private final StringRedisTemplate redis;
+    private final ObjectMapper json;
+    private final EmailService emailSvc; // injected dependency
+
+    EmailTaskHandler(StringRedisTemplate redis, ObjectMapper json, EmailService emailSvc) {
+        this.redis = redis;
+        this.json = json;
+        this.emailSvc = emailSvc;
+    }
+
+    @Override
+    public void onMessage(MapRecord<String, String, String> record) {
+        EmailPayload p;
+
+        // 1. Deserialize JSON -> Java record
+        try {
+            p = json.readValue(record.getValue().get("payload"), EmailPayload.class);
+        } catch (JsonProcessingException e) {
+            // Non-retryable: this payload will never parse. ACK it so it
+            // stops being redelivered, and park it in the dead letter stream.
+            redis.opsForStream().add(DLQ, record.getValue());
+            redis.opsForStream().acknowledge(STREAM, GROUP, record.getId());
+            return;
+        }
+
+        // 2. Execute: call email provider API
+        try {
+            log.info("sending verification email user_id={} email={}", p.userId(), p.email());
+            emailSvc.sendVerification(p.email(), p.token());
+        } catch (RuntimeException e) {
+            // Retryable: deliberately do NOT acknowledge. The message stays
+            // in the group's pending list and another worker reclaims it
+            // via XAUTOCLAIM once the idle timeout passes.
+            log.warn("send failed; leaving unacked for redelivery", e);
+            return;
+        }
+
+        // 3. XACK -> the task is done and leaves the pending list
+        redis.opsForStream().acknowledge(STREAM, GROUP, record.getId());
+    }
+}
+```
+
+### Il produttore: accodamento dal tuo gestore API
+
+Questa metà viene eseguita all'interno della **richiesta HTTP** e l'unica cosa che conta è che ritorna in microsecondi. Ogni versione seguente trasmette un payload JSON a Redis e passa immediatamente all'invio della risposta.
+
+Vai a Python JavaScript TypeScript Java
+
+accodare e restituire 201 senza attendere l'e-mail
+
+```go title="main.go / Go + Asynq, producer half"
+redisOpt := asynq.RedisClientOpt{Addr: "localhost:6379"}
+
+client := asynq.NewClient(redisOpt)
+defer client.Close()
+
+task, _ := tasks.NewSendVerificationEmailTask(
+    "usr_01J2K", "alice@example.com", "eyJhbGci...",
+)
+
+// Enqueue, returns immediately
+info, _ := client.Enqueue(task)
+// info.ID, info.Queue, info.State can be used for monitoring
+```
+
+```python title="signup.py / Python + Celery + FastAPI"
+# signup.py, Producer side (inside your API handler)
+from fastapi import FastAPI
+from tasks import send_verification_email
+
+app = FastAPI()
+
+@app.post("/signup")
+async def signup(body: SignupRequest):
+    # 1. Validate, hash password, save user to DB
+    user = await create_user(body)
+    token = generate_verification_token(user.id)
+
+    # 2. Enqueue, returns instantly, does NOT wait for email
+    send_verification_email.delay(
+        user_id=user.id,
+        email=user.email,
+        token=token
+    )
+
+    # 3. Return 201 immediately
+    return {"message": "Account created. Check your email."}, 201
+```
+
+```js title="signup.js / Node 20+ + BullMQ + Express"
+// signup.js, Producer side (inside your API handler)
+import { Queue } from 'bullmq'
+
+// Same queue name the worker listens on
+const emailQueue = new Queue('email', { connection: { host: 'localhost', port: 6379 } })
+
+app.post('/signup', async (req, res) => {
+  // 1. Validate, hash password, save user to DB
+  const user = await createUser(req.body)
+  const token = generateVerificationToken(user.id)
+
+  // 2. Enqueue, returns instantly, does NOT wait for email
+  await emailQueue.add(
+    'send_verification',
+    { userId: user.id, email: user.email, token },
+    { attempts: 5, backoff: { type: 'exponential', delay: 60_000 } },
+  )
+
+  // 3. Return 201 immediately
+  res.status(201).json({ message: 'Account created. Check your email.' })
+})
+```
+
+```ts title="signup.ts / TypeScript 5+ + BullMQ + Express"
+import { Queue } from 'bullmq'
+import type { Request, Response } from 'express'
+import type { EmailJob } from './worker'
+
+// The SAME EmailJob the worker imports. `add` now refuses a payload the
+// worker cannot read, which is the entire point of importing it here.
+const emailQueue = new Queue<EmailJob>('email', {
+  connection: { host: 'localhost', port: 6379 },
+})
+
+export async function signup(req: Request, res: Response): Promise<void> {
+  // 1. Validate, hash password, save user to DB
+  const user = await createUser(req.body)
+  const token = generateVerificationToken(user.id)
+
+  // 2. Enqueue, returns instantly, does NOT wait for email
+  await emailQueue.add(
+    'send_verification',
+    { userId: user.id, email: user.email, token },
+    {
+      attempts: 5,
+      backoff: { type: 'exponential', delay: 60_000 }, // 60s, 120s, 240s...
+      removeOnComplete: 1_000, // keep the last 1k, not every job forever
+    },
+  )
+
+  // 3. Return 201 immediately
+  res.status(201).json({ message: 'Account created. Check your email.' })
+}
+```
+
+```java title="SignupController.java / Java 17+ + Spring Data Redis Streams"
+@Service
+class EmailTaskProducer {
+    private final StringRedisTemplate redis;
+    private final ObjectMapper json;
+
+    EmailTaskProducer(StringRedisTemplate redis, ObjectMapper json) {
+        this.redis = redis;
+        this.json = json;
+    }
+
+    String enqueue(EmailPayload payload) throws JsonProcessingException {
+        // XADD tasks:email * payload <json>, returns immediately
+        RecordId id = redis.opsForStream().add(StreamRecords.newRecord()
+            .in(EmailTaskHandler.STREAM)
+            .ofMap(Map.of("payload", json.writeValueAsString(payload))));
+        return id.getValue(); // the task id, usable for monitoring
+    }
+}
+
+@RestController
+class SignupController {
+
+    @PostMapping("/signup")
+    @ResponseStatus(HttpStatus.CREATED) // 3. Return 201 immediately
+    Map<String, String> signup(@RequestBody SignupRequest body) throws JsonProcessingException {
+        // 1. Validate, hash password, save user to DB
+        User user = createUser(body);
+        String token = generateVerificationToken(user.id());
+
+        // 2. Enqueue, returns instantly, does NOT wait for email
+        producer.enqueue(new EmailPayload(user.id(), user.email(), token));
+
+        return Map.of("message", "Account created. Check your email.");
+    }
+}
+```
+
+### Esecuzione del lavoratore: concorrenza e code con priorità
+
+Il lavoratore è un **processo separato** dalla tua API e questa separazione è il punto: lo ridimensioni in modo indipendente, lo riavvii in modo indipendente e un'e-mail lenta non occupa mai un thread web. Due manopole contano: quante attività vengono eseguite contemporaneamente e quale coda viene svuotata per prima quando il lavoro si accumula.
+
+Vai a Python JavaScript TypeScript Java
+
+il processo di lunga durata che prosciuga la coda
+
+```go title="main.go / Go + Asynq, worker half"
+srv := asynq.NewServer(redisOpt, asynq.Config{
+    Concurrency: 10, // 10 concurrent workers
+    Queues: map[string]int{
+        "email":    6, // higher priority
+        "default":  3,
+        "low":      1,
+    },
+})
+
+mux := asynq.NewServeMux()
+mux.HandleFunc(tasks.TypeSendVerificationEmail,
+    handlers.EmailHandler{}.HandleSendVerificationEmail)
+
+srv.Run(mux) // blocks; this process IS the worker
+```
+
+```python title="worker / Python + Celery CLI"
+# Celery's worker is a command, not code you write. The same tasks.py is
+# imported by both your API (to enqueue) and this process (to execute).
+#
+#   celery -A tasks worker \
+#       --concurrency=10 \
+#       --queues=email,default,low \
+#       --loglevel=info
+#
+# --concurrency defaults to the CPU count, which is the wrong default for
+# IO-bound work like sending email. See chapter 20.
+
+# Priority is expressed by ROUTING tasks to named queues:
+app.conf.task_routes = {
+    "tasks.send_verification_email": {"queue": "email"},
+    "tasks.generate_monthly_report": {"queue": "low"},
+}
+
+# Then run one worker per priority class, and give the important queue
+# more processes rather than trusting a single worker to interleave fairly:
+#   celery -A tasks worker --queues=email   --concurrency=6
+#   celery -A tasks worker --queues=default --concurrency=3
+#   celery -A tasks worker --queues=low     --concurrency=1
+```
+
+```js title="worker.js / Node 20+ + BullMQ, entry point"
+// This file is its own process: `node worker.js`, never imported by the API.
+import { Worker } from 'bullmq'
+
+const connection = { host: 'localhost', port: 6379 }
+
+// concurrency is how many jobs this ONE process runs at a time. Node is
+// single-threaded, so this is only a win for IO-bound work; for CPU-bound
+// tasks use several processes (or a Sandboxed Processor). See chapter 20.
+new Worker('email', emailProcessor, { connection, concurrency: 10 })
+new Worker('default', defaultProcessor, { connection, concurrency: 3 })
+new Worker('low', lowProcessor, { connection, concurrency: 1 })
+
+// Graceful shutdown: stop accepting new jobs, let in-flight ones finish.
+// Without this, a deploy kills jobs mid-send and they are redelivered,
+// which is exactly why handlers must be idempotent. See chapter 16.
+process.on('SIGTERM', async () => {
+  await Promise.all([emailWorker.close(), defaultWorker.close(), lowWorker.close()])
+  process.exit(0)
+})
+```
+
+```ts title="worker.ts / TypeScript 5+ + BullMQ, entry point"
+import { Worker } from 'bullmq'
+import type { EmailJob } from './types'
+
+const connection = { host: 'localhost', port: 6379 }
+
+// BullMQ has no cross-queue priority setting: a Worker drains exactly one
+// queue. Priority is therefore a RESOURCE decision, you give the queue
+// that matters more concurrency, and run it in more replicas.
+const workers = [
+  new Worker<EmailJob>('email', emailProcessor, { connection, concurrency: 10 }),
+  new Worker('default', defaultProcessor, { connection, concurrency: 3 }),
+  new Worker('low', lowProcessor, { connection, concurrency: 1 }),
+]
+
+process.on('SIGTERM', async () => {
+  // close() waits for in-flight jobs; a hard kill would let them be
+  // redelivered, which only a genuinely idempotent handler survives.
+  await Promise.all(workers.map((w) => w.close()))
+  process.exit(0)
+})
+```
+
+```java title="WorkerConfig.java / Java 17+ + Spring Data Redis Streams"
+@Configuration
+public class WorkerConfig {
+
+    @Bean
+    StreamMessageListenerContainer<String, MapRecord<String, String, String>> emailWorker(
+            RedisConnectionFactory cf, EmailTaskHandler handler) {
+
+        var options = StreamMessageListenerContainer
+            .StreamMessageListenerContainerOptions.builder()
+            .pollTimeout(Duration.ofSeconds(2))
+            // The thread pool IS the concurrency knob: 10 tasks at a time.
+            .executor(Executors.newFixedThreadPool(10))
+            .build();
+
+        var container = StreamMessageListenerContainer.create(cf, options);
+
+        // Reading as a CONSUMER GROUP is what makes this a work queue
+        // rather than a broadcast: each message goes to exactly ONE
+        // consumer, and anything unacked can be reclaimed by another.
+        container.receive(
+            Consumer.from(EmailTaskHandler.GROUP, "worker-" + UUID.randomUUID()),
+            StreamOffset.create(EmailTaskHandler.STREAM, ReadOffset.lastConsumed()),
+            handler);
+
+        container.start();
+        return container;
+    }
+}
+
+// Priority: one container per queue, sized by importance, exactly as the
+// Go version weights its queues 6 / 3 / 1.
+//
+// Higher-level options exist if you would rather not hold the stream
+// yourself: JobRunr (annotation-driven, SQL/Mongo-backed), Spring Batch
+// for chunked bulk jobs, or Spring Cloud AWS for @SqsListener.
+```
+
+### Attività ricorrenti (in stile cron).
+
+Alcuni lavori non vengono affatto attivati dall'utente: un rapporto settimanale, una pulizia notturna. Ogni coda include uno **programmatore**, un piccolo processo separato che accoda le attività su un'espressione cron. Non li gestisce; li produce soltanto e i tuoi normali lavoratori li raccolgono.
+
+<Callout type="info" title="Esegui esattamente uno scheduler">
+I lavoratori scalano orizzontalmente; gli scheduler no. Esegui due repliche dello scheduler e ogni attività ricorrente viene accodata due volte. Mantienilo su una replica o utilizza uno scheduler che accetta un blocco (Asynq's `PeriodicTaskManager`, Celery Beat con un negozio condiviso, i lavori ripetibili di BullMQ, che vengono deduplicati dallo stesso Redis).
+</Callout>
+
+Vai a Python JavaScript TypeScript Java
+
+report settimanale ogni domenica a mezzanotte; pulizia il 1 di ogni mese
+
+```go title="scheduler/main.go / Go + Asynq Scheduler"
+// scheduler/main.go, Cron-style recurring tasks
+package main
+
+import (
+    "log"
+    "github.com/hibiken/asynq"
+)
+
+func main() {
+    scheduler := asynq.NewScheduler(
+        asynq.RedisClientOpt{Addr: "localhost:6379"},
+        nil,
+    )
+
+    // Send weekly report every Sunday at midnight
+    scheduler.Register("0 0 * * 0",
+        asynq.NewTask("report:weekly", nil))
+
+    // Cleanup orphan sessions every 1st of the month
+    scheduler.Register("0 3 1 * *",
+        asynq.NewTask("sessions:cleanup", nil))
+
+    if err := scheduler.Run(); err != nil {
+        log.Fatal(err)
+    }
+}
+```
+
+```python title="celery_config.py / Python + Celery Beat"
+# celery_config.py, Celery Beat schedule
+from celery.schedules import crontab
+
+CELERYBEAT_SCHEDULE = {
+    # Send weekly report every Sunday midnight
+    'weekly-report': {
+        'task': 'tasks.send_weekly_report',
+        'schedule': crontab(hour=0, minute=0, day_of_week='sunday'),
+    },
+    # Cleanup orphan sessions on the 1st of each month
+    'session-cleanup': {
+        'task': 'tasks.cleanup_orphan_sessions',
+        'schedule': crontab(hour=3, minute=0, day_of_month='1'),
+    },
+}
+
+# Beat is its own process, separate from the workers:
+#   celery -A tasks beat --loglevel=info
+```
+
+```js title="scheduler.js / Node 20+ + BullMQ repeatable jobs"
+// BullMQ has no separate scheduler process: a repeatable job is just a
+// job with a cron pattern, and Redis deduplicates it by repeat key. That
+// makes running this file on every replica harmless.
+import { Queue } from 'bullmq'
+
+const reports = new Queue('reports', { connection })
+
+// Send weekly report every Sunday at midnight
+await reports.add('weekly', null, {
+  repeat: { pattern: '0 0 * * 0', tz: 'UTC' },
+  jobId: 'report:weekly', // stable id, re-adding it does not duplicate
+})
+
+// Cleanup orphan sessions every 1st of the month
+await reports.add('sessionCleanup', null, {
+  repeat: { pattern: '0 3 1 * *', tz: 'UTC' },
+  jobId: 'sessions:cleanup',
+})
+
+// Always set `tz`. A schedule that silently follows the server's local
+// time will shift by an hour twice a year, and the bug surfaces months
+// later as "the Sunday report went out on Saturday night".
+```
+
+```ts title="scheduler.ts / TypeScript 5+ + BullMQ repeatable jobs"
+import { Queue } from 'bullmq'
+
+interface Schedule {
+  name: string
+  pattern: string
+  jobId: string
+}
+
+// Listing the schedules as DATA rather than as a sequence of calls is what
+// makes them reviewable: one array to read in a PR, and one loop that
+// cannot forget the tz or the stable jobId on the entry someone adds next.
+const SCHEDULES: Schedule[] = [
+  { name: 'weekly', pattern: '0 0 * * 0', jobId: 'report:weekly' },
+  { name: 'sessionCleanup', pattern: '0 3 1 * *', jobId: 'sessions:cleanup' },
+]
+
+const reports = new Queue('reports', { connection })
+
+for (const { name, pattern, jobId } of SCHEDULES) {
+  await reports.add(name, null, { repeat: { pattern, tz: 'UTC' }, jobId })
+}
+```
+
+```java title="SchedulerConfig.java / Java 17+ + Spring @Scheduled"
+@Configuration
+@EnableScheduling
+public class SchedulerConfig {
+
+    private final EmailTaskProducer producer;
+
+    SchedulerConfig(EmailTaskProducer producer) {
+        this.producer = producer;
+    }
+
+    // Send weekly report every Sunday at midnight.
+    // Note the six fields: Spring's cron starts with SECONDS, so the
+    // five-field Unix expression "0 0 * * 0" becomes "0 0 0 * * SUN".
+    @Scheduled(cron = "0 0 0 * * SUN", zone = "UTC")
+    void enqueueWeeklyReport() {
+        // The scheduler only ENQUEUES; an ordinary worker runs it.
+        producer.enqueue("report:weekly", null);
+    }
+
+    // Cleanup orphan sessions every 1st of the month
+    @Scheduled(cron = "0 0 3 1 * *", zone = "UTC")
+    void enqueueSessionCleanup() {
+        producer.enqueue("sessions:cleanup", null);
+    }
+}
+
+// @Scheduled fires on EVERY instance, so with two replicas every task is
+// enqueued twice. In a multi-replica deployment take a lock first, with
+// ShedLock (@SchedulerLock) or Quartz in clustered mode.
+```
+
+12
+
+## Considerazioni sulla progettazione su larga scala
+
+Quando la tua piattaforma cresce fino a raggiungere migliaia di utenti simultanei, l'ingenua configurazione della coda delle attività che ha funzionato durante lo sviluppo inizia a incrinarsi. Queste sono le aree che devi progettare attentamente prima di raggiungere la scala di produzione.
+
+Ridimensionamento orizzontale
+
+Progettare i consumatori affinché siano **senza stato**: tutti gli stati condivisi risiedono nel database o nella cache, non nel processo. Ciò ti consente di avviare N repliche senza modifiche alla configurazione. Più traffico -&gt; aggiungi lavoratori, non server più grandi.
+
+Consegna ordinata
+
+I consumatori paralleli interrompono l'ordinamento FIFO. Se l'ordine rigoroso è importante (ad esempio addebito -&gt; rimborso deve avvenire in sequenza), utilizzare SQS FIFO con a `MessageGroupId` o una coda a singolo consumatore per quel tipo di attività.
+
+Categorie di errori
+
+Distinguere gli errori _transitori_ (timeout di rete, 503 -&gt; nuovo tentativo) dagli errori _permanenti_ (payload non valido, 400 -&gt; salta il nuovo tentativo immediatamente, invia a DLQ). Riprovare con errori permanenti spreca risorse e riempie la coda.
+
+Contropressione
+
+Se la coda cresce più velocemente di quanto consumano i lavoratori, si ha una contropressione. Soluzioni: scalare i consumatori orizzontalmente, implementare code prioritarie o ridurre il carico con interruttori automatici sul lato produttore.
+
+17
+
+## Modelli di idempotenza in profondità
+
+**Idempotenza** significa che l'esecuzione di un'attività una o 100 volte produce effetti collaterali identici. Questo non è negoziabile in qualsiasi sistema che ritenta le attività e lo fanno tutte le code delle attività di produzione. Esistono diversi modelli concreti per raggiungerlo.
+
+### Modello 1: chiavi di idepotenza
+
+Assegna una chiave univoca a ciascuna attività al momento della creazione (solitamente un UUID o un hash dell'input). Prima di eseguire qualsiasi lavoro, il gestore controlla se la chiave è già stata elaborata con successo. Se sì, ritorna prima senza rifare il lavoro.
+
+Vai a Python JavaScript TypeScript Java
+
+richiedi prima la chiave; solo il vincitore fa il lavoro
+
+```go title="email_handler.go / Go + go-redis + Asynq"
+// Go, Idempotency key pattern with Redis
+func (h *EmailHandler) HandleSendVerificationEmail(
+    ctx context.Context, t *asynq.Task,
+) error {
+    var p tasks.EmailPayload
+    if err := json.Unmarshal(t.Payload(), &p); err != nil {
+        return fmt.Errorf("json.Unmarshal: %w: %w", err, asynq.SkipRetry)
+    }
+
+    // Build idempotency key from task inputs
+    key := fmt.Sprintf("idem:verify_email:%s:%s", p.UserID, p.Token)
+
+    // SetNX = SET only if Not eXists, with a 1-hour expiry.
+    // acquired is true only for the FIRST execution.
+    acquired, err := h.rdb.SetNX(ctx, key, "done", time.Hour).Result()
+    if err != nil {
+        // Redis is unreachable, so we cannot tell a duplicate from a
+        // first run. Retry rather than risk a second email.
+        return fmt.Errorf("idempotency check: %w", err)
+    }
+    if !acquired {
+        return nil // Already processed, ACK cleanly (idempotent return)
+    }
+
+    // First time, actually send the email
+    if err := h.emailSvc.SendVerification(ctx, p.Email, p.Token); err != nil {
+        h.rdb.Del(ctx, key) // release the key so the next retry can try again
+        return fmt.Errorf("emailSvc.SendVerification: %w", err)
+    }
+    return nil
+}
+```
+
+```python title="tasks.py / Python + redis-py + Celery"
+# Python, Idempotency key pattern with Redis
+import redis
+import hashlib
+
+r = redis.Redis(host='localhost', port=6379)
+
+@app.task(bind=True, max_retries=5)
+def send_verification_email(self, user_id: str, email: str, token: str):
+    # Build idempotency key from task inputs
+    key = f"idem:verify_email:{user_id}:{token}"
+
+    # SET NX = set only if Not eXists; EX = expire after 1 hour
+    # Returns True if we are the FIRST execution, False if already done
+    acquired = r.set(key, "done", nx=True, ex=3600)
+    if not acquired:
+        # Already processed, skip silently (idempotent return)
+        return {"status": "already_sent"}
+
+    # First time, actually send the email
+    try:
+        _send_email_via_provider(email, token)
+    except Exception as exc:
+        # Delete the key so next retry can attempt again
+        r.delete(key)
+        raise self.retry(exc=exc, countdown=60 * 2 ** self.request.retries)
+```
+
+```js title="worker.js / Node 20+ + node-redis + BullMQ"
+// Node, Idempotency key pattern with Redis
+new Worker('email', async (job) => {
+  const { userId, email, token } = job.data
+
+  // Build idempotency key from task inputs
+  const key = `idem:verify_email:${userId}:${token}`
+
+  // NX = set only if Not eXists; EX = expire after 1 hour.
+  // set() returns 'OK' on the FIRST execution, and null if already done.
+  const acquired = await redis.set(key, 'done', { NX: true, EX: 3600 })
+  if (acquired === null) {
+    return { status: 'already_sent' } // skip silently (idempotent return)
+  }
+
+  // First time, actually send the email
+  try {
+    await sendEmailViaProvider(email, token)
+  } catch (err) {
+    await redis.del(key) // delete the key so the next retry can attempt again
+    throw err // throwing is what schedules the retry
+  }
+}, { connection })
+```
+
+```ts title="worker.ts / TypeScript 5+ + node-redis + BullMQ"
+// Worth naming the gap in this shape before you rely on it: if the process
+// dies AFTER the SET NX but BEFORE the send lands, the key is held and the
+// retry skips the email entirely. The one-hour TTL is what bounds the
+// damage. The stronger fix is the one chapter 07 uses for payments, store
+// the RESULT under the key instead of a bare "done" marker, so a duplicate
+// can return the original outcome rather than guessing.
+async function handler(job: Job<EmailJob>): Promise<{ status: string }> {
+  const { userId, email, token } = job.data
+  const key = `idem:verify_email:${userId}:${token}`
+
+  const acquired: string | null = await redis.set(key, 'pending', { NX: true, EX: 3600 })
+  if (acquired === null) {
+    return { status: 'already_sent' } // skip silently (idempotent return)
+  }
+
+  try {
+    const messageId = await sendEmailViaProvider(email, token)
+    // Overwrite the claim with the real result, still under the same TTL.
+    await redis.set(key, JSON.stringify({ messageId }), { EX: 3600 })
+    return { status: 'sent' }
+  } catch (err) {
+    await redis.del(key) // let the next retry attempt again
+    throw err
+  }
+}
+```
+
+```java title="EmailTaskHandler.java / Java 17+ + Spring Data Redis"
+// Java, Idempotency key pattern with Redis
+@Override
+public void onMessage(MapRecord<String, String, String> record) {
+    EmailPayload p = parse(record); // as in the consumer example above
+
+    // Build idempotency key from task inputs
+    String key = "idem:verify_email:%s:%s".formatted(p.userId(), p.token());
+
+    // setIfAbsent IS SET NX, and the Duration is the EX. It returns TRUE
+    // only for the FIRST execution, FALSE if an earlier attempt got there.
+    Boolean acquired = redis.opsForValue()
+        .setIfAbsent(key, "done", Duration.ofHours(1));
+
+    if (!Boolean.TRUE.equals(acquired)) {
+        // Already processed, ACK cleanly (idempotent return). Note the
+        // Boolean.TRUE.equals: `acquired` is a nullable Boolean, and
+        // unboxing a null here would throw instead of skipping.
+        redis.opsForStream().acknowledge(STREAM, GROUP, record.getId());
+        return;
+    }
+
+    // First time, actually send the email
+    try {
+        emailSvc.sendVerification(p.email(), p.token());
+        redis.opsForStream().acknowledge(STREAM, GROUP, record.getId());
+    } catch (RuntimeException e) {
+        redis.delete(key); // release the key so the redelivery can try again
+        log.warn("send failed; leaving unacked for redelivery", e);
+    }
+}
+```
+
+### Modello 2: Transazione database + Upsert
+
+Per le attività che scrivono in un database, utilizzare **upserts** (INSERT ... ON CONFLICT DO NOTHING / DO UPDATE) invece dei semplici INSERT. In questo modo, riprovando l'attività prova semplicemente a inserirla di nuovo e salta silenziosamente il duplicato.
+
+```sql
+-- PostgreSQL, Idempotent email log via upsert
+-- If the verification_emails row already exists for this token, do nothing
+INSERT INTO verification_emails (token, user_id, sent_at, provider_msg_id)
+VALUES ($1, $2, NOW(), $3)
+ON CONFLICT (token) DO NOTHING;
+
+-- For updates: ON CONFLICT DO UPDATE
+INSERT INTO user_status (user_id, email_verified, updated_at)
+VALUES ($1, true, NOW())
+ON CONFLICT (user_id) DO UPDATE
+  SET email_verified = EXCLUDED.email_verified,
+      updated_at = EXCLUDED.updated_at;
+```
+
+### Modello 3: rollback completo della transazione (per attività complesse)
+
+Per le attività in più passaggi (come l'eliminazione di account) che riguardano molte tabelle, racchiudi l'intera attività in una transazione del database. Se un passaggio fallisce, la transazione viene ripristinata completamente, lasciando il database in uno stato pulito per il successivo tentativo di nuovo tentativo.
+
+Vai a Python JavaScript TypeScript Java
+
+ogni scrittura si impegna insieme, oppure nessuna di esse lo fa
+
+```go title="account_handler.go / Go + Asynq"
+// Go, Idempotent multi-step task with full transaction rollback
+func (h *AccountHandler) HandleDeleteAccount(ctx context.Context, t *asynq.Task) error {
+    var p DeleteAccountPayload
+    json.Unmarshal(t.Payload(), &p)
+
+    // Check if already deleted (idempotency guard)
+    exists, _ := h.db.UserExists(ctx, p.UserID)
+    if !exists {
+        return nil // already deleted on a previous attempt, ACK cleanly
+    }
+
+    // Wrap all DB writes in a single transaction
+    return h.db.WithTransaction(ctx, func(tx DB) error {
+        steps := []func() error{
+            func() error { return tx.DeleteUserProjects(ctx, p.UserID) },
+            func() error { return tx.DeleteUserSessions(ctx, p.UserID) },
+            func() error { return tx.DeleteUserAssets(ctx, p.UserID) },
+            func() error { return tx.DeleteUserAccount(ctx, p.UserID) },
+        }
+        for _, step := range steps {
+            if err := step(); err != nil {
+                return err // triggers full rollback; task retried from scratch
+            }
+        }
+        return nil // all steps succeeded -> commit -> ACK
+    })
+}
+```
+
+```python title="tasks.py / Python + SQLAlchemy + Celery"
+# Python, Idempotent multi-step task with full transaction rollback
+@app.task(bind=True, max_retries=5)
+def delete_account(self, user_id: str):
+    # Check if already deleted (idempotency guard)
+    if not db.user_exists(user_id):
+        return  # already deleted on a previous attempt, ACK cleanly
+
+    try:
+        # session.begin() COMMITs on a clean exit and ROLLBACKs on any
+        # exception, so the whole multi-step delete is one unit.
+        with Session(engine) as session, session.begin():
+            delete_user_projects(session, user_id)
+            delete_user_sessions(session, user_id)
+            delete_user_assets(session, user_id)
+            delete_user_account(session, user_id)
+    except SQLAlchemyError as exc:
+        # Nothing was written, so the retry starts from a clean database
+        raise self.retry(exc=exc, countdown=60 * 2 ** self.request.retries)
+```
+
+```js title="worker.js / Node 20+ + node-postgres + BullMQ"
+// Node, Idempotent multi-step task with full transaction rollback
+new Worker('account', async (job) => {
+  const { userId } = job.data
+
+  // Check if already deleted (idempotency guard)
+  if (!(await db.userExists(userId))) {
+    return // already deleted on a previous attempt, ACK cleanly
+  }
+
+  // Wrap all DB writes in a single transaction, on ONE connection
+  const tx = await pool.connect()
+  try {
+    await tx.query('BEGIN')
+    await deleteUserProjects(tx, userId)
+    await deleteUserSessions(tx, userId)
+    await deleteUserAssets(tx, userId)
+    await deleteUserAccount(tx, userId)
+    await tx.query('COMMIT') // all steps succeeded -> ACK
+  } catch (err) {
+    await tx.query('ROLLBACK') // full rollback; task retried from scratch
+    throw err
+  } finally {
+    tx.release()
+  }
+}, { connection })
+```
+
+```ts title="worker.ts / TypeScript 5+ + node-postgres + BullMQ"
+// The type on this array is doing real work: every step takes a `tx`, so
+// a function that does NOT take one cannot be added to the list. That
+// matters more than it looks, because a rollback only undoes DATABASE
+// writes. Slip an email send or an S3 delete in here and the retry does
+// it a second time with nothing to roll back.
+const steps: Array<(tx: PoolClient, userId: string) => Promise<void>> = [
+  deleteUserProjects,
+  deleteUserSessions,
+  deleteUserAssets,
+  deleteUserAccount,
+]
+
+async function handleDeleteAccount(job: Job<{ userId: string }>): Promise<void> {
+  const { userId } = job.data
+
+  // Check if already deleted (idempotency guard)
+  if (!(await db.userExists(userId))) {
+    return // already deleted on a previous attempt, ACK cleanly
+  }
+
+  // withTransaction (chapter 08) commits on return, rolls back on throw
+  await withTransaction(pool, async (tx) => {
+    for (const step of steps) {
+      await step(tx, userId) // any throw -> full rollback -> retry from scratch
+    }
+  })
+}
+```
+
+```java title="AccountTaskHandler.java / Java 17+ + Spring"
+// Java, Idempotent multi-step task with full transaction rollback
+@Service
+public class AccountTaskHandler {
+
+    // @Transactional wraps the WHOLE method: every write below commits
+    // together, or a thrown exception rolls all of them back and the
+    // redelivered task starts against a clean database.
+    @Transactional
+    public void handleDeleteAccount(DeleteAccountPayload p) {
+        // Check if already deleted (idempotency guard)
+        if (!db.userExists(p.userId())) {
+            return; // already deleted on a previous attempt, ACK cleanly
+        }
+
+        db.deleteUserProjects(p.userId());
+        db.deleteUserSessions(p.userId());
+        db.deleteUserAssets(p.userId());
+        db.deleteUserAccount(p.userId());
+        // returning commits; any RuntimeException triggers a full rollback
+    }
+}
+
+// Both chapter 08 traps are genuinely dangerous here, not academic:
+//  1. The proxy. Calling handleDeleteAccount() from another method of
+//     THIS class runs it with NO transaction at all, so a failure halfway
+//     down leaves an account that is half deleted and cannot be retried.
+//  2. Checked exceptions do not roll back by default, which commits the
+//     partial delete. Be explicit:
+//     @Transactional(rollbackFor = Exception.class)
+```
+
+### Modello 4: Exactly-Once tramite deduplicazione FIFO SQS
+
+Le code FIFO SQS accettano a `MessageDeduplicationId`. Qualsiasi messaggio con lo stesso ID inviato entro una finestra di 5 minuti viene eliminato silenziosamente. Questa è idempotenza a livello di broker, il gestore non vede nemmeno il duplicato.
+
+Vai a Python JavaScript TypeScript Java
+
+il broker rilascia il duplicato; il tuo gestore non lo vede mai
+
+```go title="producer.go / Go + AWS SDK v2"
+// Go, SQS FIFO with content-based deduplication
+client.SendMessage(ctx, &sqs.SendMessageInput{
+    QueueUrl:               aws.String("https://sqs.us-east-1.amazonaws.com/123/orders.fifo"),
+    MessageBody:            aws.String(payload),
+    MessageGroupId:         aws.String("order-processing"), // ordering group
+    MessageDeduplicationId: aws.String(orderID),           // unique per business event
+})
+// Sending the same orderID twice within 5 min -> second is silently dropped by SQS
+```
+
+```python title="producer.py / Python + boto3"
+# Python, SQS FIFO with deduplication
+import boto3
+
+sqs = boto3.client("sqs", region_name="us-east-1")
+
+sqs.send_message(
+    QueueUrl="https://sqs.us-east-1.amazonaws.com/123/orders.fifo",
+    MessageBody=payload,
+    MessageGroupId="order-processing",   # ordering group
+    MessageDeduplicationId=order_id,     # unique per business event
+)
+# Sending the same order_id twice within 5 min -> second is silently dropped
+```
+
+```js title="producer.js / Node 20+ + @aws-sdk/client-sqs"
+// Node, SQS FIFO with deduplication
+import { SQSClient, SendMessageCommand } from '@aws-sdk/client-sqs'
+
+const sqs = new SQSClient({ region: 'us-east-1' })
+
+await sqs.send(new SendMessageCommand({
+  QueueUrl: 'https://sqs.us-east-1.amazonaws.com/123/orders.fifo',
+  MessageBody: payload,
+  MessageGroupId: 'order-processing', // ordering group
+  MessageDeduplicationId: orderId,    // unique per business event
+}))
+// Sending the same orderId twice within 5 min -> second is silently dropped
+```
+
+```ts title="producer.ts / TypeScript 5+ + @aws-sdk/client-sqs"
+import { SQSClient, SendMessageCommand } from '@aws-sdk/client-sqs'
+
+const sqs = new SQSClient({ region: 'us-east-1' })
+
+// The dedup id has to come from the BUSINESS event, never from the
+// attempt: a randomUUID() per send makes every retry look like a new
+// message and deduplicates nothing. Typing it as the order id and not as
+// a bare `string` is a cheap way to keep that honest.
+export async function enqueueOrder(orderId: OrderId, payload: string): Promise<void> {
+  await sqs.send(new SendMessageCommand({
+    QueueUrl: process.env.ORDERS_QUEUE_URL,
+    MessageBody: payload,
+    MessageGroupId: 'order-processing', // ordering group
+    MessageDeduplicationId: orderId,    // unique per business event
+  }))
+}
+// Sending the same orderId twice within 5 min -> second is silently dropped
+```
+
+```java title="Producer.java / Java 17+ + AWS SDK v2"
+// Java, SQS FIFO with deduplication
+SqsClient sqs = SqsClient.builder().region(Region.US_EAST_1).build();
+
+sqs.sendMessage(SendMessageRequest.builder()
+    .queueUrl("https://sqs.us-east-1.amazonaws.com/123/orders.fifo")
+    .messageBody(payload)
+    .messageGroupId("order-processing") // ordering group
+    .messageDeduplicationId(orderId)    // unique per business event
+    .build());
+// Sending the same orderId twice within 5 min -> second is silently dropped
+```
+
+Regola pratica
+
+Applica sempre _almeno uno_ di questi modelli. Per la maggior parte delle attività: la chiave di idempotenza in Redis (modello 1) è la più semplice ed economica. Per attività pesanti sul DB: upserts (modello 2) + transazione (modello 3). Per carichi di lavoro SQS: ID deduplicazione FIFO (modello 4).
+
+18
+
+## Limitazione della velocità nei lavoratori
+
+Le API esterne impongono limiti di velocità. Se i tuoi dipendenti inviano 500 e-mail al secondo e il limite di Reinvia è 100 al secondo, verrai inondato da errori 429, tentativi inutili e consegna ridotta. Devi **limitare i tuoi lavoratori** per rimanere entro i limiti.
+
+### Due algoritmi principali
+
+Secchio di gettoni
+
+Un "secchio" si riempie di gettoni a una velocità fissa (ad esempio 100 gettoni/secondo). Ogni chiamata API consuma un token. Se il bucket è vuoto, la chiamata attende. Consente esplosioni fino alla capacità del secchio. Implementazione di Redis: `INCR` + `EXPIRE`.
+
+Finestra scorrevole
+
+Conta le richieste negli ultimi N secondi utilizzando una finestra temporale scorrevole. Più accurato del token bucket per una rigorosa conformità alle tariffe. Implementazione Redis: set ordinati con timestamp come punteggi.
+
+### Bucket di token (supportato da Redis)
+
+Lo script Lua riportato di seguito è identico in tutte e cinque le schede, e questo è il trucco: Redis esegue uno script in modo atomico, quindi il ciclo di lettura-riempimento-scrittura non può intercalarsi con quello di un altro lavoratore. Esegui invece i calcoli nella tua lingua e avrai ricostruito la corsa agli aggiornamenti perduti del capitolo 08, a cento lavoratori al secondo.
+
+Vai a Python JavaScript TypeScript Java
+
+una scrittura atomica; cinque modi per chiamarlo
+
+```go title="rate/token_bucket.go / Go + go-redis"
+// rate/token_bucket.go, Redis token bucket implementation
+package rate
+
+// Loaded once; go-redis sends EVALSHA and only falls back to the full
+// body if Redis has not seen the script before.
+var tokenBucketScript = redis.NewScript(`
+local key = KEYS[1]
+local capacity = tonumber(ARGV[1])
+local refill_rate = tonumber(ARGV[2])
+local now = tonumber(ARGV[3])
+
+local bucket = redis.call('HMGET', key, 'tokens', 'last_refill')
+local tokens = tonumber(bucket[1]) or capacity
+local last_refill = tonumber(bucket[2]) or now
+
+-- Refill tokens based on time elapsed
+local elapsed = now - last_refill
+tokens = math.min(capacity, tokens + elapsed * refill_rate)
+
+if tokens >= 1 then
+    tokens = tokens - 1
+    redis.call('HMSET', key, 'tokens', tokens, 'last_refill', now)
+    redis.call('EXPIRE', key, 3600)
+    return 1
+end
+return 0
+`)
+
+type TokenBucketLimiter struct {
+    rdb        *redis.Client
+    key        string  // e.g. "ratelimit:resend_emails"
+    capacity   int     // max burst (e.g. 100)
+    refillRate float64 // tokens per second (e.g. 10)
+}
+
+// Acquire reports whether a token was taken; false means rate limited.
+func (l *TokenBucketLimiter) Acquire(ctx context.Context) (bool, error) {
+    now := float64(time.Now().UnixMicro()) / 1e6
+    got, err := tokenBucketScript.Run(ctx, l.rdb,
+        []string{l.key}, l.capacity, l.refillRate, now).Int()
+    if err != nil {
+        return false, err
+    }
+    return got == 1, nil
+}
+
+// Usage inside an Asynq handler
+func (h *EmailHandler) HandleSendEmail(ctx context.Context, t *asynq.Task) error {
+    ok, err := h.limiter.Acquire(ctx)
+    if err != nil {
+        return err
+    }
+    if !ok {
+        // Rate limited. Any non-nil error re-queues the task with backoff,
+        // so this costs a retry slot but never drops the work.
+        return errors.New("rate limited, retrying")
+    }
+    return h.doSendEmail(ctx, t)
+}
+```
+
+```python title="rate_limiter.py / Python + redis-py + Celery"
+# rate_limiter.py, Redis token bucket implementation
+import time
+import redis
+
+class TokenBucketRateLimiter:
+    def __init__(self, redis_client, key: str, capacity: int, refill_rate: float):
+        self.r = redis_client
+        self.key = key               # e.g. "ratelimit:resend_emails"
+        self.capacity = capacity     # max burst (e.g. 100)
+        self.refill_rate = refill_rate  # tokens per second (e.g. 10)
+
+    def acquire(self) -> bool:
+        """Returns True if a token was acquired, False if rate limited."""
+        now = time.time()
+        pipe = self.r.pipeline()
+
+        # Lua script ensures atomic read-modify-write (no race conditions)
+        lua_script = """
+        local key = KEYS[1]
+        local capacity = tonumber(ARGV[1])
+        local refill_rate = tonumber(ARGV[2])
+        local now = tonumber(ARGV[3])
+
+        local bucket = redis.call('HMGET', key, 'tokens', 'last_refill')
+        local tokens = tonumber(bucket[1]) or capacity
+        local last_refill = tonumber(bucket[2]) or now
+
+        -- Refill tokens based on time elapsed
+        local elapsed = now - last_refill
+        tokens = math.min(capacity, tokens + elapsed * refill_rate)
+
+        if tokens >= 1 then
+            tokens = tokens - 1
+            redis.call('HMSET', key, 'tokens', tokens, 'last_refill', now)
+            redis.call('EXPIRE', key, 3600)
+            return 1
+        end
+        return 0
+        """
+        result = self.r.eval(lua_script, 1, self.key, self.capacity, self.refill_rate, now)
+        return bool(result)
+
+# Usage inside a Celery task
+limiter = TokenBucketRateLimiter(r, "ratelimit:resend", capacity=100, refill_rate=10)
+
+@app.task(bind=True, max_retries=10)
+def send_email_task(self, email, token):
+    if not limiter.acquire():
+        # Rate limited, retry after a short delay (not counted as failure)
+        raise self.retry(countdown=1, max_retries=60)  # retry every 1s up to 60 times
+    _do_send_email(email, token)
+```
+
+```js title="rateLimiter.js / Node 20+ + node-redis + BullMQ"
+// rateLimiter.js, Redis token bucket implementation
+const TOKEN_BUCKET_LUA = `
+local key = KEYS[1]
+local capacity = tonumber(ARGV[1])
+local refill_rate = tonumber(ARGV[2])
+local now = tonumber(ARGV[3])
+
+local bucket = redis.call('HMGET', key, 'tokens', 'last_refill')
+local tokens = tonumber(bucket[1]) or capacity
+local last_refill = tonumber(bucket[2]) or now
+
+-- Refill tokens based on time elapsed
+local elapsed = now - last_refill
+tokens = math.min(capacity, tokens + elapsed * refill_rate)
+
+if tokens >= 1 then
+    tokens = tokens - 1
+    redis.call('HMSET', key, 'tokens', tokens, 'last_refill', now)
+    redis.call('EXPIRE', key, 3600)
+    return 1
+end
+return 0
+`
+
+export class TokenBucketRateLimiter {
+  constructor(redis, key, capacity, refillRate) {
+    this.redis = redis
+    this.key = key                // e.g. "ratelimit:resend_emails"
+    this.capacity = capacity      // max burst (e.g. 100)
+    this.refillRate = refillRate  // tokens per second (e.g. 10)
+  }
+
+  // Returns true if a token was acquired, false if rate limited.
+  async acquire() {
+    const now = Date.now() / 1000
+    const result = await this.redis.eval(TOKEN_BUCKET_LUA, {
+      keys: [this.key],
+      arguments: [String(this.capacity), String(this.refillRate), String(now)],
+    })
+    return result === 1
+  }
+}
+
+// Usage inside a BullMQ worker
+const limiter = new TokenBucketRateLimiter(redis, 'ratelimit:resend', 100, 10)
+
+new Worker('email', async (job) => {
+  if (!(await limiter.acquire())) {
+    throw new Error('rate limited') // throwing re-queues with backoff
+  }
+  await doSendEmail(job.data)
+}, { connection })
+
+// BullMQ also ships a built-in limiter that PAUSES the worker instead of
+// failing jobs, which is usually the better shape, no retry budget burned:
+//   new Worker('email', fn, { connection, limiter: { max: 10, duration: 1000 } })
+// Its scope is the queue, though, so a second unrelated queue hitting the
+// same provider is not counted. A shared bucket like the one above is.
+```
+
+```ts title="rateLimiter.ts / TypeScript 5+ + node-redis"
+import type { RedisClientType } from 'redis'
+
+// Two details decide whether this holds up in production:
+//
+//  1. `now` comes from the WORKER's clock, and ten pods do not agree to
+//     the millisecond. If the refill has to be exact across machines,
+//     take the time from Redis (`TIME`) and pass that instead.
+//  2. It must stay ONE eval. Reading the bucket, computing the refill in
+//     TypeScript, and writing it back is the chapter 08 lost-update race
+//     wearing a different hat, and it leaks tokens under real load.
+export class TokenBucketRateLimiter {
+  constructor(
+    private readonly redis: RedisClientType,
+    private readonly key: string,        // e.g. "ratelimit:resend_emails"
+    private readonly capacity: number,   // max burst (e.g. 100)
+    private readonly refillRate: number, // tokens per second (e.g. 10)
+  ) {}
+
+  /** Returns true if a token was acquired, false if rate limited. */
+  async acquire(): Promise<boolean> {
+    const now = Date.now() / 1000
+    const result = (await this.redis.eval(TOKEN_BUCKET_LUA, {
+      keys: [this.key],
+      arguments: [String(this.capacity), String(this.refillRate), String(now)],
+    })) as number
+    return result === 1
+  }
+}
+```
+
+```java title="TokenBucketRateLimiter.java / Java 17+ + Spring Data Redis"
+@Component
+public class TokenBucketRateLimiter {
+
+    // Same Lua script, kept in src/main/resources/token_bucket.lua.
+    // Spring caches its SHA and calls EVALSHA, so the body is not resent.
+    private static final RedisScript<Long> SCRIPT = RedisScript.of(
+        new ClassPathResource("token_bucket.lua"), Long.class);
+
+    private final StringRedisTemplate redis;
+
+    TokenBucketRateLimiter(StringRedisTemplate redis) {
+        this.redis = redis;
+    }
+
+    /** Returns true if a token was acquired, false if rate limited. */
+    public boolean acquire(String key, int capacity, double refillRate) {
+        double now = System.currentTimeMillis() / 1000.0;
+        Long result = redis.execute(SCRIPT, List.of(key),
+            String.valueOf(capacity), String.valueOf(refillRate), String.valueOf(now));
+        return Long.valueOf(1L).equals(result);
+    }
+}
+
+// Usage inside the stream handler
+if (!limiter.acquire("ratelimit:resend", 100, 10)) {
+    // Rate limited: deliberately do NOT ack. The message stays pending
+    // and gets reclaimed later, which is this broker's version of a retry.
+    return;
+}
+doSendEmail(payload);
+
+// Resilience4j ships a RateLimiter too, but its scope is ONE JVM. That is
+// the wrong scope here: ten worker pods each allowing 100/s is 1000/s
+// arriving at the provider. A shared limit has to live in Redis.
+```
+
+### Limitatore di velocità della finestra scorrevole
+
+Vai a Python JavaScript TypeScript Java
+
+un insieme ordinato di timestamp; contare ciò che cade dentro la finestra
+
+```go title="rate/sliding_window.go / Go + go-redis"
+// rate/sliding_window.go, Redis sorted-set sliding window
+package rate
+
+import (
+    "context"
+    "fmt"
+    "time"
+    "github.com/redis/go-redis/v9"
+)
+
+type SlidingWindowLimiter struct {
+    client  *redis.Client
+    key     string
+    limit   int           // max requests
+    window  time.Duration // time window
+}
+
+func (l *SlidingWindowLimiter) Allow(ctx context.Context) (bool, error) {
+    now := time.Now()
+    windowStart := now.Add(-l.window).UnixMicro()
+    nowMicro := now.UnixMicro()
+
+    pipe := l.client.Pipeline()
+    // Remove entries older than the window
+    pipe.ZRemRangeByScore(ctx, l.key, "0", fmt.Sprintf("%d", windowStart))
+    // Count entries in current window
+    countCmd := pipe.ZCard(ctx, l.key)
+    // Add current request timestamp as a member
+    pipe.ZAdd(ctx, l.key, redis.Z{Score: float64(nowMicro), Member: nowMicro})
+    pipe.Expire(ctx, l.key, l.window*2)
+    pipe.Exec(ctx)
+
+    count := countCmd.Val()
+    return count < int64(l.limit), nil
+}
+
+// Usage in Asynq handler
+func (h *EmailHandler) HandleSendEmail(ctx context.Context, t *asynq.Task) error {
+    allowed, _ := h.limiter.Allow(ctx)
+    if !allowed {
+        // Return a retryable error, asynq will retry with backoff
+        return fmt.Errorf("rate limit exceeded: %w", asynq.ErrRetry)
+    }
+    return h.doSendEmail(ctx, t)
+}
+```
+
+```python title="sliding_window.py / Python + redis-py + Celery"
+# sliding_window.py, Redis sorted-set sliding window
+import time
+
+
+class SlidingWindowLimiter:
+    def __init__(self, redis_client, key: str, limit: int, window_seconds: float):
+        self.r = redis_client
+        self.key = key
+        self.limit = limit            # max requests
+        self.window = window_seconds  # time window
+
+    def allow(self) -> bool:
+        now_us = int(time.time() * 1_000_000)
+        window_start = now_us - int(self.window * 1_000_000)
+
+        pipe = self.r.pipeline()
+        # Remove entries older than the window
+        pipe.zremrangebyscore(self.key, 0, window_start)
+        # Count entries in current window
+        pipe.zcard(self.key)
+        # Add current request timestamp as a member
+        pipe.zadd(self.key, {str(now_us): now_us})
+        pipe.expire(self.key, int(self.window * 2))
+        _, count, _, _ = pipe.execute()
+
+        return count < self.limit
+
+
+# Usage inside a Celery task
+@app.task(bind=True, max_retries=60)
+def send_email_task(self, email, token):
+    if not limiter.allow():
+        raise self.retry(countdown=1)  # rate limited, not a failure
+    _do_send_email(email, token)
+```
+
+```js title="slidingWindow.js / Node 20+ + node-redis + BullMQ"
+// slidingWindow.js, Redis sorted-set sliding window
+export class SlidingWindowLimiter {
+  constructor(redis, key, limit, windowMs) {
+    this.redis = redis
+    this.key = key
+    this.limit = limit        // max requests
+    this.windowMs = windowMs  // time window
+  }
+
+  async allow() {
+    const now = Date.now() * 1000 // microseconds, used as the score
+    const windowStart = now - this.windowMs * 1000
+
+    const [, count] = await this.redis
+      .multi()
+      // Remove entries older than the window
+      .zRemRangeByScore(this.key, 0, windowStart)
+      // Count entries in current window
+      .zCard(this.key)
+      // Add current request timestamp as a member
+      .zAdd(this.key, { score: now, value: String(now) })
+      .expire(this.key, Math.ceil((this.windowMs * 2) / 1000))
+      .exec()
+
+    return count < this.limit
+  }
+}
+```
+
+```ts title="slidingWindow.ts / TypeScript 5+ + node-redis"
+// Two behaviours of this algorithm that are easy to miss, and both are in
+// the Go version above too:
+//
+//  1. The count is read BEFORE this request's own entry is added, so the
+//     effective ceiling is limit + 1 in flight. Either compare against
+//     `limit - 1`, or move the ZADD ahead of the ZCARD. Choose one on
+//     purpose, because drifting between the two across services is how a
+//     documented "100/s" quietly becomes 101/s at the provider.
+//  2. An entry is added even when the request is REJECTED. A caller that
+//     keeps hammering a limited endpoint therefore keeps its own window
+//     permanently full and never recovers. If that is not what you want,
+//     only ZADD on the allowed path.
+export class SlidingWindowLimiter {
+  constructor(
+    private readonly redis: RedisClientType,
+    private readonly key: string,
+    private readonly limit: number,    // max requests
+    private readonly windowMs: number, // time window
+  ) {}
+
+  async allow(): Promise<boolean> {
+    const now = Date.now() * 1000
+    const windowStart = now - this.windowMs * 1000
+
+    const results = await this.redis
+      .multi()
+      .zRemRangeByScore(this.key, 0, windowStart)
+      .zCard(this.key)
+      .expire(this.key, Math.ceil((this.windowMs * 2) / 1000))
+      .exec()
+
+    const count = results[1] as number
+    if (count >= this.limit) {
+      return false // rejected, and deliberately NOT recorded
+    }
+
+    await this.redis.zAdd(this.key, { score: now, value: String(now) })
+    return true
+  }
+}
+```
+
+```java title="SlidingWindowLimiter.java / Java 17+ + Spring Data Redis"
+@Component
+public class SlidingWindowLimiter {
+    private final StringRedisTemplate redis;
+
+    SlidingWindowLimiter(StringRedisTemplate redis) {
+        this.redis = redis;
+    }
+
+    public boolean allow(String key, int limit, Duration window) {
+        long nowMicros = Instant.now().toEpochMilli() * 1_000L;
+        long windowStart = nowMicros - window.toMillis() * 1_000L;
+
+        // Remove entries older than the window
+        redis.opsForZSet().removeRangeByScore(key, 0, windowStart);
+        // Count entries in current window
+        Long count = redis.opsForZSet().zCard(key);
+        // Add current request timestamp as a member
+        redis.opsForZSet().add(key, String.valueOf(nowMicros), nowMicros);
+        redis.expire(key, window.multipliedBy(2));
+
+        return count != null && count < limit;
+    }
+}
+
+// Written plainly like this it is four round trips AND four separate
+// moments: another worker can slip an entry in between the ZCARD and the
+// ZADD. Pipeline it with executePipelined, or move the whole sequence
+// into a Lua script the way the token bucket does. At low rates you will
+// never notice; at the rates that make you reach for a limiter, you will.
+```
+
+<Callout type="info" title="Limitazione della velocità integrata Asynq">
+Asynq dispone di un'interfaccia nativa per il limitatore di velocità. Implementare `asynq.RateLimiter` e passarlo a `asynq.NewServer`, il server sospenderà automaticamente il polling del lavoratore quando viene raggiunto il limite, senza la necessità di una logica di ripetizione manuale nel gestore.
+</Callout>
+
+19
+
+## Configurazione di monitoraggio completa: Prometeo + Grafana
+
+Le attività in background falliscono silenziosamente a meno che tu non abbia integrato l'osservabilità nel sistema. Lo stack di produzione standard è: **Prometheus** (raccolta e archiviazione delle metriche) + **Grafana** (cruscotto e avvisi). Ecco la configurazione completa.
+
+### Panoramica dell'architettura
+
+<Diagram>
+<svg viewBox="0 0 680 200" xmlns="http://www.w3.org/2000/svg" width="640"><defs><marker id="m1" markerWidth="7" markerHeight="7" refX="5" refY="3" orient="auto"><path d="M0,0 L0,6 L7,3 z" fill="var(--dg-warn-soft)"></path></marker><marker id="m2" markerWidth="7" markerHeight="7" refX="5" refY="3" orient="auto"><path d="M0,0 L0,6 L7,3 z" fill="var(--dg-info-soft)"></path></marker><marker id="m3" markerWidth="7" markerHeight="7" refX="5" refY="3" orient="auto"><path d="M0,0 L0,6 L7,3 z" fill="var(--dg-ok-soft)"></path></marker></defs><rect x="10" y="70" width="130" height="55" rx="5" fill="var(--dg-inverse)" stroke="var(--dg-warn-soft)" stroke-width="1.2"></rect><text x="75" y="93" text-anchor="middle" fill="var(--dg-on-inverse-warn)" font-family="var(--font-diagram-mono)" font-size="11">LAVORATORI</text><text x="75" y="111" text-anchor="middle" fill="var(--dg-on-inverse-2)" font-family="var(--font-diagram-mono)" font-size="9">/metrics endpoint</text><rect x="10" y="145" width="130" height="40" rx="5" fill="var(--dg-inverse)" stroke="var(--dg-warn-soft)" stroke-width="1.2"></rect><text x="75" y="162" text-anchor="middle" fill="var(--dg-on-inverse-warn)" font-family="var(--font-diagram-mono)" font-size="11">SERVER API</text><text x="75" y="177" text-anchor="middle" fill="var(--dg-on-inverse-2)" font-family="var(--font-diagram-mono)" font-size="9">/metrics endpoint</text><rect x="230" y="80" width="130" height="55" rx="5" fill="var(--dg-inverse)" stroke="var(--dg-info-soft)" stroke-width="1.2"></rect><text x="295" y="103" text-anchor="middle" fill="var(--dg-on-inverse-info)" font-family="var(--font-diagram-mono)" font-size="11">PROMETEO</text><text x="295" y="121" text-anchor="middle" fill="var(--dg-on-inverse-2)" font-family="var(--font-diagram-mono)" font-size="9">gratta ogni 15 s</text><rect x="450" y="60" width="100" height="40" rx="5" fill="var(--dg-inverse)" stroke="var(--dg-ok-soft)" stroke-width="1.2"></rect><text x="500" y="85" text-anchor="middle" fill="var(--dg-on-inverse-ok)" font-family="var(--font-diagram-mono)" font-size="11">GRAFANA</text><rect x="450" y="120" width="100" height="40" rx="5" fill="var(--dg-inverse)" stroke="var(--dg-accent-soft)" stroke-width="1.2"></rect><text x="500" y="138" text-anchor="middle" fill="var(--dg-on-inverse-accent)" font-family="var(--font-diagram-mono)" font-size="11">GESTORE ALLERTA</text><text x="500" y="153" text-anchor="middle" fill="var(--dg-on-inverse-2)" font-family="var(--font-diagram-mono)" font-size="9">Slack/PagerDuty</text><rect x="590" y="80" width="80" height="40" rx="5" fill="var(--dg-inverse)" stroke="var(--dg-plum)" stroke-width="1.2"></rect><text x="630" y="98" text-anchor="middle" fill="var(--dg-on-inverse-accent)" font-family="var(--font-diagram-mono)" font-size="10">REDIS</text><text x="630" y="112" text-anchor="middle" fill="var(--dg-on-inverse-2)" font-family="var(--font-diagram-mono)" font-size="9">esportatore</text><line x1="142" y1="92" x2="228" y2="100" stroke="var(--dg-warn-soft)" stroke-width="1" stroke-dasharray="4 3" marker-end="url(#m1)"></line><line x1="142" y1="162" x2="228" y2="110" stroke="var(--dg-warn-soft)" stroke-width="1" stroke-dasharray="4 3" marker-end="url(#m1)"></line><text x="185" y="88" fill="var(--dg-ink-2)" font-family="var(--font-diagram-mono)" font-size="8">raschiare</text><line x1="362" y1="96" x2="448" y2="76" stroke="var(--dg-ok-soft)" stroke-width="1" marker-end="url(#m3)"></line><line x1="362" y1="110" x2="448" y2="132" stroke="var(--dg-accent-soft)" stroke-width="1" marker-end="url(#m2)"></line><line x1="590" y1="98" x2="362" y2="100" stroke="var(--dg-plum)" stroke-width="1" stroke-dasharray="4 3" marker-end="url(#m1)"></line><text x="475" y="92" fill="var(--dg-on-inverse-2)" font-family="var(--font-diagram-mono)" font-size="8">raschiare</text></svg>
+</Diagram>
+
+### Passaggio 1: strumenti per i tuoi lavoratori
+
+Ogni lavoratore espone a `/metrics` Endpoint HTTP in formato testo Prometheus e ogni ecosistema ha un client che esegue la formattazione per te: `prometheus_client` in Pitone, `prometheus/client_golang` in Vai, `prom-client` in Node e Micrometro (tramite Spring Boot Actuator) in Java. Quattro parametri portano quasi tutto il valore, un **contatore** di attività per stato, un **istogramma** di durate, un **indicatore** di profondità della coda e un **contatore** di tentativi.
+
+Vai a Python JavaScript TypeScript Java
+
+quattro metriche e un wrapper che ne riempie tre
+
+```go title="metrics/metrics.go / Go + client_golang"
+// Go, Full metrics instrumentation for a worker process
+package metrics
+
+// -- Define metrics ---------------------------------------------
+var (
+    TaskTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+        Name: "worker_tasks_total",
+        Help: "Total tasks processed",
+    }, []string{"task_name", "status"}) // labels: status=success|failure
+
+    TaskDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
+        Name:    "worker_task_duration_seconds",
+        Help:    "Task processing duration",
+        Buckets: []float64{.01, .05, .1, .5, 1, 5, 10, 30}, // bucket boundaries
+    }, []string{"task_name"})
+
+    QueueDepth = promauto.NewGaugeVec(prometheus.GaugeOpts{
+        Name: "worker_queue_depth",
+        Help: "Current tasks waiting in queue",
+    }, []string{"queue_name"})
+
+    RetryCount = promauto.NewCounterVec(prometheus.CounterOpts{
+        Name: "worker_task_retries_total",
+        Help: "Number of task retries",
+    }, []string{"task_name"})
+)
+
+// -- Middleware to wrap any handler with metrics -----------------
+// asynq.MiddlewareFunc is the same shape as the Python decorator: it
+// wraps the handler instead of being called from inside it, so no task
+// body has to remember to record anything.
+func Track(taskName string) asynq.MiddlewareFunc {
+    return func(next asynq.Handler) asynq.Handler {
+        return asynq.HandlerFunc(func(ctx context.Context, t *asynq.Task) error {
+            start := time.Now()
+            // deferred, so the duration is recorded on BOTH paths
+            defer func() {
+                TaskDuration.WithLabelValues(taskName).
+                    Observe(time.Since(start).Seconds())
+            }()
+
+            if n, _ := asynq.GetRetryCount(ctx); n > 0 {
+                RetryCount.WithLabelValues(taskName).Inc()
+            }
+
+            if err := next.ProcessTask(ctx, t); err != nil {
+                TaskTotal.WithLabelValues(taskName, "failure").Inc()
+                return err
+            }
+            TaskTotal.WithLabelValues(taskName, "success").Inc()
+            return nil
+        })
+    }
+}
+
+// Start /metrics server on port 9090 (Prometheus scrapes this)
+func Serve() {
+    http.Handle("/metrics", promhttp.Handler())
+    go http.ListenAndServe(":9090", nil)
+}
+```
+
+```python title="metrics.py / Python + prometheus_client + Celery"
+# Python, Full metrics instrumentation for a worker process
+from prometheus_client import (
+    Counter, Histogram, Gauge, start_http_server
+)
+import time
+
+# -- Define metrics ---------------------------------------------
+TASK_TOTAL = Counter(
+    'worker_tasks_total',
+    'Total tasks processed',
+    ['task_name', 'status']  # labels: task_name, status=success|failure
+)
+
+TASK_DURATION = Histogram(
+    'worker_task_duration_seconds',
+    'Task processing duration',
+    ['task_name'],
+    buckets=[.01, .05, .1, .5, 1, 5, 10, 30]  # histogram bucket boundaries
+)
+
+QUEUE_DEPTH = Gauge(
+    'worker_queue_depth',
+    'Current tasks waiting in queue',
+    ['queue_name']
+)
+
+RETRY_COUNT = Counter(
+    'worker_task_retries_total',
+    'Number of task retries',
+    ['task_name']
+)
+
+# -- Decorator to wrap any task with metrics --------------------
+def track_metrics(task_name: str):
+    def decorator(func):
+        def wrapper(*args, **kwargs):
+            start = time.time()
+            try:
+                result = func(*args, **kwargs)
+                TASK_TOTAL.labels(task_name=task_name, status="success").inc()
+                return result
+            except Exception as e:
+                TASK_TOTAL.labels(task_name=task_name, status="failure").inc()
+                raise
+            finally:
+                TASK_DURATION.labels(task_name=task_name).observe(time.time() - start)
+        return wrapper
+    return decorator
+
+# Start /metrics server on port 9090 (Prometheus scrapes this)
+start_http_server(9090)
+
+# -- Apply to task ----------------------------------------------
+@app.task(bind=True, max_retries=5)
+@track_metrics("send_verification_email")
+def send_verification_email(self, user_id, email, token):
+    if self.request.retries > 0:
+        RETRY_COUNT.labels(task_name="send_verification_email").inc()
+    _do_send_email(email, token)
+```
+
+```js title="metrics.js / Node 20+ + prom-client + BullMQ"
+// Node, Full metrics instrumentation for a worker process
+import { Counter, Histogram, Gauge, register } from 'prom-client'
+import express from 'express'
+
+// -- Define metrics ---------------------------------------------
+export const TASK_TOTAL = new Counter({
+  name: 'worker_tasks_total',
+  help: 'Total tasks processed',
+  labelNames: ['task_name', 'status'], // status=success|failure
+})
+
+export const TASK_DURATION = new Histogram({
+  name: 'worker_task_duration_seconds',
+  help: 'Task processing duration',
+  labelNames: ['task_name'],
+  buckets: [0.01, 0.05, 0.1, 0.5, 1, 5, 10, 30], // histogram bucket boundaries
+})
+
+export const QUEUE_DEPTH = new Gauge({
+  name: 'worker_queue_depth',
+  help: 'Current tasks waiting in queue',
+  labelNames: ['queue_name'],
+})
+
+export const RETRY_COUNT = new Counter({
+  name: 'worker_task_retries_total',
+  help: 'Number of task retries',
+  labelNames: ['task_name'],
+})
+
+// -- Wrapper to give any processor metrics ----------------------
+export function trackMetrics(taskName, processor) {
+  return async (job) => {
+    const end = TASK_DURATION.startTimer({ task_name: taskName })
+    if (job.attemptsMade > 0) {
+      RETRY_COUNT.inc({ task_name: taskName })
+    }
+    try {
+      const result = await processor(job)
+      TASK_TOTAL.inc({ task_name: taskName, status: 'success' })
+      return result
+    } catch (err) {
+      TASK_TOTAL.inc({ task_name: taskName, status: 'failure' })
+      throw err
+    } finally {
+      end() // records the duration on both the success and failure paths
+    }
+  }
+}
+
+// Start /metrics server on port 9090 (Prometheus scrapes this)
+const metricsApp = express()
+metricsApp.get('/metrics', async (_req, res) => {
+  res.set('Content-Type', register.contentType)
+  res.end(await register.metrics())
+})
+metricsApp.listen(9090)
+
+// -- Apply to task ----------------------------------------------
+new Worker('email', trackMetrics('send_verification_email', emailProcessor), { connection })
+
+// QUEUE_DEPTH is the one no wrapper can fill in: it describes the QUEUE,
+// not any single job, so it has to be polled on a timer.
+setInterval(async () => {
+  QUEUE_DEPTH.set({ queue_name: 'email' }, await emailQueue.getWaitingCount())
+}, 15_000)
+```
+
+```ts title="metrics.ts / TypeScript 5+ + prom-client + BullMQ"
+import type { Job } from 'bullmq'
+
+// The Prometheus rule worth burning in before you add a single label:
+// labels must be LOW cardinality. `task_name` has maybe twenty values,
+// which is fine. A user id or a job id creates a new time series per
+// user, and that is how people take their own Prometheus down. Pinning
+// the label type instead of accepting an open Record is a cheap guard.
+type TaskLabels = { task_name: string; status?: 'success' | 'failure' }
+
+// The generics keep the wrapper invisible at the call site: what goes in
+// is a processor, what comes out is the SAME processor type.
+export function trackMetrics<T, R>(
+  taskName: string,
+  processor: (job: Job<T>) => Promise<R>,
+): (job: Job<T>) => Promise<R> {
+  return async (job: Job<T>): Promise<R> => {
+    const labels: TaskLabels = { task_name: taskName }
+    const end = TASK_DURATION.startTimer(labels)
+
+    if (job.attemptsMade > 0) {
+      RETRY_COUNT.inc(labels)
+    }
+
+    try {
+      const result = await processor(job)
+      TASK_TOTAL.inc({ ...labels, status: 'success' })
+      return result
+    } catch (err) {
+      TASK_TOTAL.inc({ ...labels, status: 'failure' })
+      throw err
+    } finally {
+      end() // records the duration on both paths
+    }
+  }
+}
+```
+
+```java title="WorkerMetrics.java / Java 17+ + Micrometer + Actuator"
+// Java, Full metrics instrumentation for a worker process.
+// spring-boot-starter-actuator + micrometer-registry-prometheus give you
+// the /actuator/prometheus endpoint for free; you define the metrics.
+@Component
+public class WorkerMetrics {
+    private final MeterRegistry registry;
+
+    WorkerMetrics(MeterRegistry registry, EmailQueue queue) {
+        this.registry = registry;
+
+        // A Gauge is POLLED, not incremented: Micrometer calls this
+        // supplier at scrape time, which is the right shape for a value
+        // that describes the queue rather than any one task.
+        Gauge.builder("worker_queue_depth", queue::waitingCount)
+             .tag("queue_name", "email")
+             .register(registry);
+    }
+
+    /** Wraps any task body with the counter + histogram, like the decorator. */
+    public <T> T track(String taskName, Supplier<T> body) {
+        Timer.Sample sample = Timer.start(registry);
+        try {
+            T result = body.get();
+            registry.counter("worker_tasks_total",
+                "task_name", taskName, "status", "success").increment();
+            return result;
+        } catch (RuntimeException e) {
+            registry.counter("worker_tasks_total",
+                "task_name", taskName, "status", "failure").increment();
+            throw e;
+        } finally {
+            // stop() in the finally block, so a failed task is timed too
+            sample.stop(Timer.builder("worker_task_duration_seconds")
+                .tag("task_name", taskName)
+                .publishPercentileHistogram() // the histogram buckets
+                .register(registry));
+        }
+    }
+}
+
+// application.yml, expose the scrape endpoint on the metrics port:
+//   management.endpoints.web.exposure.include: prometheus
+//   management.server.port: 9090
+```
+
+### Passaggio 2: configurazione di Prometeo
+
+```yaml
+# prometheus.yml, Scrape config
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+rule_files:
+  - "alert_rules.yml"
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ["alertmanager:9093"]
+
+scrape_configs:
+  - job_name: "celery_workers"
+    static_configs:
+      - targets:
+          - "worker-1:9090"
+          - "worker-2:9090"
+          - "worker-3:9090"
+
+  - job_name: "redis"
+    static_configs:
+      - targets: ["redis-exporter:9121"]  # oliver006/redis_exporter
+
+  - job_name: "api_server"
+    static_configs:
+      - targets: ["api:8080"]
+```
+
+### Passaggio 3: regole di avviso
+
+```text
+# alert_rules.yml, Fire alerts when things go wrong
+groups:
+  - name: task_queue_alerts
+    rules:
+
+      # Alert if queue depth stays high for 5 minutes
+      - alert: HighQueueDepth
+        expr: worker_queue_depth{queue_name="email"} > 1000
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Email queue backed up ({{ $value }} tasks)"
+          description: "Queue depth has been above 1000 for 5+ minutes. Scale workers."
+
+      # Alert if failure rate > 10% over last 5 minutes
+      - alert: HighTaskFailureRate
+        expr: |
+          rate(worker_tasks_total{status="failure"}[5m])
+          / rate(worker_tasks_total[5m]) > 0.1
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Task failure rate above 10%"
+
+      # Alert if a worker process goes down (no scrape for 1 min)
+      - alert: WorkerDown
+        expr: up{job="celery_workers"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Worker {{ $labels.instance }} is down"
+```
+
+### Passaggio 4: principali pannelli Grafana da costruire
+
+| Pannello | Interrogazione (PromQL) | Soglia di avviso |
+| --------------------- | ------------------------------------------------------------------------------------- | -------------------------------------- |
+| Profondità coda (indicatore) | `worker_queue_depth{queue_name="email"}`                                              | &gt; 1000 -&gt; avvisa; &gt; 5000 -&gt; critico |
+| Tasso di successo delle attività (%) | `rate(worker_tasks_total{status="success"}[5m]) / rate(worker_tasks_total[5m]) * 100` | &lt; 95% -&gt; avvisa; &lt; 90% -&gt; critico |
+| p95 Latenza attività | `histogram_quantile(0.95, rate(worker_task_duration_seconds_bucket[5m]))`             | &gt; 30s -&gt; avvisa |
+| Frequenza tentativi | `rate(worker_task_retries_total[5m])`                                                 | Picco improvviso -&gt; problema del servizio esterno |
+| Conteggio lavoratori (attivo) | `count(up{job="celery_workers"} == 1)`                                                | &lt; min\_lavoratori -&gt; critico |
+| Utilizzo della memoria Redis | `redis_memory_used_bytes / redis_memory_max_bytes * 100`                              | &gt; 80% -&gt; avvisa |
+
+<Callout type="info" title="Esportatore Redis">
+Esegui [oliver006/redis\_exporter](https://github.com/oliver006/redis_exporter) come sidecar. Espone oltre 100 parametri Redis a Prometheus, lunghezze delle code, memoria, client connessi, accessi/mancati spazi delle chiavi, zero codice richiesto.
+</Callout>
+
+13
+
+## Migliori pratiche
+
+### 1. Mantieni le attività piccole e mirate
+
+Una singola attività dovrebbe fare **una cosa**. Non raggruppare l'invio di e-mail + la pulizia del DB + i report analitici in un'unica attività. Se un passaggio fallisce, riprovi tutto. Piccole attività = tentativi precisi, debug più semplice, migliore scalabilità.
+
+Se più cose dipendono l'una dall'altra, utilizza **attività a catena** (genitore-figlio). Se sono indipendenti, eseguili in parallelo.
+
+### 2. Evitare attività a lunga esecuzione
+
+Se l'esecuzione di un'attività richiede minuti, suddividila in parti più piccole. Le attività lunghe consumano thread di lavoro, sono più difficili da riprovare correttamente e sono soggette alla scadenza del timeout di visibilità. Un'attività che richiede 10 minuti -&gt; 10 attività che richiedono 1 minuto ciascuna.
+
+### 3. Robusta gestione e registrazione degli errori
+
+A differenza di una richiesta web in cui puoi restituire un 500 e il client lo vede, **le attività in background falliscono silenziosamente** a meno che tu non abbia integrato l'osservabilità. Ogni gestore deve:
+
+- Cattura tutte le eccezioni, non lasciare che il panico/le eccezioni non gestite uccidano silenziosamente il lavoratore.
+- Registra l'ID attività, l'ID utente, il tipo di errore e l'analisi dello stack completo in caso di errore.
+- Distinguere gli errori temporanei da quelli permanenti, utilizzare `SkipRetry` (Asynq) o `raises=(SkipRetry,)` (Sedano) per errori irreversibili.
+- Invia errori critici a un canale di avviso (Slack, PagerDuty).
+
+### 4. Monitorare la lunghezza della coda e la salute dei lavoratori
+
+Imposta **soglie di avviso**: se la profondità della coda &gt; 10.000 -&gt; attiva la scalabilità automatica o avvisa i tecnici. Se un pod di lavoro si riavvia più di 3 volte in 5 minuti -&gt; avviso. Utilizza i dashboard Grafana supportati da Prometheus (o CloudWatch per SQS).
+
+### 5. Utilizzare le code di messaggi non recapitabili
+
+Non lasciare mai che le attività scompaiano silenziosamente. Configura un DLQ in modo che le attività che esauriscono tutti i tentativi arrivino in un posto ispezionabile. Controlla regolarmente il DLQ, gli errori ricorrenti indicano un bug sistemico.
+
+<Callout type="info" title="Lista di controllo riepilogativa">
+L'attività è idempotente   Il gestore ha try/catch   Gli errori vengono registrati con il contesto   Metriche Prometheus emesse   DLQ configurato   Backoff esponenziale abilitato   Timeout visibilità impostato in modo appropriato   I lavoratori sono stateless (scalabili orizzontalmente)
+</Callout>
+
+14
+
+## Confronto quadro
+
+| Quadro | Lingua | Intermediario | Nuovi tentativi | Pianificazione | Note |
+| ------------ | -------- | --------------- | ------------------- | ------------------ | ------------------------------------------------------------------------ |
+| **Sedano** | Pitone | Redis, ConiglioMQ | Backoff esponenziale | Battere il sedano | La soluzione Python più matura. Grande ecosistema.                            |
+| **BullMQ** | Node.js | Redis | Integrato | Lavori ripetibili | Prima TypeScript. Buona dashboard dell'interfaccia utente (Bull Board).                        |
+| **Asynq** | Vai | Flussi Redis | Configurabile | Pianificatore integrato | Go leggero e idiomatico. Include l'interfaccia utente Web (asynqmon).                   |
+| **Sidekiq** | Rubino | Redis | Integrato | Sidekiq-Cron | Di fatto lo standard Ruby. Eccellente interfaccia utente web.                                |
+| **Temporale** | Poliglotta | Proprio server | Flussi di lavoro durevoli | Integrato | Pesante ma di livello aziendale. Orchestrazione completa del flusso di lavoro, non solo attività. |
+
+---
+
+<Callout type="info" title="Riepilogo">
+Le attività in background sono essenziali per qualsiasi backend di produzione. Disaccoppiano l'affidabilità della tua API dai servizi esterni, prevengono errori indotti dal timeout, abilitano nuovi tentativi automatici e ti consentono di scalare orizzontalmente l'elaborazione indipendentemente dai tuoi server API. I modelli qui, produttore/consumatore, backoff esponenziale, timeout di visibilità, idempotenza, monitoraggio, si applicano indipendentemente dal linguaggio o dal framework. Padroneggiali e costruirai backend di livello produttivo.
+</Callout>
+
+20
+
+## Orchestrazione temporale e del flusso di lavoro
+
+Le code di attività standard (Celery, BullMQ, Asynq) sono ottime per _attività indipendenti_, attiva e dimentica, riprova in caso di errore. Ma quando hai **flussi di lavoro a più fasi e di lunga durata** con dipendenze complesse, ramificazioni condizionali, passaggi di approvazione umana o logica di compensazione (modello saga), hai bisogno di qualcosa di più potente: un **motore di orchestrazione del flusso di lavoro**.
+
+<Callout type="info" title="Le soluzioni temporali del problema fondamentale">
+Immagina un flusso di lavoro di pagamento: addebito su carta -&gt; prenotazione inventario -&gt; invio e-mail di conferma -&gt; notifica magazzino -&gt; aggiornamento punti fedeltà. Ogni passaggio può fallire in modo indipendente. Se il passaggio 4 fallisce, rimborsi il passaggio 1? Come si riprende dal passaggio 4 dopo un arresto anomalo del server? Come aspetti che un essere umano approvi il passaggio 3 prima di continuare? È qui che le code delle attività si interrompono e i motori del flusso di lavoro brillano.
+</Callout>
+
+### Coda di attività e motore del flusso di lavoro
+
+| Capacità | Coda attività (Celery/Asynq/BullMQ) | Temporale |
+| ------------------------------ | -------------------------------------------- | --------------------------------------------- |
+| **Nuovi tentativi di attività individuali** | Integrato | Integrato |
+| **Flussi di lavoro in più fasi** | Manuale, concatena tu stesso le attività | Nativi, i flussi di lavoro sono di prima classe |
+| **Persistenza dello stato del flusso di lavoro** | Lo gestisci tu (record DB, flag) | Automatico, l'intera cronologia di esecuzione è persistente |
+| **Recupero dopo un incidente** | Riprova dall'inizio dell'attività | Riprendi dal passaggio esatto in cui si è verificato l'arresto anomalo |
+| **Compensazione / rollback** | Codice manuale | Supporto del modello saga nativo |
+| **Di lunga durata (giorni/mesi)** | Difficile, timeout di visibilità, limiti di connessione | Nativo, i timer possono attivarsi dopo mesi |
+| **Umano nel circuito** | Molto difficile | Segnali e query nativi |
+| **Complessità operativa** | Basso | Alta, richiede cluster di server temporali |
+| **Lingue** | Specifico della lingua | Vai, Python, Java, TypeScript, .NET |
+
+### Concetti temporali fondamentali
+
+Flusso di lavoro
+
+Una funzione duratura che orchestra l'intero processo aziendale. Scritto come codice normale ma Temporal serializza ogni passaggio. Se il server si blocca, l'esecuzione riprende esattamente da dove era stata interrotta.
+
+Attività
+
+Un'unità di lavoro individuale, equivalente a un compito di Sedano. Dispone di criteri di ripetizione, timeout e heartbeat propri. Le attività interagiscono con il mondo esterno (DB, API esterne).
+
+Lavoratore
+
+Un processo che interroga il server temporale per le attività del flusso di lavoro/attività e le esegue. Stesso concetto dei lavoratori di Sedano.
+
+Segnale
+
+Un evento esterno inviato a un flusso di lavoro in esecuzione. Per esempio. "pagamento approvato dall'uomo" -&gt; il flusso di lavoro riprende. Abilita modelli human-in-the-loop.
+
+Domanda
+
+Leggi lo stato corrente di un flusso di lavoro in esecuzione senza influenzarlo. Per esempio. "a che punto si trova quest'ordine?"
+
+Storia degli eventi
+
+Temporale persiste ogni singolo evento nella durata di un flusso di lavoro. In questo modo si ottiene il ripristino da crash, al riavvio riproduce la cronologia per ripristinare lo stato.
+
+### Esempio: flusso di lavoro di elaborazione video
+
+La stessa attività della catena di caricamento video che abbiamo visto nella Sezione 9, ora implementata con Temporal. Temporal fornisce SDK di prima parte per Go, Java, Python e TypeScript e la forma seguente è deliberatamente la stessa in tutti essi: ogni passaggio si legge come una normale chiamata di funzione e ognuno viene registrato nella cronologia del flusso di lavoro, quindi un arresto anomalo riprende dal primo passaggio che non era terminato.
+
+Vai a Python JavaScript TypeScript Java
+
+cinque passaggi, due dei quali in parallelo, ripetibili in qualsiasi momento
+
+```go title="workflows/video_processing.go / Go + Temporal SDK"
+// workflows/video_processing.go
+package workflows
+
+import (
+    "time"
+    "go.temporal.io/sdk/workflow"
+    "go.temporal.io/sdk/activity"
+    "myapp/activities"
+)
+
+// VideoProcessingWorkflow, orchestrates the entire pipeline
+// Temporal persists every step, crash at any point = resume here
+func VideoProcessingWorkflow(ctx workflow.Context, videoID string) error {
+    // Activity options, each step has its own retry policy
+    actOpts := workflow.ActivityOptions{
+        StartToCloseTimeout: 10 * time.Minute,
+        RetryPolicy: &temporal.RetryPolicy{
+            MaxAttempts:        3,
+            InitialInterval:    time.Minute,
+            BackoffCoefficient: 2.0,
+        },
+    }
+    ctx = workflow.WithActivityOptions(ctx, actOpts)
+
+    // Step 1: Encode video to multiple resolutions
+    // If server crashes here, workflow resumes from step 1 on restart
+    var encodedPath string
+    if err := workflow.ExecuteActivity(ctx, activities.EncodeVideo, videoID).Get(ctx, &encodedPath); err != nil {
+        return err // step 1 failed all retries, workflow fails
+    }
+
+    // Step 2 + 3: Thumbnail generation AND transcription in parallel
+    thumbFuture := workflow.ExecuteActivity(ctx, activities.GenerateThumbnails, encodedPath)
+    transcriptFuture := workflow.ExecuteActivity(ctx, activities.GenerateTranscription, encodedPath)
+
+    // Wait for both, if either fails, the workflow fails (with its own retries first)
+    if err := thumbFuture.Get(ctx, nil); err != nil { return err }
+    if err := transcriptFuture.Get(ctx, nil); err != nil { return err }
+
+    // Step 4: Process thumbnails (depends on step 2 completing)
+    if err := workflow.ExecuteActivity(ctx, activities.ProcessThumbnailImages, videoID).Get(ctx, nil); err != nil {
+        return err
+    }
+
+    // Step 5: Notify user their video is ready
+    return workflow.ExecuteActivity(ctx, activities.NotifyUserVideoReady, videoID).Get(ctx, nil)
+}
+```
+
+```python title="workflows/video_processing.py / Python + temporalio"
+# workflows/video_processing.py
+import asyncio
+from datetime import timedelta
+
+from temporalio import workflow
+from temporalio.common import RetryPolicy
+
+with workflow.unsafe.imports_passed_through():
+    from activities import (
+        encode_video, generate_thumbnails, generate_transcription,
+        process_thumbnail_images, notify_user_video_ready,
+    )
+
+
+@workflow.defn
+class VideoProcessingWorkflow:
+    """Orchestrates the entire pipeline.
+
+    Temporal persists every step, crash at any point = resume here.
+    """
+
+    @workflow.run
+    async def run(self, video_id: str) -> None:
+        # Activity options, each step has its own retry policy
+        opts = dict(
+            start_to_close_timeout=timedelta(minutes=10),
+            retry_policy=RetryPolicy(
+                maximum_attempts=3,
+                initial_interval=timedelta(minutes=1),
+                backoff_coefficient=2.0,
+            ),
+        )
+
+        # Step 1: Encode video to multiple resolutions.
+        # If the worker crashes here, the workflow resumes from step 1.
+        encoded_path = await workflow.execute_activity(encode_video, video_id, **opts)
+
+        # Step 2 + 3: Thumbnail generation AND transcription in parallel.
+        # gather() is what makes them concurrent; awaiting each in turn
+        # would quietly serialise them and double the wall-clock time.
+        await asyncio.gather(
+            workflow.execute_activity(generate_thumbnails, encoded_path, **opts),
+            workflow.execute_activity(generate_transcription, encoded_path, **opts),
+        )
+
+        # Step 4: Process thumbnails (depends on step 2 completing)
+        await workflow.execute_activity(process_thumbnail_images, video_id, **opts)
+
+        # Step 5: Notify user their video is ready
+        await workflow.execute_activity(notify_user_video_ready, video_id, **opts)
+```
+
+```js title="workflows/videoProcessing.js / Node 20+ + @temporalio/workflow"
+// workflows/videoProcessing.js
+import { proxyActivities } from '@temporalio/workflow'
+
+// Activity options, each step has its own retry policy
+const {
+  encodeVideo,
+  generateThumbnails,
+  generateTranscription,
+  processThumbnailImages,
+  notifyUserVideoReady,
+} = proxyActivities({
+  startToCloseTimeout: '10 minutes',
+  retry: { maximumAttempts: 3, initialInterval: '1 minute', backoffCoefficient: 2 },
+})
+
+// videoProcessingWorkflow, orchestrates the entire pipeline.
+// Temporal persists every step, crash at any point = resume here.
+export async function videoProcessingWorkflow(videoId) {
+  // Step 1: Encode video to multiple resolutions.
+  // If the worker crashes here, the workflow resumes from step 1.
+  const encodedPath = await encodeVideo(videoId)
+
+  // Step 2 + 3: Thumbnail generation AND transcription in parallel
+  await Promise.all([
+    generateThumbnails(encodedPath),
+    generateTranscription(encodedPath),
+  ])
+
+  // Step 4: Process thumbnails (depends on step 2 completing)
+  await processThumbnailImages(videoId)
+
+  // Step 5: Notify user their video is ready
+  await notifyUserVideoReady(videoId)
+}
+
+// Temporal ships ONE SDK for Node, written in TypeScript. It runs from
+// plain JavaScript exactly as above; what you give up is the compile-time
+// check on activity names and arguments shown in the TypeScript tab.
+//
+// The hard rule in any language: workflow code must be deterministic. No
+// Date.now(), no Math.random(), no direct fetch. Replay has to produce
+// the same decisions, so anything non-deterministic belongs in an
+// activity (or in workflow.now() / workflow.random()).
+```
+
+```ts title="workflows/videoProcessing.ts / TypeScript 5+ + @temporalio/workflow"
+import { proxyActivities } from '@temporalio/workflow'
+import type * as activities from '../activities'
+
+// `typeof activities` is the TypeScript SDK's best trick: the signatures
+// come from the REAL implementations, so renaming an activity or changing
+// its arguments breaks the build rather than breaking a replay in
+// production, weeks later, on a workflow that started before the deploy.
+const {
+  encodeVideo,
+  generateThumbnails,
+  generateTranscription,
+  processThumbnailImages,
+  notifyUserVideoReady,
+} = proxyActivities<typeof activities>({
+  // Activity options, each step has its own retry policy
+  startToCloseTimeout: '10 minutes',
+  retry: { maximumAttempts: 3, initialInterval: '1 minute', backoffCoefficient: 2 },
+})
+
+// videoProcessingWorkflow, orchestrates the entire pipeline.
+// Temporal persists every step, crash at any point = resume here.
+export async function videoProcessingWorkflow(videoId: string): Promise<void> {
+  // Step 1: Encode video to multiple resolutions.
+  // If the worker crashes here, the workflow resumes from step 1.
+  const encodedPath: string = await encodeVideo(videoId)
+
+  // Step 2 + 3: Thumbnail generation AND transcription in parallel
+  await Promise.all([
+    generateThumbnails(encodedPath),
+    generateTranscription(encodedPath),
+  ])
+
+  // Step 4: Process thumbnails (depends on step 2 completing)
+  await processThumbnailImages(videoId)
+
+  // Step 5: Notify user their video is ready
+  await notifyUserVideoReady(videoId)
+}
+```
+
+```java title="VideoProcessingWorkflow.java / Java 17+ + Temporal SDK"
+// workflows/VideoProcessingWorkflow.java
+@WorkflowInterface
+public interface VideoProcessingWorkflow {
+    @WorkflowMethod
+    void process(String videoId);
+}
+
+public class VideoProcessingWorkflowImpl implements VideoProcessingWorkflow {
+
+    // Activity options, each step has its own retry policy
+    private static final ActivityOptions OPTIONS = ActivityOptions.newBuilder()
+        .setStartToCloseTimeout(Duration.ofMinutes(10))
+        .setRetryOptions(RetryOptions.newBuilder()
+            .setMaximumAttempts(3)
+            .setInitialInterval(Duration.ofMinutes(1))
+            .setBackoffCoefficient(2.0)
+            .build())
+        .build();
+
+    // The stub looks like an ordinary object and is not one: every call
+    // on it is recorded in the workflow history.
+    private final VideoActivities activities =
+        Workflow.newActivityStub(VideoActivities.class, OPTIONS);
+
+    @Override
+    public void process(String videoId) {
+        // Step 1: Encode video to multiple resolutions.
+        // If the worker crashes here, the workflow resumes from step 1.
+        String encodedPath = activities.encodeVideo(videoId);
+
+        // Step 2 + 3: Thumbnail generation AND transcription in parallel.
+        // Async.procedure STARTS the activity and returns immediately;
+        // calling activities.generateThumbnails() directly would block.
+        Promise<Void> thumbs =
+            Async.procedure(activities::generateThumbnails, encodedPath);
+        Promise<Void> transcript =
+            Async.procedure(activities::generateTranscription, encodedPath);
+
+        // Wait for both, if either fails, the workflow fails (after its retries)
+        Promise.allOf(thumbs, transcript).get();
+
+        // Step 4: Process thumbnails (depends on step 2 completing)
+        activities.processThumbnailImages(videoId);
+
+        // Step 5: Notify user their video is ready
+        activities.notifyUserVideoReady(videoId);
+    }
+}
+```
+
+### Esempio: Human-in-the-Loop con segnali
+
+Un **segnale** è un evento esterno inviato in un flusso di lavoro in esecuzione. È ciò che consente a un flusso di lavoro di restare in attesa di una persona, per un giorno o per un mese, senza trattenere un thread, una connessione o un blocco di riga da nessuna parte.
+
+Vai a Python JavaScript TypeScript Java
+
+attendere 24 ore per un essere umano e compensare se nessuno risponde
+
+```go title="workflows/payment_approval.go / Go + Temporal SDK"
+// workflows/payment_approval.go, Wait for human signal
+func PaymentApprovalWorkflow(ctx workflow.Context, orderID string) error {
+    // Register a signal channel, external events can wake this workflow
+    approvalCh := workflow.GetSignalChannel(ctx, "approval-signal")
+
+    // Step 1: Process payment details
+    workflow.ExecuteActivity(ctx, activities.PreparePayment, orderID).Get(ctx, nil)
+
+    // Step 2: Wait up to 24 hours for human approval
+    // Temporal pauses here, no CPU/memory consumed while waiting
+    var approved bool
+    selector := workflow.NewSelector(ctx)
+    selector.AddReceive(approvalCh, func(ch workflow.ReceiveChannel, more bool) {
+        ch.Receive(ctx, &approved)
+    })
+    selector.AddFuture(workflow.NewTimer(ctx, 24*time.Hour), func(f workflow.Future) {
+        approved = false // timeout, auto-reject
+    })
+    selector.Select(ctx)
+
+    if !approved {
+        // Saga: compensate previous steps
+        workflow.ExecuteActivity(ctx, activities.RefundPayment, orderID).Get(ctx, nil)
+        return nil
+    }
+    return workflow.ExecuteActivity(ctx, activities.FinalizePayment, orderID).Get(ctx, nil)
+}
+
+// To send approval signal from your API handler:
+func ApprovePaymentHandler(c *gin.Context) {
+    orderID := c.Param("id")
+    temporalClient.SignalWorkflow(c, orderID, "", "approval-signal", true)
+    c.JSON(200, gin.H{"status": "approved"})
+}
+```
+
+```python title="workflows/payment_approval.py / Python + temporalio"
+# workflows/payment_approval.py, Wait for human signal
+@workflow.defn
+class PaymentApprovalWorkflow:
+    def __init__(self) -> None:
+        self._approved: bool | None = None
+
+    # A signal is just a method: external events can wake this workflow
+    @workflow.signal
+    def approve(self, approved: bool) -> None:
+        self._approved = approved
+
+    @workflow.run
+    async def run(self, order_id: str) -> None:
+        # Step 1: Process payment details
+        await workflow.execute_activity(prepare_payment, order_id, **opts)
+
+        # Step 2: Wait up to 24 hours for human approval.
+        # Temporal pauses here, no CPU/memory consumed while waiting.
+        try:
+            await workflow.wait_condition(
+                lambda: self._approved is not None,
+                timeout=timedelta(hours=24),
+            )
+        except asyncio.TimeoutError:
+            self._approved = False  # timeout, auto-reject
+
+        if not self._approved:
+            # Saga: compensate previous steps
+            await workflow.execute_activity(refund_payment, order_id, **opts)
+            return
+
+        await workflow.execute_activity(finalize_payment, order_id, **opts)
+
+
+# To send the approval signal from your API handler:
+handle = client.get_workflow_handle(order_id)
+await handle.signal(PaymentApprovalWorkflow.approve, True)
+```
+
+```js title="workflows/paymentApproval.js / Node 20+ + @temporalio/workflow"
+// workflows/paymentApproval.js, Wait for human signal
+import { condition, defineSignal, setHandler } from '@temporalio/workflow'
+
+// Register a signal, external events can wake this workflow
+export const approvalSignal = defineSignal('approval-signal')
+
+export async function paymentApprovalWorkflow(orderId) {
+  let approved
+
+  setHandler(approvalSignal, (value) => {
+    approved = value
+  })
+
+  // Step 1: Process payment details
+  await preparePayment(orderId)
+
+  // Step 2: Wait up to 24 hours for human approval.
+  // Temporal pauses here, no CPU/memory consumed while waiting.
+  const signalled = await condition(() => approved !== undefined, '24 hours')
+  if (!signalled) {
+    approved = false // timeout, auto-reject
+  }
+
+  if (!approved) {
+    // Saga: compensate previous steps
+    await refundPayment(orderId)
+    return
+  }
+  await finalizePayment(orderId)
+}
+
+// To send the approval signal from your API handler:
+//   const handle = client.workflow.getHandle(orderId)
+//   await handle.signal(approvalSignal, true)
+```
+
+```ts title="workflows/paymentApproval.ts / TypeScript 5+ + @temporalio/workflow"
+import { condition, defineSignal, setHandler } from '@temporalio/workflow'
+
+// defineSignal's type parameter is the signal's ARGUMENT list, and it is
+// shared by the workflow and the API handler that sends it. Sending a
+// string where the workflow expects a boolean is then a compile error
+// rather than a workflow that wakes up holding the wrong value.
+export const approvalSignal = defineSignal<[boolean]>('approval-signal')
+
+export async function paymentApprovalWorkflow(orderId: string): Promise<void> {
+  // `undefined` is a third state here and it matters: it distinguishes
+  // "nobody has answered yet" from "somebody rejected it", which is
+  // exactly the distinction the timeout branch below turns into a refund.
+  let approved: boolean | undefined
+
+  setHandler(approvalSignal, (value: boolean) => {
+    approved = value
+  })
+
+  // Step 1: Process payment details
+  await preparePayment(orderId)
+
+  // Step 2: Wait up to 24 hours for human approval.
+  // Temporal pauses here, no CPU/memory consumed while waiting.
+  const signalled = await condition(() => approved !== undefined, '24 hours')
+  if (!signalled) {
+    approved = false // timeout, auto-reject
+  }
+
+  if (!approved) {
+    // Saga: compensate previous steps
+    await refundPayment(orderId)
+    return
+  }
+  await finalizePayment(orderId)
+}
+```
+
+```java title="PaymentApprovalWorkflow.java / Java 17+ + Temporal SDK"
+// workflows/PaymentApprovalWorkflow.java, Wait for human signal
+@WorkflowInterface
+public interface PaymentApprovalWorkflow {
+    @WorkflowMethod
+    void run(String orderId);
+
+    // Register a signal, external events can wake this workflow
+    @SignalMethod
+    void approve(boolean approved);
+}
+
+public class PaymentApprovalWorkflowImpl implements PaymentApprovalWorkflow {
+    // Boolean, not boolean: null is the "nobody has answered yet" state.
+    private Boolean approved = null;
+
+    @Override
+    public void approve(boolean value) {
+        this.approved = value;
+    }
+
+    @Override
+    public void run(String orderId) {
+        // Step 1: Process payment details
+        activities.preparePayment(orderId);
+
+        // Step 2: Wait up to 24 hours for human approval.
+        // Temporal pauses here, no CPU/memory consumed while waiting.
+        boolean signalled = Workflow.await(Duration.ofHours(24), () -> approved != null);
+        if (!signalled) {
+            approved = false; // timeout, auto-reject
+        }
+
+        if (!approved) {
+            // Saga: compensate previous steps
+            activities.refundPayment(orderId);
+            return;
+        }
+        activities.finalizePayment(orderId);
+    }
+}
+
+// To send the approval signal from your API handler:
+//   PaymentApprovalWorkflow wf =
+//       client.newWorkflowStub(PaymentApprovalWorkflow.class, orderId);
+//   wf.approve(true); // returns as soon as Temporal accepts the signal
+```
+
+<Callout type="info" title="Quando utilizzare Temporal rispetto a una normale coda di attività">
+Utilizza una normale coda di attività (Celery/Asynq/BullMQ/Redis Streams) per **attività semplici e indipendenti**: e-mail, notifiche, elaborazione di immagini. Rivolgiti a Temporal quando disponi di **flussi di lavoro aziendali in più fasi** con logica di compensazione, lunghi periodi di attesa, approvazioni umane o quando hai bisogno di una cronologia completa di esecuzione per conformità/debug. Temporal ha un sovraccarico operativo più elevato (esegui un cluster di server Temporal), quindi non utilizzarlo a meno che non sia necessario.
+</Callout>
+
+Backend dai primi principi / Capitolo 10 / Code di attività. Il codice è destinato a Go 1.22+, Python 3.11+, Node.js 20+, TypeScript 5+ e Java 17+ (Spring Boot).

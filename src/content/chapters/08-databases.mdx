@@ -1,0 +1,873 @@
+---
+order: 8
+title: "Database"
+navTitle: "Database"
+summary: "Interagire con un database è la cosa più frequente che fa un ingegnere di backend. Questo capitolo ricostruisce l'intero quadro da zero, spiegando perché esistono i database, perché vivono su disco, come modellare relazioni reali, come interrogarle in modo sicuro e veloce e le due leve prestazionali (indici e trigger) che separano un giocattolo dalla produzione. Tutto si basa su un esempio concreto: una piattaforma di gestione dei progetti."
+readingTime: "2-3 ore"
+keywords:
+  - "database"
+  - "postgres"
+  - "sql"
+  - "orm"
+  - "queries"
+  - "transactions"
+  - "connection"
+  - "pooling"
+  - "indexes"
+---
+## Perché esistono i database
+
+Fondamentalmente un database è semplicemente un modo per **persistere le informazioni tra le sessioni**. Persistenza significa archiviare i dati in modo che sopravvivano anche dopo l'arresto del programma che li ha creati. Pensa a un'app da fare: aggiungi elementi, ne selezioni alcuni, chiudi l'app e quando la riapri, tutto è esattamente come l'avevi lasciato. Senza perseveranza inizieresti da un elenco vuoto ogni volta e perderesti tutti i tuoi progressi. Questa continuità, nel tempo e tra le macchine, è il punto centrale.
+
+### "Database" è una parola sorprendentemente ampia
+
+Nel senso più semplice, _qualsiasi spazio di archiviazione strutturato_ è un database. L'elenco dei contatti del tuo telefono è un database. Quello del browser `localStorage`, `sessionStorage`e i cookie, tutti gli archivi di valori-chiave che puoi controllare in DevTools -&gt; Applicazione, sono database. Anche un file di testo semplice in cui annoti le note è un database molto semplice. Il filo conduttore: un sistema persistente che ti consente di **creare, leggere, aggiornare ed eliminare** dati, CRUD.
+
+### Cosa significa "database" in un contesto backend
+
+Quella definizione generica non è ciò che di solito intendono gli ingegneri. Nel contesto di server e sistemi backend, "database" significa quasi sempre un **database basato su disco**: dati archiviati su un disco rigido (HDD) o un'unità a stato solido (SSD). _Perché il disco?_ Questa è la sezione successiva, ed è l'idea fondamentale più importante qui.
+
+<Callout type="info" title="Modello mentale">
+Un database è un livello di persistenza che offre CRUD. Nello specifico nel lavoro di backend, è uno strato di persistenza **basato su disco**, scelto deliberatamente per la capacità rispetto alla velocità pura. Tutto il resto di questo capitolo deriva da questo compromesso.
+</Callout>
+
+## Disco contro RAM
+
+La tua CPU può raggiungere due tipi di memoria. La **RAM (memoria primaria)** è estremamente veloce ma costosa e limitata nella fornitura, la maggior parte delle macchine ha 8, 16, 32, forse 64-128 GB. **Disco (memoria secondaria)**: HDD o SSD, è molto più economico e molto più abbondante, in genere da 512 GB a diversi TB, ma è più lento da leggere e scrivere.
+
+<Diagram caption="The core trade-off">
+<svg viewBox="0 0 720 210" xmlns="http://www.w3.org/2000/svg" font-family="var(--font-diagram-mono)" font-size="11"><rect x="30" y="24" width="300" height="160" rx="11" fill="var(--dg-info-surface)" stroke="var(--dg-info-soft)"></rect><text x="180" y="52" text-anchor="middle" fill="var(--dg-info)" font-size="14" font-weight="600">RAM/primaria</text><text x="180" y="80" text-anchor="middle" fill="var(--dg-ink)" font-size="11">molto veloce</text><text x="180" y="102" text-anchor="middle" fill="var(--dg-ink)" font-size="11">costoso/scarso</text><text x="180" y="124" text-anchor="middle" fill="var(--dg-ink)" font-size="11">volatile (perso allo spegnimento)</text><text x="180" y="150" text-anchor="middle" fill="var(--dg-info)" font-size="10.5" font-weight="600">utilizzato per la memorizzazione nella cache (Redis)</text><text x="180" y="170" text-anchor="middle" fill="var(--dg-ink-2)" font-size="9.5">~8-128GB</text><rect x="390" y="24" width="300" height="160" rx="11" fill="var(--dg-warn-surface)" stroke="var(--dg-warn-border)"></rect><text x="540" y="52" text-anchor="middle" fill="var(--dg-warn)" font-size="14" font-weight="600">DISCO/secondario</text><text x="540" y="80" text-anchor="middle" fill="var(--dg-ink)" font-size="11">più lento</text><text x="540" y="102" text-anchor="middle" fill="var(--dg-ink)" font-size="11">economico/abbondante</text><text x="540" y="124" text-anchor="middle" fill="var(--dg-ink)" font-size="11">persistente (sopravvive allo spegnimento)</text><text x="540" y="150" text-anchor="middle" fill="var(--dg-warn)" font-size="10.5" font-weight="600">utilizzato per DATABASE (Postgres)</text><text x="540" y="170" text-anchor="middle" fill="var(--dg-ink-2)" font-size="9.5">~512 GB, più TB</text></svg>
+</Diagram>
+
+Quindi il modello è: **caching = RAM** (critico per la velocità, piccolo), **database = disco** (critico per la capacità, grande). Postgres, MySQL, MongoDB, memorizzano tutti i propri dati su disco. Il _come_ distribuiscono i byte sul disco è un'area profonda e affascinante, ma come ingegnere di backend a livello di applicazione la conclusione essenziale è proprio questo compromesso. (Ed è esattamente il motivo per cui gli indici, nella sezione 11, sono così importanti: sono il modo in cui riduciamo la velocità dalle ricerche lente del disco.)
+
+## DBMS e perché non solo file di testo
+
+Archiviare i dati su disco non è sufficiente, abbiamo bisogno di modi efficienti per recuperarli, modificarli ed eliminarli, su centinaia di gigabyte. Questo è il compito di un **DBMS (Database Management System)**: software il cui unico scopo è archiviare dati e fornire operazioni CRUD efficienti su di essi. Ad alto livello, un DBMS ha due compiti, **archiviare i dati** e **gestire le operazioni**, oltre a una serie di responsabilità:
+
+| Responsabilità | Cosa significa |
+| --------------------- | ------------------------------------------------------------------------------------------------ |
+| **Organizzazione dei dati** | Disporre i dati in modo che il recupero/aggiornamento/inserimento sia efficiente.                                               |
+| **Accesso** | Fornire metodi per CRUD, creare, leggere, aggiornare, eliminare.                                          |
+| **Integrità** | Mantenere i dati accurati e validi, ad es. un `payment` Il campo accetta solo numeri, mai una stringa vagante. |
+| **Sicurezza** | Proteggi i dati dall'accesso non autorizzato tramite utenti e ruoli.                                       |
+
+### Perché un file di testo semplice va in pezzi
+
+Prima che esistesse il software DBMS, le persone provavano a memorizzare tutto in file di testo. Si rompe per tre ragioni concrete:
+
+#### 1. L'analisi è lenta e soggetta a errori
+
+Per trovare un cliente scriveresti il codice dell'applicazione per leggere il file, dividere ogni riga e confrontare ogni campo, un'operazione lenta e ancora più lenta in linguaggi come JavaScript o Python che in qualcosa come Rust. Peggio ancora, l'analisi manuale è fragile: un errore e si corromperanno i dati o si consegnerà al cliente il record sbagliato.
+
+#### 2. Non c'è struttura
+
+I file di testo non hanno uno schema formale. Puoi scaricare qualsiasi testo in qualsiasi forma, quindi non puoi imporre "questo campo deve sempre essere un numero". Non c'è modo di garantire la coerenza, sono solo stringhe.
+
+#### 3. Nessun controllo della concorrenza
+
+Questo è l'assassino. Cosa succede quando due persone aggiornano lo stesso valore contemporaneamente?
+
+<Diagram caption="The lost-update race / amount starts at 40">
+<svg viewBox="0 0 720 230" xmlns="http://www.w3.org/2000/svg" font-family="var(--font-diagram-mono)" font-size="11"><line x1="360" y1="14" x2="360" y2="216" stroke="var(--dg-line)" stroke-width="1" stroke-dasharray="3 4"></line><text x="360" y="206" text-anchor="middle" fill="var(--dg-ink-3)" font-size="9">stesso momento</text><text x="20" y="44" fill="var(--dg-info)" font-weight="600">Utente A (+20)</text><rect x="150" y="28" width="120" height="30" rx="6" fill="var(--dg-info-surface)" stroke="var(--dg-info-soft)"></rect><text x="210" y="48" text-anchor="middle" fill="var(--dg-ink)">legge 40</text><rect x="400" y="28" width="150" height="30" rx="6" fill="var(--dg-info-surface)" stroke="var(--dg-info-soft)"></rect><text x="475" y="48" text-anchor="middle" fill="var(--dg-ink)">scrive 60</text><text x="20" y="104" fill="var(--dg-accent)" font-weight="600">Utente B (-20)</text><rect x="150" y="88" width="120" height="30" rx="6" fill="var(--dg-accent-surface)" stroke="var(--dg-accent-border)"></rect><text x="210" y="108" text-anchor="middle" fill="var(--dg-ink)">legge 40</text><rect x="400" y="88" width="150" height="30" rx="6" fill="var(--dg-accent-surface)" stroke="var(--dg-accent-border)"></rect><text x="475" y="108" text-anchor="middle" fill="var(--dg-ink)">scrive 20</text><rect x="150" y="150" width="400" height="52" rx="9" fill="var(--dg-inverse)"></rect><text x="350" y="172" text-anchor="middle" fill="var(--dg-on-inverse)" font-size="11">valore finale = 60 O 20, vince chi ha salvato per ultimo</text><text x="350" y="190" text-anchor="middle" fill="var(--dg-on-inverse-accent)" font-size="11" font-weight="600">un aggiornamento perso silenziosamente/nessuna coerenza</text></svg>
+</Diagram>
+
+Questi tre errori, analisi lenta, assenza di struttura e controllo della concorrenza, sono esattamente il motivo per cui esiste il software DBMS. Prova a far crescere un "database" di file di testo oggi e ne troverai tutti.
+
+## Relazionale vs non relazionale
+
+Ad alto livello ci sono due principali famiglie di DBMS.
+
+<Diagram caption="Two ways to shape data">
+<svg viewBox="0 0 720 220" xmlns="http://www.w3.org/2000/svg" font-family="var(--font-diagram-mono)" font-size="10.5"><text x="30" y="26" fill="var(--dg-ok)" font-size="12" font-weight="600">RELAZIONALE / righe in una tabella rigorosa</text><g><rect x="30" y="38" width="300" height="26" fill="var(--dg-ok-surface)" stroke="var(--dg-ok-border)"></rect><text x="44" y="55" fill="var(--dg-ok)" font-weight="600">stato del nome identificativo</text><rect x="30" y="64" width="300" height="24" fill="var(--dg-surface-2)" stroke="var(--dg-accent-soft)"></rect><text x="44" y="80" fill="var(--dg-ink)">1 Alice attiva</text><rect x="30" y="88" width="300" height="24" fill="var(--dg-surface-2)" stroke="var(--dg-accent-soft)"></rect><text x="44" y="104" fill="var(--dg-ink)">2 Bob attivo</text><rect x="30" y="112" width="300" height="24" fill="var(--dg-surface-2)" stroke="var(--dg-accent-soft)"></rect><text x="44" y="128" fill="var(--dg-ink)">3 Carol archiviata</text></g><text x="30" y="160" fill="var(--dg-ink-2)" font-size="9.5">ogni riga ha le stesse colonne/schema fissate in primo piano</text><text x="30" y="176" fill="var(--dg-ink-2)" font-size="9.5">interrogato con SQL/collegato da chiavi esterne</text><text x="390" y="26" fill="var(--dg-warn)" font-size="12" font-weight="600">NON RELAZIONALI/documenti</text><rect x="390" y="38" width="300" height="46" rx="7" fill="var(--dg-warn-surface)" stroke="var(--dg-warn-border)"></rect><text x="404" y="56" fill="var(--dg-ink)">{ id:1, nome:&quot;Alice&quot;,</text><text x="404" y="72" fill="var(--dg-ink)">  tag:[&quot;x&quot;], attivo:true }</text><rect x="390" y="90" width="300" height="46" rx="7" fill="var(--dg-warn-surface)" stroke="var(--dg-warn-border)"></rect><text x="404" y="108" fill="var(--dg-ink)">{ id:2, nome:&quot;Bob&quot;,</text><text x="404" y="124" fill="var(--dg-ink)">  indirizzo:{ città:&quot;BLR&quot; } }</text><text x="390" y="160" fill="var(--dg-ink-2)" font-size="9.5">ogni documento può differire/schema flessibile</text><text x="390" y="176" fill="var(--dg-ink-2)" font-size="9.5">&quot;tabella&quot;-&gt;raccolta / &quot;riga&quot;-&gt;documento</text></svg>
+</Diagram>
+
+### Relazionale (SQL)
+
+Un database relazionale organizza i dati in **tabelle** di righe e colonne, con relazioni tra tabelle definite da **chiavi esterne**. La sua caratteristica distintiva è uno **schema rigoroso e predefinito**: prima di inserire qualsiasi cosa devi dichiarare la tabella, le sue colonne e il tipo di dati di ciascuna colonna. Non succede nulla "al volo". Questa severità porta con sé il grande vantaggio, l'**integrità dei dati**: in qualsiasi momento puoi scommettere sulla forma e sul tipo dei tuoi dati. Interagisci con esso utilizzando **SQL** (Structured Query Language). Esempi: PostgreSQL, MySQL, SQL Server.
+
+### Non relazionale (NoSQL)
+
+I database NoSQL come MongoDB non impongono uno schema. Nel vocabolario di Mongo una tabella è una **raccolta** e una riga è un **documento**, e due documenti nella stessa raccolta possono avere forme completamente diverse. Il vantaggio è la **flessibilità**: ottima quando si crea un prototipo velocemente o quando non si conosce in anticipo la forma dei dati. Il costo è un’integrità più debole: senza uno schema applicato a livello di database, è necessario imporre la correttezza nel codice dell’applicazione, il che aggiunge complessità ed è più soggetto a errori (il codice dell’applicazione cambia costantemente e si insinuano bug).
+
+### Scegliere con due esempi
+
+- **CRM (gestione delle relazioni con i clienti)** -&gt; **relazionale**. I contatti, le opportunità di vendita e le relative relazioni sono dati critici e strutturati che richiedono una forte integrità e query complesse. Postgres è un'ottima soluzione.
+- **CMS (sistema di gestione dei contenuti)** -&gt; **non relazionale** (o JSON in Postgres). Un articolo può contenere un'immagine, un blocco di codice, un incorporamento di YouTube, contenuti estremamente vari che non è possibile inserire in uno schema fisso. "Prendi tutto e buttalo via" si addice a un negozio di documenti.
+
+## Perché Postgres
+
+Tra tutte le opzioni, Postgres è l'impostazione predefinita sensata per la maggior parte dei progetti, per cinque motivi:
+
+1. **Open source e gratuito.** Non è proprietario, le aziende possono ospitarlo autonomamente sui propri server e ispezionare la fonte.
+2. **Conforme allo standard SQL.** SQL standard funziona allo stesso modo di MySQL o SQL Server, quindi la migrazione successiva a un altro motore implica molte meno rielaborazioni.
+3. **Estensibile.** I documenti contengono \~1400 pagine; copre quasi tutti i casi d'uso tipici di un SaaS e dispone di un potente sistema di estensione per personalizzarlo.
+4. **Affidabile e scalabile.** Una comprovata esperienza su larga scala.
+5. **Eccellente supporto JSON, la caratteristica decisiva.** Il motivo principale per cui le persone scelgono MongoDB è "archivia qualsiasi JSON". Ma Postgres offre a `JSON`/`JSONB` digitare con una forte capacità di indicizzazione e query, in modo da poter archiviare dati dinamici e senza schema _all'interno_ di un database relazionale. Ciò elimina il solito motivo per lasciare Postgres per un archivio NoSQL.
+
+<Callout type="info" title="La chiamata pragmatica">
+Troverai articoli che affermano che MySQL ha vantaggi in termini di prestazioni, ma finché non servirai milioni di utenti e inseguirai uno specifico collo di bottiglia, quella differenza non avrà importanza. Il ricco set di funzionalità e JSON di prima classe rendono Postgres una prima scelta per quasi tutti i progetti. Questo è ciò che utilizza il resto di questo capitolo.
+</Callout>
+
+<Callout type="info" title="SQL vs Postgres / la distinzione">
+**SQL** è il _linguaggio_ in cui scrivi le query. **Postgres** è il _sistema di database_, il software che esegue tali query. Questo capitolo presuppone che tu abbia imparato le nozioni di base di SQL (SELECT, CREATE TABLE, ORDER BY, GROUP BY) altrove e si concentra sui concetti che contano effettivamente giorno per giorno nel lavoro di backend.
+</Callout>
+
+## Tipi di dati
+
+Ogni colonna in una tabella relazionale ha un tipo fisso. Ecco quelli che utilizzerai effettivamente, con le decisioni che contano.
+
+| Digitare | Cosa conserva / quando usarlo |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `serial` / `bigserial`            | Intero con incremento automatico (1, 2, 3...) quando lo ometti durante l'inserimento. Utilizzare `bigserial` nella produzione per una capacità maggiore. Comune per ID interi/chiavi primarie. |
+| `smallint` / `integer` / `bigint` | Numeri interi di capacità crescente. Scegli in base al numero più grande che devi memorizzare.                                                                               |
+| `decimal(10,2)` / `numeric`       | Numero con precisione esatta, qui, fino a 10 cifre totali, 2 dopo la virgola. **Utilizzare sempre per denaro/prezzo.** |
+| `real` / `double precision`       | Virgola mobile. Veloce, ma i valori possono differire leggermente da un sistema all'altro. Utilizzare per dati scientifici/di misurazione in cui piccole discrepanze non contano.              |
+| `char(n)`                         | Testo a lunghezza fissa, **riempito di spazi** `n`. Evita, eredità.                                                                                             |
+| `varchar(n)`                      | Testo di lunghezza variabile con un massimo di `n`. Il famoso `255` è solo un'abitudine di MySQL, priva di significato in Postgres.                                                     |
+| `text`                            | Lunghezza variabile, nessun limite. **Preferisco questo** in Postgres (vedi sotto).                                                                                          |
+| `boolean`                         | `true` / `false`.                                                                                                                                            |
+| `date` / `time` / `timestamp`     | Una data, un'ora o entrambe insieme.                                                                                                                            |
+| `timestamptz`                     | Timestamp _con fuso orario_, memorizza anche il fuso orario. Preferisci colonne create/aggiornate.                                                                         |
+| `interval`                        | Un intervallo come "10 giorni" o "1 settimana".                                                                                                                           |
+| `uuid`                            | Identificatore univoco universale. Ottimo per le chiavi primarie, soprattutto nei sistemi distribuiti. Postgres ce l'ha nativamente.                                          |
+| `json` / `jsonb`                  | Dati JSON. **Preferisco `jsonb`** (binario), Postgres lo serializza nel proprio formato in modo che possa indicizzarlo ed interrogarlo velocemente. Semplice `json` viene memorizzato come testo.          |
+| `type[]` (matrice) | Un array di qualsiasi tipo, `integer[]`, `text[]`, ecc. |
+| inet/macaddr/punto/xml | Indirizzi di rete, indirizzi MAC, punti geometrici, XML. Raramente necessario nella quotidianità.                                                                           |
+
+### Decimale vs flottante: la regola del denaro
+
+Per prima cosa decodifica i parametri: `decimal(10,2)` significa **10 cifre totali, con 2 dopo il punto decimale**. Quindi puoi conservare `12345678.90`, contali, sono 10 cifre in tutto il numero, due delle quali a destra del punto. Prova a memorizzare un numero che richiede 11 cifre e il database lo rifiuta.
+
+I numeri in virgola mobile sono _veloci_ ma rappresentati in un modo che può differire leggermente da un sistema all'altro, quindi lo stesso valore può essere visualizzato come `89.87` qui e `89.9` lì. Per un **prezzo**, in cui il numero alimenta i calcoli e la precisione è fondamentale, è inaccettabile, **usa sempre `decimal`/`numeric`**. Per qualcosa come una misurazione dell'area (`567.8987`) dove una piccola differenza di arrotondamento è innocua, utilizzare `float` per la velocità.
+
+E il naturale seguito: _se i decimali sono sempre accurati, perché non usarli ovunque?_ Poiché questa precisione va a discapito delle prestazioni, i numeri in virgola mobile vengono memorizzati e calcolati più velocemente, ed è esattamente il motivo per cui i domini scientifici/di misurazione li preferiscono. Regola pratica: **la precisione conta -&gt; decimale; la velocità è importante e piccole discrepanze vanno bene -&gt; float.**
+
+### char vs varchar vs testo: preferisci il testo
+
+Tutti e tre memorizzano il testo; la differenza sta nel modo in cui gestiscono la lunghezza. `char(10)` sempre **blocchetti per tutta la lunghezza con spazi**: store `"ab"` e il database aggiunge 8 spazi finali prima del salvataggio, perché a `char` il campo occupa sempre la sua lunghezza dichiarata. `varchar(255)` memorizza solo ciò che dai (storing `"ab"` utilizza la lunghezza 2, `"abcd"` usa 4) fino a un massimo di 255, superalo e ottieni un errore a livello di database. `text` è `varchar` senza alcun limite di lunghezza (tecnicamente un limite molto alto, \~1 GB, a cui non ti avvicinerai mai).
+
+<Diagram caption="Storing &quot;ab&quot; in each string type">
+<svg viewBox="0 0 720 130" xmlns="http://www.w3.org/2000/svg" font-family="var(--font-diagram-mono)" font-size="10.5"><text x="20" y="30" fill="var(--dg-accent)" font-weight="600">carattere(10)</text><rect x="120" y="16" width="200" height="22" fill="var(--dg-accent-surface)" stroke="var(--dg-accent-border)"></rect><text x="130" y="31" fill="var(--dg-ink)">ab________</text><text x="335" y="31" fill="var(--dg-ink-2)" font-size="9">imbottito a 10/spreca spazio/evita</text><text x="20" y="66" fill="var(--dg-info)" font-weight="600">varchar(255)</text><rect x="120" y="52" width="44" height="22" fill="var(--dg-info-surface)" stroke="var(--dg-info-soft)"></rect><text x="130" y="67" fill="var(--dg-ink)">ab</text><text x="180" y="67" fill="var(--dg-ink-2)" font-size="9">lunghezza 2 / max 255 / il &quot;255&quot; è un'abitudine MySQL priva di significato</text><text x="20" y="102" fill="var(--dg-ok)" font-weight="600">testo</text><rect x="120" y="88" width="44" height="22" fill="var(--dg-ok-surface)" stroke="var(--dg-ok-border)"></rect><text x="130" y="103" fill="var(--dg-ink)">ab</text><text x="180" y="103" fill="var(--dg-ink-2)" font-size="9">lunghezza 2 / nessun limite / &lt;- preferisco questo in Postgres</text></svg>
+</Diagram>
+
+I documenti di Postgres lo consigliano `text`, essenzialmente non c'è **nessuna differenza di prestazioni** tra loro e puoi indicizzare `text` va bene (un malinteso comune preso in prestito da altri motori come MySQL/SQL Server, che si comportano diversamente e confondono le persone che cambiano). Due ragioni pratiche per impostare l'impostazione predefinita `text`:
+
+- **Nessun problema di migrazione.** Se imposti `varchar(255)` e successivamente necessitano di valori più lunghi, è necessario eseguire una migrazione dello schema che tocchi molti dati, più rischiosa rispetto alla semplice applicazione della lunghezza nel codice dell'applicazione. Come ingegneri di backend interagiamo con il DB tramite un driver e disponiamo comunque del codice dell'applicazione, quindi applica la lunghezza lì e mantieni la migrazione semplice.
+- **Autodocumentante.** Un numero simile `varchar(255)` _sembra_ significativo, quindi un nuovo compagno di squadra perde tempo a cercare il motivo per cui è 255 (risposta: non è significativo, è un'abitudine MySQL copiata). `text` si legge in modo chiaro come "un campo di testo", senza alcun numero fantasma da spiegare.
+
+Utilizzare solo `char(n)` quando la lunghezza è veramente _sempre_ identica, ad es. codici giornalieri di due lettere `Mo`, `Tu`, `We`, dove il riempimento non avviene mai e si risparmia spazio rispetto alle spese generali di lunghezza variabile.
+
+### json vs jsonb: preferisci jsonb
+
+`json` viene memorizzato come testo normale; `jsonb` è serializzato nel formato binario di Postgres. Scegli quasi sempre **`jsonb`**: interroga e indicizza molto più velocemente. (È una funzionalità di Postgres, non SQL standard.)
+
+## Migrazioni
+
+In produzione non basta aprire una GUI come TablePlus e iniziare a eseguire query, non ci sarebbe traccia di _cosa_ è cambiato, _quando_ o _chi_ lo ha fatto e non c'è modo di controllare lo stato del database nel tempo. Invece, i database utilizzano **migrazioni**: controllo della versione per il tuo schema.
+
+### Come funziona il flusso di lavoro
+
+Mantieni una cartella di file SQL con nomi in sequenza. Uno strumento da riga di comando (**dbmate**, **golang-migrate**, ecc.) li guida in ordine e applica l'SQL all'interno di ciascuno al database configurato.
+
+<Diagram caption="Migration files run in sequence; a tracking table remembers where you are">
+<svg viewBox="0 0 720 170" xmlns="http://www.w3.org/2000/svg" font-family="var(--font-diagram-mono)" font-size="10.5"><rect x="20" y="40" width="120" height="60" rx="8" fill="var(--dg-ok-surface)" stroke="var(--dg-ok-border)"></rect><text x="80" y="66" text-anchor="middle" font-weight="600" fill="var(--dg-ink)">001.sql</text><text x="80" y="84" text-anchor="middle" fill="var(--dg-ink-2)" font-size="9">creare utenti</text><rect x="170" y="40" width="120" height="60" rx="8" fill="var(--dg-ok-surface)" stroke="var(--dg-ok-border)"></rect><text x="230" y="66" text-anchor="middle" font-weight="600" fill="var(--dg-ink)">002.sql</text><text x="230" y="84" text-anchor="middle" fill="var(--dg-ink-2)" font-size="9">dati del seme</text><rect x="320" y="40" width="120" height="60" rx="8" fill="var(--dg-ok-surface)" stroke="var(--dg-ok-border)"></rect><text x="380" y="66" text-anchor="middle" font-weight="600" fill="var(--dg-ink)">003.sql</text><text x="380" y="84" text-anchor="middle" fill="var(--dg-ink-2)" font-size="9">indici + trigger</text><line x1="140" y1="70" x2="170" y2="70" stroke="var(--dg-line-2)" stroke-width="1.5"></line><line x1="290" y1="70" x2="320" y2="70" stroke="var(--dg-line-2)" stroke-width="1.5"></line><line x1="440" y1="70" x2="500" y2="70" stroke="var(--dg-line-2)" stroke-width="1.5"></line><rect x="500" y="34" width="200" height="72" rx="9" fill="var(--dg-inverse)"></rect><text x="600" y="60" text-anchor="middle" fill="var(--dg-on-inverse)" font-size="10">schema_migrations</text><text x="600" y="80" text-anchor="middle" fill="var(--dg-on-inverse-warn)" font-size="10">versione = 003</text><text x="600" y="96" text-anchor="middle" fill="var(--dg-on-inverse-3)" font-size="9">lo strumento sa cosa applicare dopo</text></svg>
+</Diagram>
+
+Ogni file è composto da due metà: una **migrazione verso l'alto** (la modifica, `CREATE TABLE`, `CREATE INDEX`...) e una **migrazione verso il basso** (l'esatto contrario, `DROP TABLE`...). La metà inferiore esiste in modo che se una modifica interrompe la produzione è possibile **tornare** allo stato precedente in modo pulito. Lo strumento mantiene a `schema_migrations` table che contiene la versione corrente, quindi non riesegue mai un file già applicato (che genererebbe un errore con "tabella già esistente").
+
+______
+
+SQL
+
+un file di migrazione dbmate, metà su e giù
+
+```sql
+-- migrate:up
+CREATE TABLE users (
+  id    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  email TEXT NOT NULL UNIQUE
+);
+
+-- migrate:down
+DROP TABLE users;
+```
+
+### Perché le migrazioni contano
+
+- **Cronologia monitorata.** I file risiedono in git insieme al tuo codice, quindi ogni modifica dello schema nel corso di mesi o anni viene registrata, rivedibile e riproducibile su qualsiasi macchina o server.
+- **Rollback.** Le migrazioni verso il basso ti consentono di ripristinare una modifica errata in una versione sicuramente valida.
+
+### Semina
+
+Per i test locali/di sviluppo su cui vuoi che i dati di esempio funzionino prima della distribuzione. Questo è il **seeding**: una migrazione separata che inserisce righe di test (utenti di esempio, progetti e così via). La procedura consigliata mantiene i dati iniziali nel proprio file di migrazione in modo che siano chiaramente distinti dalle modifiche dello schema.
+
+## Relazioni di modellazione
+
+Modelleremo una piattaforma di gestione dei progetti (si pensi a Jira/Linear). Dai requisiti estraiamo i **nomi** -&gt; tabelle: `users`, `user_profiles`, `projects`, `tasks`, `project_members`.
+
+<Callout type="info" title="Convenzioni di denominazione">
+**Plurale** nomi di tabelle (`users`, `projects`) secondo lo standard di settore e le colonne **snake\_case** (`full_name`, `password_hash`). Perché serpente\_case? Postgres non fa distinzione tra maiuscole e minuscole per natura, scrivi `fullName` e lo legge come `fullname` a meno che non lo si racchiuda ovunque tra virgolette doppie, il che rende brutto il codice dell'applicazione. Snake\_case minuscolo aggira l'intero problema.
+</Callout>
+
+Le tre forme di relazione sono il cuore della modellazione dei dati. Ecco come viene implementato ciascuno:
+
+<Diagram caption="The three relationship shapes">
+<svg viewBox="0 0 720 250" xmlns="http://www.w3.org/2000/svg" font-family="var(--font-diagram-mono)" font-size="10"><text x="20" y="22" fill="var(--dg-ok)" font-weight="600" font-size="11">UNO A UNO</text><rect x="20" y="32" width="90" height="34" rx="6" fill="var(--dg-ok-surface)" stroke="var(--dg-ok-border)"></rect><text x="65" y="53" text-anchor="middle" fill="var(--dg-ink)">utenti</text><line x1="110" y1="49" x2="170" y2="49" stroke="var(--dg-ok)" stroke-width="2"></line><rect x="170" y="32" width="110" height="34" rx="6" fill="var(--dg-ok-surface)" stroke="var(--dg-ok-border)"></rect><text x="225" y="53" text-anchor="middle" fill="var(--dg-ink)">profili_utente</text><text x="20" y="84" fill="var(--dg-ink-2)" font-size="9">user_id del profilo è SIA la chiave primaria che quella esterna</text><text x="20" y="120" fill="var(--dg-info)" font-weight="600" font-size="11">UNO A MOLTI</text><rect x="20" y="130" width="90" height="34" rx="6" fill="var(--dg-info-surface)" stroke="var(--dg-info-soft)"></rect><text x="65" y="151" text-anchor="middle" fill="var(--dg-ink)">progetti</text><line x1="110" y1="147" x2="175" y2="135" stroke="var(--dg-info)" stroke-width="1.6"></line><line x1="110" y1="147" x2="175" y2="147" stroke="var(--dg-info)" stroke-width="1.6"></line><line x1="110" y1="147" x2="175" y2="159" stroke="var(--dg-info)" stroke-width="1.6"></line><rect x="175" y="124" width="80" height="20" rx="4" fill="var(--dg-surface-2)" stroke="var(--dg-accent-soft)"></rect><text x="215" y="138" text-anchor="middle" fill="var(--dg-ink)">compito</text><rect x="175" y="148" width="80" height="20" rx="4" fill="var(--dg-surface-2)" stroke="var(--dg-accent-soft)"></rect><text x="215" y="162" text-anchor="middle" fill="var(--dg-ink)">compito</text><text x="20" y="186" fill="var(--dg-ink-2)" font-size="9">ogni attività contiene una chiave esterna project_id</text><text x="400" y="120" fill="var(--dg-warn)" font-weight="600" font-size="11">MOLTI A MOLTI</text><rect x="400" y="130" width="80" height="34" rx="6" fill="var(--dg-warn-surface)" stroke="var(--dg-warn-border)"></rect><text x="440" y="151" text-anchor="middle" fill="var(--dg-ink)">utenti</text><rect x="500" y="124" width="110" height="46" rx="6" fill="var(--dg-inverse)"></rect><text x="555" y="143" text-anchor="middle" fill="var(--dg-on-inverse)" font-size="9">project_members</text><text x="555" y="158" text-anchor="middle" fill="var(--dg-on-inverse-3)" font-size="8">tabella di collegamento</text><rect x="630" y="130" width="80" height="34" rx="6" fill="var(--dg-warn-surface)" stroke="var(--dg-warn-border)"></rect><text x="670" y="151" text-anchor="middle" fill="var(--dg-ink)">progetti</text><line x1="480" y1="147" x2="500" y2="147" stroke="var(--dg-warn)" stroke-width="1.6"></line><line x1="610" y1="147" x2="630" y2="147" stroke="var(--dg-warn)" stroke-width="1.6"></line><text x="400" y="190" fill="var(--dg-ink-2)" font-size="9">tabella di collegamento con una chiave primaria COMPOSITA (user_id + project_id)</text></svg>
+</Diagram>
+
+### Uno a uno: gli utenti &lt;-&gt; utente\_profili
+
+Perché dividere i dati del profilo in una tabella invece di accumularli `users`? Perché un profilo cresce nel tempo (bio, telefono, avatar, link social, siti web...) e costringerebbe a migrazioni costanti sul core `users` tavolo. Astraendolo in una tabella separata che può evolversi in modo indipendente mantiene leggera la tabella primaria. Poiché ogni utente ha esattamente un profilo, non è nemmeno necessario un ID separato, crea quello del profilo `user_id` fungere da **sia chiave primaria che chiave esterna**.
+
+### Uno-a-molti: progetti &lt;-&gt; compiti
+
+Un progetto ha molti compiti; ogni attività appartiene a un progetto. Implementalo inserendo a `project_id` **chiave straniera** sul `tasks` tabella (non una chiave primaria). Molte righe di attività possono condividere la stessa cosa `project_id`, questo è il lato "molti".
+
+### Molti-a-molti: utenti &lt;-&gt; progetti
+
+Un utente può trovarsi in molti progetti e un progetto può avere molti utenti e si desidera eseguire query in entrambe le direzioni. Quando la stessa relazione ha senso da entrambe le parti, è molti-a-molti. Non puoi esprimerlo con una singola chiave esterna, quindi crei una **tabella di collegamento** (`project_members`) con in mano due chiavi esterne, `user_id` e `project_id`e rendi la coppia una **chiave primaria composita**. Questa combinazione è implicitamente univoca e non nulla, quindi "l'utente 1 è nel progetto 2" può esistere esattamente una volta.
+
+______
+
+SQL
+
+lo schema completo, le enumerazioni, quindi le cinque tabelle
+
+```sql
+-- custom enum types: a fixed set of allowed values
+CREATE TYPE project_status AS ENUM ('active', 'completed', 'archived');
+CREATE TYPE task_status    AS ENUM ('pending', 'in_progress', 'completed', 'cancelled');
+CREATE TYPE member_role    AS ENUM ('owner', 'admin', 'member');
+
+CREATE TABLE users (
+  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  email         TEXT NOT NULL UNIQUE,
+  full_name     TEXT NOT NULL,
+  password_hash TEXT NOT NULL,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- ONE-TO-ONE: user_id is BOTH primary key and foreign key
+CREATE TABLE user_profiles (
+  user_id     UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  avatar_url  TEXT,             -- optional -> no NOT NULL
+  bio         TEXT,
+  phone       TEXT,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE projects (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name        TEXT NOT NULL,
+  description TEXT,
+  status      project_status NOT NULL DEFAULT 'active',
+  owner_id    UUID NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- ONE-TO-MANY: a project has many tasks via project_id
+CREATE TABLE tasks (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  project_id  UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  title       TEXT NOT NULL,
+  description TEXT,
+  priority    INTEGER NOT NULL DEFAULT 1 CHECK (priority BETWEEN 1 AND 5),
+  status      task_status NOT NULL DEFAULT 'pending',
+  due_date    DATE,
+  assigned_to UUID REFERENCES users(id) ON DELETE SET NULL,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- MANY-TO-MANY: linking table with a COMPOSITE primary key
+CREATE TABLE project_members (
+  project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  user_id    UUID NOT NULL REFERENCES users(id)    ON DELETE CASCADE,
+  role       member_role NOT NULL DEFAULT 'member',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (project_id, user_id)   -- the pair is unique & not-null
+);
+```
+
+<Callout type="info" title="Nota sulla versione / gen\_random\_uuid()">
+Questo schema è verificato rispetto a **PostgreSQL 16**. `gen_random_uuid()` è integrato nel core Postgres da **13 in poi**. Nelle versioni precedenti (&lt;=12) devi prima abilitare l'estensione crypto: `CREATE EXTENSION IF NOT EXISTS pgcrypto;`, allora la stessa chiamata funziona.
+</Callout>
+
+## Vincoli e integrità
+
+I vincoli sono condizioni allegate a una colonna in modo che il database stesso protegga i dati dalla corruzione. L'intera filosofia: spingere i controlli di integrità _fino al database_ piuttosto che fidarsi solo del codice dell'applicazione. Il codice dell'app rappresenta un livello di difesa; un vincolo del database è la garanzia.
+
+### Chiave primaria
+
+Un campo univoco che identifica una riga. Porta implicitamente due vincoli, **non null** e **unique**: più il comportamento di riferimento a chiave esterna. Per convenzione ogni tavolo ha un `id`, spesso `UUID PRIMARY KEY DEFAULT gen_random_uuid()` quindi Postgres genera un ID casuale quando lo ometti durante l'inserimento.
+
+### Non nulla: la regola del 70%.
+
+Per impostazione predefinita, ogni colonna Postgres _consente_ null a meno che tu non dica diversamente. **Più del 70% delle colonne dovrebbe esserlo `NOT NULL`**, perché i null si insinuano silenziosamente, soprattutto tramite script automatizzati con bug, e ti lasciano con una tabella disordinata e incoerente. Aggiungi `NOT NULL` a meno che un campo non sia veramente facoltativo (come la biografia o il telefono di un utente).
+
+### Unico
+
+Non esistono due righe che possano condividere quel valore, ad es. `email TEXT NOT NULL UNIQUE` significa che l'inserimento di un'e-mail duplicata genera un errore a livello di database.
+
+### Vincolo di chiave esterna
+
+`REFERENCES users(id)` garantisce che qualunque cosa tu inserisca `assigned_to` o `owner_id` deve essere un ID utente reale ed esistente. Passa un UUID casuale (anche dall'aspetto valido) senza un utente corrispondente e l'inserimento fallisce. Non puoi fare riferimento a qualcosa che non esiste.
+
+### Verifica vincolo
+
+Una regola personalizzata che la riga deve soddisfare, la transazione viene eseguita solo finché la condizione è valida. `CHECK (priority BETWEEN 1 AND 5)` impedisce a chiunque di inserirsi `priority = 55`.
+
+### Enumerazioni: integrità + documentazione
+
+Un'enumerazione è un tipo personalizzato limitato a un insieme fisso di valori (ad es. `project_status` in \{active, completed, archived\}). Due vittorie:
+
+- **Integrità dei dati**: inserisci qualsiasi altra stringa in a `project_status` colonna e viene visualizzato un errore a livello di database; non devi fare affidamento esclusivamente sulla convalida del codice dell'app.
+- **Autodocumentazione**: probabilmente la vittoria più grande. Un futuro compagno di squadra che legge la migrazione vede immediatamente i valori consentiti. Se la colonna fosse semplice `text`, dovrebbero eseguire il grep dell'intero codice dell'applicazione per scoprire quali stringhe sono effettivamente valide.
+
+### Integrità referenziale: comportamento ON DELETE
+
+Quando elimini una riga a cui puntano altre tabelle, cosa succede a quei riferimenti? Lo dichiari per chiave esterna:
+
+| Clausola | All'eliminazione della riga di riferimento\... | Usato qui per |
+| ----------------------- | ----------------------------------------------------------- | ----------------------------------------------------------------- |
+| `ON DELETE RESTRICT`    | Blocca l'eliminazione se eventuali righe secondarie fanno ancora riferimento ad essa.      | `projects.owner_id`, non è possibile eliminare un utente che possiede ancora progetti. |
+| `ON DELETE CASCADE`     | Elimina anche i bambini.                                    | `tasks.project_id`, l'eliminazione di un progetto elimina le sue attività.         |
+| `ON DELETE SET NULL`    | Imposta il riferimento del figlio su null (la colonna deve consentire null). | `tasks.assigned_to`, l'eliminazione di un utente annulla l'assegnazione delle sue attività.      |
+| `ON DELETE SET DEFAULT` | Imposta il riferimento del bambino al valore predefinito dichiarato.          | - |
+
+<Callout type="info" title="La mentalità dell’integrità">
+Ogni vincolo, chiave primaria, non null, univoca, chiave esterna, check, enum, ON DELETE, esiste in modo che il _database_ garantisca la correttezza, non solo il codice dell'applicazione speranzoso. Più codifichi a questo livello, più difficile sarà per un bug futuro corrompere i tuoi dati.
+</Callout>
+
+## Interrogazione e join
+
+### Crea query da FROM, non SELECT
+
+Un'abitudine che vale la pena adottare: quando si scrive una query SQL, **inizia con il `FROM` clausola**, no `SELECT`. Decidi innanzitutto _da dove_ provengono i tuoi dati, quali tabelle, come si sono uniti e solo dopo decidi _cosa_ estrarre. Ti mantiene orientato: conosci sempre la fonte prima di raggiungere le colonne. Costruiremo la query "elenco utenti con profilo" esattamente in questo ordine, prima l'origine, poi la forma e infine l'ordine.
+
+1
+
+**Fonte.** `FROM users u`e assegnagli un breve _alias_ (`u`) in modo da potervi fare riferimento in modo conciso durante tutta la query.
+
+2
+
+**Unisciti alla tabella correlata.** Il profilo risiede altrove, collegato dalla chiave esterna, quindi `LEFT JOIN user_profiles up ON u.id = up.user_id`.
+
+3
+
+**Forma.** Ora seleziona le colonne: `u.*` più il profilo piegato, `to_jsonb(up.*) AS profile`.
+
+4
+
+**Ordine.** Termina con `ORDER BY u.created_at DESC` quindi i risultati sono deterministici e vengono prima i più recenti.
+
+### Unione di tabelle: e perché LEFT JOIN
+
+Per restituire a ciascun utente _con_ il proprio profilo in una chiamata API, ti iscrivi `users` a `user_profiles` sulla chiave esterna. Utilizza **LEFT JOIN**, non INNER JOIN: un utente potrebbe non aver mai creato una riga di profilo e un INNER JOIN restituisce solo righe in cui _entrambi_ i lati hanno una corrispondenza, quindi gli utenti senza profilo scomparirebbero silenziosamente dal risultato, restituendo meno utenti di quelli esistenti. Un LEFT JOIN mantiene _ogni_ riga della tabella sinistra (principale) indipendentemente, riempiendo il lato del profilo con null quando non c'è corrispondenza. Dal momento che vogliamo sempre indietro l'utente, profilo o meno, LEFT JOIN è corretto qui. (I join INNER e LEFT coprono la stragrande maggioranza delle query reali; gli altri sono rari.)
+
+Altri due dettagli in quella query. Gli **alias** brevi (`u`, `up`) basta rendere leggibile una query lunga, assegnarle una volta dentro `FROM`/`JOIN` e riutilizzarli ovunque. E `to_jsonb(up.*)` è una funzione Postgres integrata che converte la riga del profilo corrispondente in un oggetto JSON, incorporato come singolo `profile` campo su ogni utente, quindi il frontend ottiene `user.profile` nidificati, in un viaggio di andata e ritorno, invece di effettuare una seconda chiamata. Termina sempre una query di elenco con un `ORDER BY` (qui `created_at DESC`): altrimenti i risultati della query ritornano in ordine _arbitrario_ e tale ordine può cambiare tra una chiamata e l'altra, quindi si ordina in modo esplicito, in genere prima il più recente in base all'ora di creazione.
+
+______
+
+SQL
+
+GET /v1/users, elenca gli utenti con profilo incorporato
+
+```sql
+SELECT
+  u.*,
+  to_jsonb(up.*) AS profile          -- fold the profile row into one JSON field
+FROM users u
+LEFT JOIN user_profiles up           -- LEFT so users without a profile still appear
+  ON u.id = up.user_id               -- the foreign-key join condition
+ORDER BY u.created_at DESC;          -- newest first; never rely on default order
+```
+
+### Query con parametri: non concatenare mai
+
+Questa è l'abitudine di sicurezza più importante con i database. Una **query parametrizzata** lascia uno slot segnaposto e fornisce il valore separatamente; il database tratta tutto ciò che passi come **dati puri (una stringa), mai SQL eseguibile**. Se passa un attaccante `'; DELETE FROM users; --` in un parametro, viene memorizzato/confrontato come una stringa letterale innocua, non eseguito come comando.
+
+<Callout type="info" title="SQL injection/il peccato capitale">
+La vulnerabilità viene visualizzata quando si creano query **concatenando stringhe** con l'input dell'utente. Quindi un input predisposto può scoppiare ed eseguire il proprio SQL, leggendo, alterando o cancellando i tuoi dati. **Mai** concatenare stringhe di valori utente in una query. Utilizza sempre i segnaposto dei parametri; il tuo autista/ORM si occupa della sostituzione in sicurezza. Questo non è facoltativo.
+</Callout>
+
+______
+
+SQL Go Python JavaScript TypeScript Java
+
+GET /v1/users/:id, stessa query, parametrica in ogni livello
+
+```sql
+SELECT u.*, to_jsonb(up.*) AS profile
+FROM users u
+LEFT JOIN user_profiles up ON u.id = up.user_id
+WHERE u.id = $1;        -- $1 is a parameter slot; the value is sent separately
+```
+
+```go
+// database/sql, the driver substitutes the parameter safely
+row := db.QueryRow(`
+  SELECT u.*, to_jsonb(up.*) AS profile
+  FROM users u
+  LEFT JOIN user_profiles up ON u.id = up.user_id
+  WHERE u.id = $1`, userID) // userID is treated strictly as data, never SQL
+```
+
+```python
+# psycopg, pass params as a tuple; NEVER use f-strings to build SQL
+cur.execute(
+    """
+    SELECT u.*, to_jsonb(up.*) AS profile
+    FROM users u
+    LEFT JOIN user_profiles up ON u.id = up.user_id
+    WHERE u.id = %s
+    """,
+    (user_id,),  # the driver escapes it; injection is impossible
+)
+```
+
+```js
+// node-postgres: the values live in the ARRAY, never in the string.
+const { rows } = await db.query(
+  `SELECT u.*, to_jsonb(up.*) AS profile
+   FROM users u
+   LEFT JOIN user_profiles up ON u.id = up.user_id
+   WHERE u.id = $1`,
+  [userId], // userId is treated strictly as data, never SQL
+)
+
+// The JavaScript-specific trap: a template literal looks almost identical
+// and IS the injection. These two lines differ by four characters:
+//   WHERE u.id = $1`, [userId]   <- safe, the driver binds it
+//   WHERE u.id = ${userId}`      <- concatenation; you just lost the table
+```
+
+```ts
+import type { Pool } from 'pg'
+
+// The generic types the ROW, so `user.profile` is checked at compile time.
+// Worth being clear about what that does and does not buy you: it checks
+// the shape you claim to get back, not the SQL. The parameter slot is
+// still the only thing standing between you and injection.
+const { rows } = await db.query<UserWithProfile>(
+  `SELECT u.*, to_jsonb(up.*) AS profile
+   FROM users u
+   LEFT JOIN user_profiles up ON u.id = up.user_id
+   WHERE u.id = $1`,
+  [userId], // sent separately; the driver never interpolates it
+)
+const user: UserWithProfile | undefined = rows[0]
+```
+
+```java
+// Spring's JdbcClient: ? is the parameter slot, param() supplies the value.
+Optional<UserWithProfile> user = db.sql("""
+        SELECT u.*, to_jsonb(up.*) AS profile
+        FROM users u
+        LEFT JOIN user_profiles up ON u.id = up.user_id
+        WHERE u.id = ?
+        """)
+    .param(userId) // bound as data; the driver never interpolates it
+    .query(UserWithProfile.class)
+    .optional();
+
+// JPA/Hibernate is the same rule in a different spelling, a named
+// parameter instead of a positional one:
+//   em.createQuery("SELECT u FROM User u WHERE u.id = :id")
+//     .setParameter("id", userId)
+// and the same cardinal sin: never "... WHERE u.id = " + userId.
+```
+
+### Inserisci e aggiorna
+
+______
+
+SQL
+
+POST crea/PATCH aggiornamento parziale
+
+```sql
+-- POST /v1/users  -> returning the new row back to the client
+INSERT INTO users (email, full_name, password_hash)
+VALUES ($1, $2, $3)
+RETURNING *;
+
+-- PATCH /v1/users/:id  -> only the fields the client actually sent
+UPDATE user_profiles
+SET bio = $1, phone = $2
+WHERE user_id = $3
+RETURNING *;
+```
+
+### Filtro dinamico, ordinamento e impaginazione
+
+Gli endpoint dell'elenco supportano il filtraggio, l'ordinamento e l'impaginazione, integrati dinamicamente nel codice dell'app dai parametri di query, con valori predefiniti sensati (nessun `page` -&gt; 1, n `limit` -&gt; 10, nessun ordinamento -&gt; `created_at DESC`). A livello SQL:
+
+- **Filtra** con `ILIKE`, corrispondenza del modello senza distinzione tra maiuscole e minuscole. `WHERE u.full_name ILIKE $1 || '%'` corrisponde ai nomi che iniziano con una lettera indipendentemente dal caso.
+- **Ordina** da un _elenco_consenti_ di colonne in base alle quali il client può ordinare (`full_name`, `email`, `created_at`) più una direzione.
+- **Impagina** con `LIMIT` + `OFFSET`. Nota: la pagina 1 dell'API è mappata al database `OFFSET 0`, l'offset è in base zero.
+
+______
+
+SQL
+
+elenco con filtro + ordinamento + impaginazione
+
+```sql
+SELECT u.*, to_jsonb(up.*) AS profile
+FROM users u
+LEFT JOIN user_profiles up ON u.id = up.user_id
+WHERE u.full_name ILIKE $1 || '%'   -- filter: names starting with $1 (case-insensitive)
+ORDER BY u.created_at DESC           -- sort (column from an allow-list, direction chosen)
+LIMIT $2 OFFSET $3;                  -- page 1 -> OFFSET 0, page 2 -> OFFSET (limit), ...
+```
+
+## Indici
+
+Gli indici sono la più grande leva prestazionale di cui disponi e sono meglio compresi attraverso l'analogia del libro. L'indice di un libro elenca ogni capitolo e il suo numero di pagina, quindi per arrivare al capitolo 4 non sfogli 50 pagine una per una, le guardi e salti direttamente lì.
+
+### Il problema: scansione sequenziale
+
+Ricorda che i database memorizzano righe sparse sul disco, non in ordine ordinato. Senza un indice, trovare un'attività tramite ID significa una **scansione sequenziale**: il database controlla riga dopo riga, posizione dopo posizione, finché non trova una corrispondenza. Con sei file è immediato; con un milione o un miliardo di righe è dolorosamente lento.
+
+<Diagram caption="Sequential scan vs index lookup">
+<svg viewBox="0 0 720 250" xmlns="http://www.w3.org/2000/svg" font-family="var(--font-diagram-mono)" font-size="10"><text x="20" y="22" fill="var(--dg-accent)" font-weight="600" font-size="11">SENZA INDICE / scansiona ogni riga</text><g fill="var(--dg-surface-2)" stroke="var(--dg-accent-soft)"><rect x="20" y="34" width="150" height="22"></rect><rect x="20" y="58" width="150" height="22"></rect><rect x="20" y="82" width="150" height="22"></rect><rect x="20" y="106" width="150" height="22"></rect><rect x="20" y="130" width="150" height="22"></rect></g><text x="30" y="49" fill="var(--dg-ink)">compito / controllo...</text><text x="30" y="73" fill="var(--dg-ink)">compito / controllo...</text><text x="30" y="97" fill="var(--dg-ink)">compito / controllo...</text><text x="30" y="121" fill="var(--dg-ink)">compito / controllo...</text><text x="30" y="145" fill="var(--dg-ok)">compito / ABBINAMENTO </text><text x="20" y="172" fill="var(--dg-ink-2)" font-size="9">sparsi su disco / O(n), brutali su un milione di righe</text><text x="400" y="22" fill="var(--dg-ok)" font-weight="600" font-size="11">CON INDICE / tabella di ricerca -&gt; salta</text><rect x="400" y="34" width="150" height="118" rx="6" fill="var(--dg-ok-surface)" stroke="var(--dg-ok-border)"></rect><text x="412" y="52" fill="var(--dg-ok)" font-weight="600">ID -&gt; posizione</text><text x="412" y="72" fill="var(--dg-ink)">a1 -&gt; 0x4F</text><text x="412" y="90" fill="var(--dg-ink)">a2 -&gt; 0x1C</text><text x="412" y="108" fill="var(--dg-ink)">a3 -&gt; 0x9B &lt; trovato</text><text x="412" y="126" fill="var(--dg-ink)">a4 -&gt; 0x22</text><line x1="550" y1="104" x2="640" y2="104" stroke="var(--dg-ok)" stroke-width="1.6" marker-end="url(#ar)"></line><rect x="610" y="92" width="90" height="24" rx="5" fill="var(--dg-inverse)"></rect><text x="655" y="108" text-anchor="middle" fill="var(--dg-on-inverse)" font-size="9">0x9B -&gt; riga</text><text x="400" y="172" fill="var(--dg-ink-2)" font-size="9">ricerca ordinata -&gt; passaggio diretto alla posizione del disco</text><defs><marker id="ar" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto"><path d="M0,0 L7,3.5 L0,7 z" fill="var(--dg-ok)"></path></marker></defs></svg>
+</Diagram>
+
+### La soluzione: una tabella di ricerca
+
+Un indice è essenzialmente una **tabella di ricerca** separata e ordinata che associa ciascun valore indicizzato alla **posizione** su disco della relativa riga. Effettua una query tramite un campo indicizzato e il database esegue la scansione di questa struttura compatta e ordinata (internamente un albero B), trova rapidamente la voce, legge la posizione e salta direttamente alla riga, senza scansione completa. Due proprietà contano:
+
+- **Ricerca diretta**: valore -&gt; posizione, invece di controllare ogni riga.
+- **Ordine**: un indice può essere ascendente o discendente. Se corri spesso `ORDER BY created_at DESC`, crea l'indice _decrescente_ in modo che le righe tornino già in ordine, senza passaggi di ordinamento aggiuntivi.
+
+### Quando creare un indice
+
+La regola pratica è indicizzare una colonna quando viene utilizzata in un **`WHERE` clausola**, a**`JOIN` condizione**, o un **`ORDER BY`**. Un dettaglio importante: **le chiavi primarie sono indicizzate automaticamente**, ma **le chiavi esterne non lo sono**: quindi le chiavi esterne a cui ti unisci (come `tasks.project_id`, `tasks.assigned_to`) sono candidati all'indice primario.
+
+Percorrere il ragionamento reale dietro ogni indice nel nostro schema rende la regola concreta:
+
+- `users.email` -&gt; c'è una ricerca "trova utente tramite e-mail" e si unisce all'e-mail, quindi appare in `WHERE`/`JOIN` -&gt; indicizzalo.
+- `users.created_at DESC` -&gt; l'API list-users ordina per impostazione predefinita il più recente e viene chiamata costantemente, quindi indicizzala _decrescente_ in modo che corrisponda al `ORDER BY` esattamente.
+- `tasks.project_id` -&gt; "recupera tutte le attività di un progetto" si unisce `projects` a `tasks` su questa chiave esterna. Il `projects.id` side è la chiave primaria (già indicizzata), ma `project_id` qui c'è una chiave esterna e _non lo è_, quindi indicizzala.
+- `tasks.assigned_to` -&gt; "recupera tutte le attività per un utente" si unisce a questa chiave esterna. Stessa logica, chiave esterna, non indicizzata automaticamente, utilizzata in un join -&gt; indicizzalo.
+- `tasks.status` -&gt; Filtri "recupera tutte le attività in sospeso" sullo stato in a `WHERE` clausola -&gt; indicizzalo.
+- `tasks.created_at DESC` -&gt; l'API list-task ordina il più recente per primo -&gt; indice discendente.
+
+Internamente un albero B mantiene queste voci ordinate, il che è ciò che rende veloci sia la ricerca diretta che la scansione ordinata, ma non sono necessari gli interni per applicare la regola; i tre trigger (DOVE / ISCRIVITI / ORDINA PER) sono sufficienti per decidere.
+
+______
+
+SQL
+
+indici scelti dall'utilizzo reale di DOVE / ISCRIVITI / ORDINA PER
+
+```sql
+CREATE INDEX idx_users_email        ON users (email);              -- WHERE / JOIN on email
+CREATE INDEX idx_users_created_at    ON users (created_at DESC);    -- ORDER BY newest first
+CREATE INDEX idx_tasks_project_id    ON tasks (project_id);         -- FK join (not auto-indexed)
+CREATE INDEX idx_tasks_assigned_to   ON tasks (assigned_to);        -- FK join (not auto-indexed)
+CREATE INDEX idx_tasks_status        ON tasks (status);             -- WHERE status = ...
+CREATE INDEX idx_tasks_created_at    ON tasks (created_at DESC);    -- ORDER BY newest first
+```
+
+<Callout type="info" title="Il compromesso in termini di scrittura delle spese generali">
+Gli indici accelerano le **letture** ma rallentano leggermente le **scritture**: ogni `INSERT`/`UPDATE` deve anche mantenere aggiornato l'indice. Quindi non indicizzare tutto alla cieca. Valuta la frequenza con cui viene eseguita la query e se il successo in lettura vale il costo di scrittura. Mossa pratica: creare indici per le colonne WHERE/JOIN/ORDER BY più attive, quindi monitorare ed eliminare quelle le cui query risultano rare.
+</Callout>
+
+## Trigger
+
+Ogni tavolo qui ha un `updated_at` colonna che deve essere aggiornata su "adesso" ogni volta che la riga cambia. Puoi impostarlo manualmente in ogni AGGIORNAMENTO oppure puoi **automatizzarlo** con un trigger in modo che l'applicazione non debba mai pensarci.
+
+Un **trigger** esegue automaticamente una funzione quando viene soddisfatta una condizione. Qui: definisci una funzione che imposta `NEW.updated_at = now()` e restituisce la riga, quindi allega a `BEFORE UPDATE` trigger su ogni tabella che lo chiama.
+
+<Diagram caption="UPDATE fires the trigger automatically">
+<svg viewBox="0 0 720 100" xmlns="http://www.w3.org/2000/svg" font-family="var(--font-diagram-mono)" font-size="10.5"><rect x="20" y="34" width="170" height="34" rx="7" fill="var(--dg-info-surface)" stroke="var(--dg-info-soft)"></rect><text x="105" y="55" text-anchor="middle" fill="var(--dg-ink)">riga AGGIORNAMENTO</text><line x1="190" y1="51" x2="250" y2="51" stroke="var(--dg-line-2)" stroke-width="1.5" marker-end="url(#a2)"></line><rect x="250" y="34" width="200" height="34" rx="7" fill="var(--dg-accent)"></rect><text x="350" y="55" text-anchor="middle" fill="var(--dg-on-accent)">PRIMA dell'AGGIORNAMENTO trigger</text><line x1="450" y1="51" x2="510" y2="51" stroke="var(--dg-line-2)" stroke-width="1.5" marker-end="url(#a2)"></line><rect x="510" y="34" width="190" height="34" rx="7" fill="var(--dg-ok-surface)" stroke="var(--dg-ok-border)"></rect><text x="605" y="55" text-anchor="middle" fill="var(--dg-ok)">aggiornato_a = adesso()</text><defs><marker id="a2" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto"><path d="M0,0 L7,3.5 L0,7 z" fill="var(--dg-line-2)"></path></marker></defs></svg>
+</Diagram>
+
+______
+
+SQL
+
+una funzione, riutilizzata come trigger su ogni tavolo
+
+```sql
+-- the function: stamp updated_at, return the modified row
+CREATE FUNCTION set_updated_at() RETURNS TRIGGER AS $$
+BEGIN
+  NEW.updated_at = now();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- attach it before every UPDATE on each table
+CREATE TRIGGER trg_users_updated
+  BEFORE UPDATE ON users
+  FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
+CREATE TRIGGER trg_projects_updated
+  BEFORE UPDATE ON projects
+  FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+-- ...and likewise for user_profiles, tasks, project_members
+```
+
+Ora qualsiasi AGGIORNAMENTO, da qualsiasi luogo, codice app o query manuale, si aggiorna automaticamente `updated_at`. Nessuna colonna viene dimenticata e la logica risiede in un unico posto.
+
+<Callout type="info" title="Il capitolo in un fiato">
+I database conservano i dati su un **disco** economico e spazioso; un **DBMS** ti offre CRUD efficienti e sicuri che i file di testo non possono fare. Predefinito su **Postgres** per la sua integrità più JSONB. Modella con le giuste **relazioni** (uno-a-uno, uno-a-molti, molti-a-molti tramite una tabella di collegamento), applica la correttezza con **vincoli ed enumerazioni**, evolvi in sicurezza attraverso **migrazioni**, esegui query con **join** e SQL sempre**parametrizzato** e raggiungi le due leve prestazionali, **indici** (nelle colonne WHERE/JOIN/ORDER BY) e **trigger** (per automatizzare il noioso). Questo rappresenta circa l'80% del lavoro del database come ingegnere backend.
+</Callout>
+
+## Transazioni e ACID
+
+Nella sezione 3 abbiamo visto perché un file di testo non è in grado di gestire due persone che modificano lo stesso valore contemporaneamente, la corsa all'aggiornamento perduto. Un vero DBMS risolve questo problema con **transazioni**: un gruppo di operazioni che _tutte_ riescono insieme o _nessuna_ riesce. Questo è il meccanismo che rende sicura la concorrenza e vale la pena comprenderlo perché il denaro, l'inventario e qualsiasi logica "leggi e poi scrivi" dipendono da esso.
+
+### L'esempio classico: un trasferimento di denaro
+
+Sposta 500 INR dal conto A al conto B. Sono due scritture: sottrai da A, aggiungi a B. Se il server si blocca _tra_ di loro, A ha perso 500 INR che non sono mai arrivati a B, il denaro è svanito. Una transazione rende la coppia atomica: avvolgili `BEGIN ... COMMIT`, e si verificano entrambi oppure, in caso di fallimento, `ROLLBACK` disfa tutto come se nulla fosse accaduto.
+
+______
+
+SQL Go Python JavaScript TypeScript Java
+
+entrambe le scritture si impegnano insieme, oppure nessuna delle due lo fa
+
+```sql
+BEGIN;                                              -- start the transaction
+  UPDATE accounts SET balance = balance - 500 WHERE id = $1;  -- debit A
+  UPDATE accounts SET balance = balance + 500 WHERE id = $2;  -- credit B
+COMMIT;                                             -- both are now permanent
+-- if anything fails between BEGIN and COMMIT -> ROLLBACK undoes it all
+```
+
+```go
+tx, err := db.Begin()
+if err != nil { return err }
+defer tx.Rollback() // safety net: a no-op if we already committed
+
+if _, err = tx.Exec(`UPDATE accounts SET balance = balance - 500 WHERE id = $1`, a); err != nil {
+	return err // deferred Rollback fires -> A is untouched
+}
+if _, err = tx.Exec(`UPDATE accounts SET balance = balance + 500 WHERE id = $1`, b); err != nil {
+	return err // deferred Rollback fires -> both reverted
+}
+return tx.Commit() // only here do both writes become permanent
+```
+
+```python
+conn = pool.getconn()
+try:
+    with conn:                       # commits on success, ROLLBACKs on any exception
+        with conn.cursor() as cur:
+            cur.execute("UPDATE accounts SET balance = balance - 500 WHERE id = %s", (a,))
+            cur.execute("UPDATE accounts SET balance = balance + 500 WHERE id = %s", (b,))
+    # reaching here means both writes committed atomically
+finally:
+    pool.putconn(conn)
+```
+
+```js
+// A transaction lives on ONE connection. `pool.query` hands out whichever
+// connection is free, so a BEGIN sent that way can easily land on a
+// different connection than the UPDATE that follows it. Check one out.
+const tx = await pool.connect()
+try {
+  await tx.query('BEGIN') // start the transaction
+  await tx.query('UPDATE accounts SET balance = balance - 500 WHERE id = $1', [a]) // debit A
+  await tx.query('UPDATE accounts SET balance = balance + 500 WHERE id = $1', [b]) // credit B
+  await tx.query('COMMIT') // only here do both writes become permanent
+} catch (err) {
+  await tx.query('ROLLBACK') // anything failed -> both reverted
+  throw err
+} finally {
+  tx.release() // the checked-out connection MUST go back to the pool
+}
+```
+
+```ts
+import type { Pool, PoolClient } from 'pg'
+
+// The release() in the finally block is the part that must never be
+// forgotten, and "must never be forgotten" is the signal to write it once.
+// The callback shape also makes the transaction's extent obvious: it is
+// exactly the body of `fn`, no more and no less.
+async function withTransaction<T>(pool: Pool, fn: (tx: PoolClient) => Promise<T>): Promise<T> {
+  const tx = await pool.connect()
+  try {
+    await tx.query('BEGIN')
+    const result = await fn(tx)
+    await tx.query('COMMIT') // only here do the writes become permanent
+    return result
+  } catch (err) {
+    await tx.query('ROLLBACK') // anything failed -> everything reverted
+    throw err
+  } finally {
+    tx.release()
+  }
+}
+
+await withTransaction(pool, async (tx) => {
+  await tx.query('UPDATE accounts SET balance = balance - 500 WHERE id = $1', [a]) // debit A
+  await tx.query('UPDATE accounts SET balance = balance + 500 WHERE id = $1', [b]) // credit B
+})
+```
+
+```java
+// @Transactional IS begin/commit/rollback: Spring opens a transaction
+// before the method body runs, commits when it returns normally, and rolls
+// back if it throws. Both writes are atomic without a BEGIN in sight.
+@Transactional
+public void transfer(long a, long b) {
+    db.sql("UPDATE accounts SET balance = balance - 500 WHERE id = ?")
+      .param(a)
+      .update(); // debit A
+
+    db.sql("UPDATE accounts SET balance = balance + 500 WHERE id = ?")
+      .param(b)
+      .update(); // credit B
+
+    // returning normally commits; any RuntimeException rolls BOTH back
+}
+
+// Two things that surprise people, both worth knowing before you trust it:
+//  1. It works through a proxy, so calling transfer() from another method
+//     of the SAME class skips the proxy and you get two auto-commits.
+//  2. By default it rolls back on RuntimeException but NOT on a checked
+//     exception, which commits the half-done work. Say so explicitly:
+//     @Transactional(rollbackFor = Exception.class)
+```
+
+### ACIDO: le quattro garanzie
+
+Le transazioni ti danno quattro proprietà, abbreviate ACID:
+
+| Immobile | Garanzia | Nell'esempio di trasferimento |
+| --------------- | ------------------------------------------------------------------------ | ---------------------------------------------- |
+| **Atomicità** | Tutte le operazioni hanno esito positivo oppure nessuna.                                      | Non addebiti mai A senza accreditare B. |
+| **Coerenza** | Il DB passa da uno stato valido all'altro; i vincoli valgono sempre.   | Il denaro totale sui conti rimane corretto.     |
+| **Isolamento** | Le transazioni simultanee non si sovrappongono; ognuno corre come se fosse solo. | Due trasferimenti contemporaneamente non possono corrompere un saldo. |
+| **Durabilità** | Una volta impegnato, sopravvive a arresti anomali/perdita di potenza.                          | Dopo COMMIT, il trasferimento è permanente.       |
+
+Questo è uno dei motivi principali per ricorrere a un database relazionale come Postgres quando i dati sono fondamentali, le transazioni ACID sono una garanzia di prima classe, esattamente ciò che il file di testo della sezione 3 non potrebbe mai fornire.
+
+### Isolamento e corsa agli aggiornamenti perduti, rivisitati
+
+**Isolamento** è la proprietà che effettivamente risolve il nostro problema di due scrittori su 40. Dietro il cofano il database utilizza il **blocco** e il **MVCC (controllo della concorrenza multiversione)** in modo che le transazioni simultanee vedano un'istantanea coerente e serializzino le loro scritture in conflitto, anziché sovrascriversi ciecamente a vicenda.
+
+Per la logica di lettura e scrittura specificatamente, esistono due strumenti standard:
+
+- **Scrittura atomica**: inserisce il calcolo nell'SQL stesso: `UPDATE accounts SET balance = balance - 500 ...` legge e scrive in un unico passaggio bloccato, quindi non c'è spazio in cui possa scivolare un altro scrittore. (Molto più sicuro che leggere il saldo nel codice dell'app, elaborarlo e riscriverlo.)
+- **Blocco riga**: `SELECT ... FOR UPDATE` blocca le righe che leggi fino al termine della transazione, quindi una transazione simultanea deve attendere il suo turno invece di gareggiare con te.
+
+______
+
+SQL
+
+SELECT... PER AGGIORNAMENTO, blocca la riga, quindi modifica in sicurezza
+
+```sql
+BEGIN;
+  -- lock this account's row so no other transaction can change it until we're done
+  SELECT balance FROM accounts WHERE id = $1 FOR UPDATE;
+  -- ... compute safely in app code ...
+  UPDATE accounts SET balance = $2 WHERE id = $1;
+COMMIT;
+```
+
+<Callout type="info" title="Non leggere e poi scrivere nel codice dell'app senza protezione">
+Il modello ingenuo, `SELECT balance` nel tuo programma, aggiungi il codice, `UPDATE` indietro, è precisamente la condizione di gara della sezione 3, appena spostata nel tuo backend. Due richieste leggono entrambe il vecchio saldo e una sovrascrive l'altra. Utilizza un **aggiornamento SQL atomico** (`balance = balance - 500`) o **`FOR UPDATE`** blocco delle righe all'interno di una transazione. Questo è uno dei bug di concorrenza più comuni nel mondo reale.
+</Callout>
+
+<Callout type="info" title="Dove si adattano le transazioni">
+Ogni volta che una singola operazione logica si estende su **scritture multiple** che devono tenere tutte insieme, i trasferimenti, "crea ordine + decrementa stock", "archivia organizzazione + pulizia a cascata", lo racchiudono in una transazione. ACID è ciò che ti consente di trattare quel gruppo come un'unità indivisibile, a prova di crash e di concorrenza. È il database che mantiene la promessa che un file di testo non potrebbe mai fare.
+</Callout>
+
+## Elementi essenziali della produzione
+
+La trascrizione si ferma ai fondamenti. Questi quattro argomenti non sono presenti, ma li affronterai tutti nel momento in cui il tuo database servirà traffico reale. Costituiscono la differenza tra "funziona sulla mia macchina con sei file" e "funziona su larga scala".
+
+### Il problema delle query N+1: il bug di prestazioni del DB più comune
+
+Recuperi un elenco di N progetti, quindi esegui il loop su di essi e esegui _un'altra query per progetto_ per caricare le sue attività. Ciò significa **1 + N query**: per 100 progetti, 101 viaggi di andata e ritorno al database. Ogni viaggio di andata e ritorno ha un sovraccarico di rete + pianificazione, quindi questa è la morte per mille tagli. È particolarmente insidioso con gli ORM, dove il caricamento lento di una relazione all'interno di un ciclo nasconde le query extra dietro un codice dall'aspetto innocente.
+
+<Diagram caption="N+1 vs a single join">
+<svg viewBox="0 0 720 150" xmlns="http://www.w3.org/2000/svg" font-family="var(--font-diagram-mono)" font-size="10"><text x="20" y="22" fill="var(--dg-accent)" font-weight="600" font-size="11">N+1/1 query di elenco, quindi una per riga</text><rect x="20" y="32" width="120" height="22" rx="5" fill="var(--dg-accent-surface)" stroke="var(--dg-accent-border)"></rect><text x="80" y="47" text-anchor="middle" fill="var(--dg-ink)">elencare i progetti</text><rect x="160" y="32" width="64" height="22" rx="5" fill="var(--dg-accent-surface)" stroke="var(--dg-accent-border)"></rect><text x="192" y="47" text-anchor="middle" fill="var(--dg-ink)">compiti?</text><rect x="230" y="32" width="64" height="22" rx="5" fill="var(--dg-accent-surface)" stroke="var(--dg-accent-border)"></rect><text x="262" y="47" text-anchor="middle" fill="var(--dg-ink)">compiti?</text><rect x="300" y="32" width="64" height="22" rx="5" fill="var(--dg-accent-surface)" stroke="var(--dg-accent-border)"></rect><text x="332" y="47" text-anchor="middle" fill="var(--dg-ink)">compiti?</text><text x="374" y="47" fill="var(--dg-accent)">...xN</text><text x="20" y="78" fill="var(--dg-ink-2)" font-size="9">100 progetti -&gt; 101 viaggi di andata e ritorno</text><text x="20" y="108" fill="var(--dg-ok)" font-weight="600" font-size="11">Risolto / UNA query con un join</text><rect x="20" y="118" width="280" height="22" rx="5" fill="var(--dg-ok-surface)" stroke="var(--dg-ok-border)"></rect><text x="160" y="133" text-anchor="middle" fill="var(--dg-ink)">progetti SINISTRA UNISCITI alle attività, 1 viaggio di andata e ritorno</text></svg>
+</Diagram>
+
+La soluzione consiste nel recuperare i dati correlati in **una** query, JOIN o batch `WHERE project_id = ANY($1)`o un aggregato che crea lato server JSON nidificato. Con un ORM, l'equivalente è "caricamento impaziente" (ad es. `JOIN`/`preload`/`include`) invece del caricamento lento all'interno di un ciclo.
+
+______
+
+SQL
+
+N+1 compresso in un'unica query con attività aggregate
+
+```sql
+-- instead of: SELECT * FROM projects;  then per row: SELECT * FROM tasks WHERE project_id = ?
+SELECT
+  p.*,
+  COALESCE(jsonb_agg(t.*) FILTER (WHERE t.id IS NOT NULL), '[]') AS tasks
+FROM projects p
+LEFT JOIN tasks t ON t.project_id = p.id
+GROUP BY p.id;        -- one round trip, every project with its tasks nested
+```
+
+### Raggruppamento delle connessioni
+
+Aprire una connessione Postgres è **costoso**: Postgres genera un processo per connessione e c'è un limite rigido (predefinito \~100 `max_connections`). Se ogni richiesta web apre la propria connessione, esaurisci il server e paghi costantemente il costo di installazione. La soluzione è un **pool di connessioni**: un piccolo insieme di connessioni di lunga durata che richiedono prestito e restituzione.
+
+<Diagram caption="Many requests, a few reused connections">
+<svg viewBox="0 0 720 120" xmlns="http://www.w3.org/2000/svg" font-family="var(--font-diagram-mono)" font-size="10"><text x="20" y="20" fill="var(--dg-ink-2)" font-size="9">centinaia di richieste</text><rect x="20" y="28" width="40" height="16" rx="3" fill="var(--dg-info-surface)" stroke="var(--dg-info-soft)"></rect><rect x="20" y="48" width="40" height="16" rx="3" fill="var(--dg-info-surface)" stroke="var(--dg-info-soft)"></rect><rect x="20" y="68" width="40" height="16" rx="3" fill="var(--dg-info-surface)" stroke="var(--dg-info-soft)"></rect><rect x="20" y="88" width="40" height="16" rx="3" fill="var(--dg-info-surface)" stroke="var(--dg-info-soft)"></rect><line x1="60" y1="66" x2="150" y2="66" stroke="var(--dg-line-2)" stroke-width="1.4"></line><rect x="150" y="40" width="150" height="52" rx="8" fill="var(--dg-accent)"></rect><text x="225" y="62" text-anchor="middle" fill="var(--dg-on-accent)">piscina / ~10-20 conn</text><text x="225" y="78" text-anchor="middle" fill="var(--dg-on-accent)" font-size="9">prendere in prestito -&gt; utilizzare -&gt; restituire</text><line x1="300" y1="66" x2="390" y2="66" stroke="var(--dg-line-2)" stroke-width="1.4"></line><rect x="390" y="44" width="110" height="44" rx="8" fill="var(--dg-warn-surface)" stroke="var(--dg-warn-border)"></rect><text x="445" y="70" text-anchor="middle" fill="var(--dg-warn)">Postgres</text></svg>
+</Diagram>
+
+Due livelli, spesso combinati: il **pool integrato del driver** (Go's `database/sql` piscine automaticamente; Python utilizza `psycopg_pool`/SQLAlchemy's pool) for a single app instance, and an **external pooler like PgBouncer** when many app instances would otherwise each hold their own pool and overwhelm Postgres. Tune pool size to your workload, bigger isn't better; too many connections degrade Postgres.
+
+### SPIEGARE ANALISI: verificare che l'indice sia effettivamente utilizzato
+
+La creazione di un indice non garantisce che il pianificatore lo utilizzi. `EXPLAIN` mostra il piano di interrogazione; `EXPLAIN ANALYZE` effettivamente _esegue_ la query e riporta i tempi reali. Lo leggi cercando **"Index Scan"** (bene, il tuo indice funziona) rispetto a **"Seq Scan"** (il pianificatore legge ogni riga).
+
+<Callout type="info" title="Verificato dal vivo/questo è un risultato reale">
+Correre `EXPLAIN SELECT * FROM tasks WHERE status = 'pending'` rispetto allo schema effettivo del capitolo su Postgres 16 prodotto: `Bitmap Index Scan on idx_tasks_status`, confermando che l'indice di stato della sezione 11 viene effettivamente utilizzato per quel filtro, non solo creato e ignorato.
+</Callout>
+
+Un avvertimento che confonde le persone: su una tabella _piccola_ il pianificatore può comunque scegliere correttamente una scansione Seq (leggere 6 righe direttamente è più veloce del viaggio di andata e ritorno dell'indice). Non è un bug, i vantaggi dell'indice si manifestano su larga scala. `EXPLAIN ANALYZE` sui dati di dimensioni di produzione è il modo in cui confermi che un indice guadagna il suo mantenimento e come esegui il debug di una query lenta che _dovrebbe_ utilizzarne uno ma non lo è.
+
+### Eliminazioni soft
+
+Spesso non si vuole che una riga scompaia davvero, si vuole che venga conservata per controllo, ripristino o integrità storica, ma nascosta alle normali query. Questa è un'**eliminazione temporanea**: aggiungi un nullable `deleted_at TIMESTAMPTZ` colonna (null = live, un timestamp = eliminato). "Eliminazione" diventa un AGGIORNAMENTO; ogni lettura filtra le righe cancellate.
+
+______
+
+SQL
+
+eliminazione temporanea / la colonna, "eliminazione", le letture e l'indice univoco ottenuto
+
+```sql
+ALTER TABLE users ADD COLUMN deleted_at TIMESTAMPTZ;   -- null = alive
+
+-- "delete" = mark, don't remove
+UPDATE users SET deleted_at = now() WHERE id = $1;
+
+-- every read must exclude the dead rows
+SELECT * FROM users WHERE deleted_at IS NULL ORDER BY created_at DESC;
+
+-- gotcha: a plain UNIQUE now blocks reusing a soft-deleted email.
+-- a PARTIAL unique index fixes it, uniqueness only among LIVE rows:
+CREATE UNIQUE INDEX uniq_active_email
+  ON users (email) WHERE deleted_at IS NULL;
+```
+
+I compromessi sono reali: ogni query deve ricordare il `WHERE deleted_at IS NULL` filtro (facile da dimenticare, una perdita), i vincoli univoci richiedono il trattamento dell'indice parziale mostrato sopra e la tabella cresce sempre e solo. Utilizzare eliminazioni temporanee laddove la cronologia è importante (ordini, account utente, qualsiasi cosa verificabile); usare duro `DELETE` per dati veramente usa e getta.
+
+<Callout type="info" title="Mentalità produttiva">
+I fondamenti ti forniscono un database corretto; questi te ne danno uno _veloce, sicuro, utilizzabile_. Comprimi N+1 in join, raggruppa le tue connessioni, dimostra i tuoi indici `EXPLAIN ANALYZE`e ricorrere alle eliminazioni temporanee quando i dati devono sopravvivere alla propria eliminazione. Niente di tutto ciò è esotico, è la realtà del secondo giorno di gestione di un database in produzione.
+</Callout>
+
+L'obiettivo del backend/Manuale sul campo v2, capitolo 12.\
+Schema, vincoli, trigger, join e utilizzo degli indici in questo capitolo sono stati eseguiti e verificati rispetto a PostgreSQL 16.\
+Capitolo complementare: 11 / Progettazione completa dell'API REST (stesso esempio di gestione del progetto).
+
+Backend da Primi Principi / Capitolo 08 / Postgres. Il codice è destinato a Go 1.22+, Python 3.11+, Node.js 20+, TypeScript 5+ e Java 17+ (Spring Boot).

