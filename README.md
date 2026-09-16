@@ -1,7 +1,17 @@
 # Backend dai Primi Principi
 
 
-Benvenuti nel repository della documentazione **Backend from First Principles**! 
+Benvenuti nel repository della documentazione **Backend from First Principles**!
+
+Some links:
+
+https://backend-from-first-principle.vercel.app/
+
+https://medium.com/@karthik.joshi103/backend-from-first-principles-036209a3049c
+
+https://www.sevydevy.com/resources/engineering-articles/backend-engineering-from-first-principles
+
+https://blog.aakashdev.in/blog/backend-first-principles-interview-prep
 
 Questo repository contiene una raccolta completa di note, frammenti di codice e spiegazioni che coprono concetti fondamentali e avanzati nell'ingegneria del backend. L'obiettivo di questa serie è scomporre argomenti complessi di backend in principi comprensibili e fondamentali.
 
